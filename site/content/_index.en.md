@@ -26,7 +26,7 @@ fit = "Fit"
         <p class="subtitle"><!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, TypeScript, and Go independently.<!-- csarc-readme-preamble-tagline:end --></p>
         <p class="subtitle flow-line"><strong>Result:</strong> every change, human or AI, is scoped, checked, and reviewed before it merges -- leaving evidence behind.</p>
         <p class="subtitle">Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Maintenance mode adds configuration files, code, and technical rationale. See the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a> for quick-start commands.</p>
-        <p class="subtitle"><strong>Public status:</strong> this repository and its GitHub Pages repo-site are publicly readable; <code>noindex</code>/<code>robots.txt</code> only reduce indexing and do not restrict reading or sharing. The pending hosting/access-control decision remains in <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/425" target="_blank" rel="noreferrer">Issue #425</a>.</p>
+        <p class="subtitle"><strong>Public status:</strong> this repository and its GitHub Pages repo-site are publicly readable. <code>noindex</code>/<code>robots.txt</code> only reduce indexing; they do not restrict reading or sharing. The open hosting/access-control decision stays in <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/425" target="_blank" rel="noreferrer">Issue #425</a>.</p>
         <div class="package-badges" aria-label="Package status">
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">4 language modules</span>
@@ -37,8 +37,8 @@ fit = "Fit"
         </div>
       </header>
       <div class="language-contract" aria-label="Languages and template settings">
-        <p class="language-card"><strong>Choose languages at creation or adoption</strong>Check whichever of Python, Rust, TypeScript, and Go you need; select none for the shared workflow only.</p>
-        <p class="language-card shared"><strong>One template configuration</strong>Languages, governance, and optional capabilities live in <code>.csarc/config.yml</code>, kept current by template updates.</p>
+        <p class="language-card"><strong>Choose languages at creation or adoption</strong>Select the Python, Rust, TypeScript, and Go modules you need. Select none for the shared workflow only.</p>
+        <p class="language-card shared"><strong>One template configuration</strong><code>.csarc/config.yml</code> holds languages, governance, and optional capabilities. Template updates keep it current.</p>
         <p class="language-card future"><strong>Currently supported versions</strong>Python 3.14, Rust 1.98, TypeScript on Node 24 LTS, and Go 1.27 minimum (developed and verified on 1.27.1).</p>
       </div>
       <div class="product-start">
@@ -51,21 +51,21 @@ fit = "Fit"
         </section>
         <section class="start-paths" aria-label="Three ways to start">
           <h3>Start from your repo's current state</h3>
-          <article class="start-path primary"><h3>Create a new repo</h3><p>Settle on a type and branch approach first; nothing is created or pushed to GitHub before that.</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">Start now</button></article>
-          <article class="start-path"><h3>Adopt an existing repo</h3><p>Preview the diff on an isolated branch, keeping your content untouched.</p><button class="setup-trigger" type="button" data-setup="existing" aria-expanded="false">Adoption command</button></article>
-          <article class="start-path"><h3>Update a repo already on the template</h3><p>A dry run produces a reviewable diff first; it merges only after you confirm, never straight into main.</p><button class="setup-trigger" type="button" data-setup="update" aria-expanded="false">Update command</button></article>
+          <article class="start-path primary"><h3>Create a new repo</h3><p>Choose a type and branch approach first. Nothing is created or pushed to GitHub before that.</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">Start now</button></article>
+          <article class="start-path"><h3>Adopt an existing repo</h3><p>Preview the diff on an isolated branch. Your content stays untouched.</p><button class="setup-trigger" type="button" data-setup="existing" aria-expanded="false">Adoption command</button></article>
+          <article class="start-path"><h3>Update a repo already on the template</h3><p>A dry run first makes a reviewable diff. It merges only after you confirm, never straight into main.</p><button class="setup-trigger" type="button" data-setup="update" aria-expanded="false">Update command</button></article>
         </section>
       </div>
       <div class="prerequisite-line product-prerequisites">
-        <p><strong>Install before you start</strong>Git, GitHub CLI, and uv; see the full list, including optional Rust/TypeScript/Go tooling, in Maintenance mode.</p>
+        <p><strong>Install before you start</strong>Git, GitHub CLI, and uv. Maintenance mode gives the full list, including optional Rust/TypeScript/Go tooling.</p>
         <button class="setup-trigger" type="button" data-setup="mac" aria-expanded="false">macOS setup</button>
         <button class="setup-trigger" type="button" data-setup="windows" aria-expanded="false">Windows setup</button>
       </div>
-      <p class="subtitle bridge-line"><strong>Next:</strong> the Install guide page gives you one complete prompt to paste to your agent -- it previews first and acts only after you confirm; Maintenance mode covers the exact state-detection rules.</p>
+      <p class="subtitle bridge-line"><strong>Next:</strong> the Install guide page gives you one complete prompt for your agent. The agent previews first and acts only after you confirm. Maintenance mode covers the exact state-detection rules.</p>
 {{< /legacy >}}
 
 {{< basic >}}
-<!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, TypeScript, and Go independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. The <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> is a compact entry point; it keeps public facts aligned without requiring identical wording. This repository and its GitHub Pages repo-site are publicly readable; `noindex`/`robots.txt` do not restrict reading or sharing.
+<!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, TypeScript, and Go independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. The <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> is a compact entry point. It keeps public facts aligned but can use different wording. This repository and its GitHub Pages repo-site are publicly readable. `noindex`/`robots.txt` do not restrict reading or sharing.
 
 <p class="template-version"><strong>Template release:</strong> v0.42.0-beta.1<!-- x-release-please-version --></p>
 
@@ -75,7 +75,7 @@ fit = "Fit"
 | repo-site template version | [[site_template_version]] |
 | repo-site render engine version | [[site_engine_version]] |
 
-**Current state:** Milestone 13 is extending the repo site and adoption experience. Only reviewed workflows under `.github/workflows/` run today; the rest stay archived. See the CI/CD settings appendix for the per-stage status.
+**Current state:** Milestone 13 extends the repo site and adoption experience. Only reviewed workflows under `.github/workflows/` run today; the rest stay archived. The CI/CD settings appendix gives the status of each stage.
 
 | Choice | Production capability available today |
 | --- | --- |
@@ -86,8 +86,8 @@ fit = "Fit"
 
 {{< disclosure key="capability-boundary" title="Adoption paths and current scope" >}}
 - **New repository:** choose a project type and branch approach; split only larger outcomes into independently verifiable sub-items.
-- **Existing repository:** the template detects current languages and creates `.csarc/config.yml`, then previews the adoption diff while preserving product content.
-- **Repository already using the template:** change options or upgrade through `csarc update`; the template updates the configuration and managed files together.
+- **Existing repository:** the template detects current languages and creates `.csarc/config.yml`. Then it previews the adoption diff and preserves product content.
+- **Repository already using the template:** change options or upgrade through `csarc update`. The template updates the configuration and managed files together.
 - **Prerequisites:** Git, GitHub CLI, and uv; Rust needs rustup, TypeScript needs Node 24+ and pnpm 11, and Go needs Go 1.27.1. Local verification needs no token.
 
 The template promises only capabilities that are implemented and tested. Generic deployment, monitoring, AI knowledge retrieval, and hosted documentation remain future or optional work.
@@ -96,28 +96,28 @@ The template promises only capabilities that are implemented and tested. Generic
 {{< /slide >}}
 
 {{< slide key="install" parity="supplemental" eyebrow="Install guide" title="Paste one prompt to your agent; it figures out what happens next" subtitle="`csarc status` checks the adoption checkpoint first, then `.csarc/config.yml`, the Copier revision, and policies/ drift; the result never depends on agent judgment." class="dense" legacy="false" >}}
-Whether the repository is brand new, an existing one, or already CSARC-managed, the way you find out is the same: you do not need to remember a command yourself -- paste the text below straight to your coding agent (Claude Code, Copilot, and the like) and let it run and judge for you.
+The first step is the same for a new repository, an existing one, or one that CSARC already manages. You do not need to remember a command. Paste the text below to your coding agent (Claude Code, Copilot, and similar) and let it run the check.
 
 {{< standard key="install-mode-standard" title="The prompt to paste to your agent" >}}
-<div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>Paste it</h3><p>Paste the full prompt below to your coding agent -- no command to remember.</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>CLI decides</h3><p>The agent runs <code>csarc status</code>; the CLI itself (not the agent's own judgment) classifies create, adopt, pending adoption, update, or a policy-only change.</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>Preview first</h3><p>Whatever the result, the agent shows you the plan and waits for confirmation before doing anything.</p></article></div>
+<div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>Paste it</h3><p>Paste the full prompt below to your coding agent. You remember no command.</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>CLI decides</h3><p>The agent runs <code>csarc status</code>. The CLI, not the agent, classifies create, adopt, pending adoption, update, or a policy-only change.</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>Preview first</h3><p>For every result, the agent shows you the plan and waits for confirmation before it acts.</p></article></div>
 
-The result will be one of: **create** a new project, **adopt** an existing one, **finish a pending adoption**, apply an available **update**, find it **already current** with nothing to do, or apply **policy-only** settings -- whichever it is, the agent always shows you the plan before touching anything.
+The result will be one of: **create** a new project, **adopt** an existing one, **finish a pending adoption**, apply an available **update**, find it **already current** with nothing to do, or apply **policy-only** settings. In each case, the agent shows you the plan before it changes anything.
 
-<p class="install-promise"><strong>The promise at this step:</strong> this step only checks the current state and proposes a plan; nothing is modified, no GitHub setting changes, and no PR opens until you confirm.</p>
+<p class="install-promise"><strong>The promise at this step:</strong> this step only checks the current state and proposes a plan. Until you confirm, no file or GitHub setting changes and no PR opens.</p>
 
 <div class="command-block"><div class="command-block-head"><span class="command-block-label">The full prompt to paste to your agent</span><button class="copy-command" type="button">Copy prompt</button></div><pre class="command-block-text">From the published Releases at https://github.com/Innoguard-Cyber-Arch/csarc-repo-template, use the official csarc CLI to select the latest stable immutable Release. Download and read that Release's `release-prompt.txt`; after confirming its repository, tag, and full SHA agree, follow it exactly in the current workspace. Do not use `main`, guess the installation state, or modify files or GitHub settings, push, or open a PR before I confirm.</pre></div>
 
-Each Release carries one pinned prompt. It lets the CLI classify the state first, then uses that same Release's `copier.yml` to offer recommended defaults or grouped customization instead of switching among separate lifecycle prompts.
+Each Release carries one pinned prompt. The CLI classifies the state first. Then that Release's `copier.yml` offers recommended defaults or grouped customization, so no separate lifecycle prompts are necessary.
 {{< /standard >}}
 
 {{< ops key="install-mode-ops" title="The exact detection rule and command for each state" >}}
-Prefer to run the command yourself instead of going through an agent:
+To run the command yourself instead of through an agent:
 
 ```bash
 csarc status <path> --json
 ```
 
-It only reads local files plus, once a repository is already managed, the resolved template release and live GitHub settings; it never writes anything or executes a helper from the target repository. Running it again against unchanged repository state always returns the same answer.
+It reads only local files. For a managed repository, it also reads the resolved template release and live GitHub settings. It never writes anything or executes a helper from the target repository. For unchanged repository state, it always returns the same answer.
 
 | State (`state`) | How it is detected | Next step |
 | --- | --- | --- |
@@ -130,17 +130,17 @@ It only reads local files plus, once a repository is already managed, the resolv
 | `policy-only-update` (policy settings changed) | The Copier revision is current, but `policies/` (for example, whether workarounds are allowed) no longer matches the live GitHub settings | `.csarc/scripts/apply-repository-settings.sh plan` to preview, then `apply`; this **skips** a full adopt or update run |
 
 {{< disclosure key="install-policy-only" title="Why a policy-only change skips a full readopt" >}}
-Policy settings (branch protection, required checks, labels, CODEOWNER rules) live in `.csarc/policies/*.json` and are applied to GitHub directly by `.csarc/scripts/apply-repository-settings.sh`; they are separate from the Copier template files. Changing a policy never touches a template file and never moves the pinned Copier revision. `csarc status` runs `check` from a complete helper closure rendered from the verified Release; it never trusts or executes the target repository's copy. When the revision is unchanged but policy drift is detected, status returns `policy-only-update` and points straight at the existing, standalone `plan`/`apply` flow instead of suggesting a full adopt or update.
+Policy settings (branch protection, required checks, labels, CODEOWNER rules) live in `.csarc/policies/*.json`. `.csarc/scripts/apply-repository-settings.sh` applies them to GitHub directly, separate from the Copier template files. A policy change never touches a template file or moves the pinned Copier revision. `csarc status` runs `check` from a complete helper closure rendered from the verified Release. It never trusts or executes the target repository's copy. If the revision is unchanged but policy drift exists, status returns `policy-only-update`. It points to the existing, standalone `plan`/`apply` flow, not a full adopt or update.
 
-If the trusted `apply-repository-settings.sh check` cannot run (for example, the Release is unverified, `gh` is not authenticated, or there is no network), `csarc status` does not assume policy drift. It falls back to `current` and marks `policy_check.available` as `false`, leaving the confirmation to a human.
+If the trusted `apply-repository-settings.sh check` cannot run (for example, the Release is unverified, `gh` is not authenticated, or there is no network), `csarc status` does not assume policy drift. It falls back to `current`, marks `policy_check.available` as `false`, and leaves the confirmation to a human.
 {{< /disclosure >}}
 
 {{< disclosure key="install-agent" title="Where the agent install contract lives" >}}
-The full machine-readable contract lives in [`docs/agent-install.md`](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/agent-install.md): an agent always runs `csarc status` first and follows the row matching its returned `state`, instead of guessing which situation applies. All of the classification logic lives in the CLI (`detect_install_state`); the agent only calls it and acts on the result, so the same repository state never produces a different answer just because a different agent ran it.
+The full machine-readable contract lives in [`docs/agent-install.md`](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/agent-install.md): an agent always runs `csarc status` first and follows the row for the returned `state`. It does not guess the situation. All classification logic lives in the CLI (`detect_install_state`). The agent only calls it and acts on the result, so a different agent never gets a different answer for the same repository state.
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-capabilities" title="Know what this specific repository can actually enable" >}}
-The Governance step's plan table (Step 08) answers "what does the account's GitHub *plan* allow." That is necessary but not sufficient: organization policy, CODEOWNER user or team access, and token scope can still block a capability on a plan that would otherwise support it. Beyond that plan probing, `policies/capability-matrix.json` names every capability this template relies on, its minimum requirement, and a documented workaround; `scripts/check-repo-capabilities` evaluates it against what this repository and token actually have, live:
+The Governance step's plan table (Step 08) answers "what does the account's GitHub *plan* allow." That is necessary but not sufficient. Organization policy, CODEOWNER user or team access, and token scope can still block a capability that the plan supports. `policies/capability-matrix.json` names every capability this template relies on, its minimum requirement, and a documented workaround. `scripts/check-repo-capabilities` evaluates it live against what this repository and token have:
 
 ```bash
 ./scripts/check-repo-capabilities        # human-readable report
@@ -158,66 +158,66 @@ The Governance step's plan table (Step 08) answers "what does the account's GitH
 | `repository_settings_inspection` | `check` mode can compare live admin-only fields | Same as `repository_admin` | DEGRADED marker; run `check` from a trusted admin checkout |
 | `immutable_releases` | Repository setting GitHub uses to sign each published Release's attestation | An admin enables it once via `apply-repository-settings.sh apply`; `GITHUB_TOKEN` still can't read it directly | No longer pre-flight-blocking (#770); `scripts/publish-release` verifies the signed attestation post-hoc and fails closed if it's missing |
 
-For a local repository without a remote, a configured CODEOWNER may first be reported as `unknown`, and a valid `--data repository_url=https://github.com/<owner>/<repository>` is required. Other configuration and package metadata still use this repository identity when documentation is disabled, and it is never guessed from `code_owner`.
+For a local repository without a remote, the report can first show a configured CODEOWNER as `unknown`. Give a valid `--data repository_url=https://github.com/<owner>/<repository>`. Other configuration and package metadata use this repository identity even when documentation is disabled. The template never guesses it from `code_owner`.
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-results" title="How to read a check-repo-capabilities result" >}}
-Every row reports one of three states: `allowed` (usable now), `blocked` (a real, currently-missing requirement), or `unknown` (cannot be proven from a read-only probe alone -- for example, an Actions setting that is off might just be unset rather than organization-blocked). This is a diagnostic preflight, not a merge gate: it always exits `0` once the report is produced, and it never mutates GitHub. Whether live settings actually *match* declared policy remains `apply-repository-settings.sh check`'s job.
+Every row reports one of three states: `allowed` (usable now), `blocked` (a real, currently-missing requirement), or `unknown` (a read-only probe alone cannot prove it; for example, an Actions setting that is off can be unset, not organization-blocked). This is a diagnostic preflight, not a merge gate. It always exits `0` after it produces the report, and it never mutates GitHub. `apply-repository-settings.sh check` still decides whether live settings *match* declared policy.
 
-`--facts <file>` reads pre-built facts instead of calling `gh`, so the same matrix can be evaluated against a hypothetical permission combination without live access -- this is also how `scripts/test-check-repo-capabilities` proves the gap list for several permission/plan combinations without any network access.
+`--facts <file>` reads pre-built facts instead of calling `gh`. You can then evaluate the matrix against a hypothetical permission combination without live access. `scripts/test-check-repo-capabilities` uses this to prove the gap list for several permission/plan combinations without network access.
 {{< /disclosure >}}
 
 {{< disclosure key="advanced-install-workarounds" title="Workarounds and the existing DEGRADED marker" >}}
-This matrix does not replace or redesign `apply-repository-settings.sh`'s DEGRADED mechanism -- it documents it. Every row whose workaround says "DEGRADED marker" reuses the exact same fail-safe already printed by `apply-repository-settings.sh check`/`plan`/`apply` for that limitation; the two never disagree because the underlying detection (plan, visibility, admin permission) is the same. `docs/ci-policy.md` and [the capability-aware governance ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/capability-aware-governance.md) record the durable decision; this page and `policies/capability-matrix.json` are what stay current as the single source both consult.
+This matrix documents `apply-repository-settings.sh`'s DEGRADED mechanism; it does not replace or redesign it. A row with the workaround "DEGRADED marker" reuses the fail-safe that `apply-repository-settings.sh check`/`plan`/`apply` already prints for that limitation. The two never disagree because they use the same detection (plan, visibility, admin permission). `docs/ci-policy.md` and [the capability-aware governance ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/capability-aware-governance.md) record the durable decision. This page and `policies/capability-matrix.json` stay current as the single source that both consult.
 {{< /disclosure >}}
 {{< /ops >}}
 {{< /slide >}}
 
 {{< slide key="about" track="about" eyebrow="About" title="CSARC is an updatable governance baseline that keeps working alongside your repo" subtitle="Not a template that stops once it generates files; creating, adopting, and upgrading all preview the diff before anything applies." class="dense single-column" legacy="false" >}}
 {{< standard key="about-mode-standard" title="What CSARC actually keeps doing" >}}
-Most templates are done the moment they generate files. CSARC keeps working alongside your repo, through a full lifecycle:
+Most templates stop when they generate files. CSARC keeps working alongside your repo for its full lifecycle:
 
-<div class="capability-map"><div class="capability-node"><h3>1｜Preview the diff before you touch anything</h3><p>Whether you're creating a new repo or adopting an existing one, a preview is built on the side first, listing what would be added, kept, or needs your own judgment; you apply it only after reviewing, never as a silent overwrite.</p><span class="capability-pointer">See "Install guide" and "Template updates"</span></div><div class="capability-node"><h3>2｜Day-to-day changes follow rules and get verified</h3><p>Each piece of work starts as an Issue stating what to do and what "done" means; the change happens on its own branch, gets checked locally first, then GitHub verifies the exact candidate on a trusted runner, while routine package and known-vulnerability checks run automatically on their own schedule.</p><span class="capability-pointer">See "Work", "Verify / CI", and "Supply chain"</span></div><div class="capability-node"><h3>3｜Merging leaves evidence behind</h3><p>A PR merges only after human review; when needed, a version and Release are created that record exactly which packages shipped, so "what actually happened" can always be checked later.</p><span class="capability-pointer">See "PR merge" and "Version / delivery"</span></div><div class="capability-node"><h3>4｜Future template updates still preview first</h3><p>A template update works the same way adoption does: it produces a reviewable diff first, and you confirm before it applies. This site itself is built on the same principle -- download <code>docs/index.html</code> and it opens offline.</p><span class="capability-pointer">See "Template updates" and "Repo-site"</span></div></div>
+<div class="capability-map"><div class="capability-node"><h3>1｜Preview the diff before you touch anything</h3><p>For a new repo or an existing one, the template first builds a preview on the side. It lists what it adds, what it keeps, and what needs your judgment. You apply it only after review; it is never a silent overwrite.</p><span class="capability-pointer">See "Install guide" and "Template updates"</span></div><div class="capability-node"><h3>2｜Day-to-day changes follow rules and get verified</h3><p>Each piece of work starts as an Issue that states what to do and what "done" means. The change uses its own branch and gets local checks first. Then GitHub verifies the exact candidate on a trusted runner. Routine package and known-vulnerability checks run automatically on their own schedule.</p><span class="capability-pointer">See "Work", "Verify / CI", and "Supply chain"</span></div><div class="capability-node"><h3>3｜Merging leaves evidence behind</h3><p>A PR merges only after human review. When needed, a version and Release record exactly which packages shipped, so you can always check later what happened.</p><span class="capability-pointer">See "PR merge" and "Version / delivery"</span></div><div class="capability-node"><h3>4｜Future template updates still preview first</h3><p>A template update works like adoption: it makes a reviewable diff first, and you confirm before it applies. This site follows the same principle: download <code>docs/index.html</code> and it opens offline.</p><span class="capability-pointer">See "Template updates" and "Repo-site"</span></div></div>
 
-This rhythm fits you if: you already have a GitHub repository that cannot risk being overwritten wholesale; you want coding agents in day-to-day development with clear rule boundaries; or you want several projects to share one workflow. If you just want to scaffold an empty project quickly with no ongoing maintenance, a lighter template probably fits better.
+This rhythm fits you if you have a GitHub repository that a wholesale overwrite would damage. It also fits if you want coding agents in daily development with clear rule boundaries, or several projects on one workflow. To scaffold an empty project quickly with no ongoing maintenance, a lighter template probably fits better.
 {{< /standard >}}
 
 {{< ops key="about-mode-ops" title="The thinking behind the governance baseline" >}}
-CSARC is not just a file generator: creating a new project, adopting an existing one, and rolling out later policy updates all go through a process that previews, verifies, and stays traceable -- what it delivers is a verifiable way of working, not just files.
+CSARC is more than a file generator. Creation, adoption, and later policy updates all use one process that previews, verifies, and stays traceable. It delivers a verifiable way of working, not only files.
 
-<div class="capability-map"><div class="capability-node"><h3>Adopting an existing repository safely</h3><p>Builds a full candidate in isolation and verifies it first; reconfirms no drift before applying; stops on conflict or failure without touching the target repo.</p></div><div class="capability-node"><h3>Rolling out governance policy continuously</h3><p>Keeps repository choices, the template revision, GitHub's desired policy, and the platform's actual state separate; a fixable gap is called out, an unsupported capability is labeled <code>DEGRADED</code>.</p></div><div class="capability-node"><h3>Keeping an evidence chain you can check</h3><p>Issue -&gt; PR -&gt; verification -&gt; delivery candidate -&gt; merge -&gt; release -&gt; checksum/SBOM -&gt; audit trail, each step pointing back to the exact version before it.</p></div></div>
+<div class="capability-map"><div class="capability-node"><h3>Adopting an existing repository safely</h3><p>Builds and verifies a full candidate in isolation first. Confirms again that no drift exists before it applies. Stops on conflict or failure and leaves the target repo untouched.</p></div><div class="capability-node"><h3>Rolling out governance policy continuously</h3><p>Keeps repository choices, the template revision, GitHub's desired policy, and the platform's actual state separate. It reports a fixable gap and labels an unsupported capability <code>DEGRADED</code>.</p></div><div class="capability-node"><h3>Keeping an evidence chain you can check</h3><p>Issue -&gt; PR -&gt; verification -&gt; delivery candidate -&gt; merge -&gt; release -&gt; checksum/SBOM -&gt; audit trail. Each step points back to the exact version before it.</p></div></div>
 
 {{< disclosure key="about-three-layers" title="Three layers: why a written policy doesn't always mean an enforced one" >}}
-CSARC splits "governance" into three layers that can drift out of sync with each other, so no single layer alone proves a control is actually in effect:
+CSARC splits "governance" into three layers that can drift apart. No single layer alone proves that a control is in effect:
 
-1. **Template source:** `template/`, `policies/`, and `profiles/catalog.yaml` -- the shared definitions the template team maintains, describing what "should" be provided.
-2. **The repo-local contract:** `.csarc/config.yml`, `policies/*.json`, and `AGENTS.md` left in this repository after generation or adoption -- what this repository chose from the template, and what it expects.
-3. **What actually takes effect on GitHub:** branch protection, Rulesets, Actions permissions, and the GitHub plan's own limits -- what the platform is really enforcing right now.
+1. **Template source:** `template/`, `policies/`, and `profiles/catalog.yaml`. The template team maintains these shared definitions of what "should" be provided.
+2. **The repo-local contract:** `.csarc/config.yml`, `policies/*.json`, and `AGENTS.md`, left in this repository after generation or adoption. They record what this repository chose from the template and what it expects.
+3. **What actually takes effect on GitHub:** branch protection, Rulesets, Actions permissions, and the GitHub plan's own limits. This is what the platform enforces now.
 
-A template update only touches layer 1; applying it to a repository only touches layer 2; and whether the policy written into layer 2 actually takes effect still depends on whether layer 3 -- the GitHub plan and permissions -- can support it. `apply-repository-settings.sh`'s `plan`/`apply`/`check` exist precisely to reconcile layer 2 against layer 3: when they agree, it applies and `check` verifies it; when the platform genuinely cannot support it, the result is marked `DEGRADED` and handed back to a person, never pretended as enforced.
+A template update touches only layer 1. Applying it to a repository touches only layer 2. Layer 2 policy takes effect only if layer 3, the GitHub plan and permissions, can support it. `apply-repository-settings.sh`'s `plan`/`apply`/`check` reconcile layer 2 against layer 3. When they agree, it applies and `check` verifies it. When the platform cannot support it, the result is marked `DEGRADED` and goes back to a person. It is never shown as enforced.
 {{< /disclosure >}}
 
 {{< disclosure key="about-design-philosophy" title="Why it is designed this way: people/agent split, repo-local, who this fits" >}}
 ### Designed for people and coding agents together
 
-CSARC gives agents a friendly way in, but never lets an agent guess at repository state or governance policy on its own. An agent's job is to help operate the system and explain it; the actual judgment lives in deterministic, testable CLI commands, scripts, and policies that anyone can rerun locally. Requirement trade-offs, irreversible actions, external impact, and merge authorization all stay with a human.
+CSARC gives agents an easy way in, but an agent never guesses repository state or governance policy. An agent helps operate and explain the system. Deterministic, testable CLI commands, scripts, and policies make the decisions, and anyone can rerun them locally. Requirement trade-offs, irreversible actions, external impact, and merge authorization stay with a human.
 
 ### Repo-local, not another platform to run
 
-CSARC does not require standing up a developer portal, a long-lived PAT, an extra GitHub App, or a dedicated hosted service first. Policy, verification, documentation, and decision evidence all stay inside the repository, where they go through PR review, version control, and can be read offline. It does not replace Backstage, Minder, or a language's own native tooling -- it composes Copier, GitHub, uv, Cargo, pnpm, the Go toolchain, OSV, Syft, and Release Please into one repository lifecycle with clear ownership and clear failure boundaries.
+CSARC needs no developer portal, long-lived PAT, extra GitHub App, or dedicated hosted service first. Policy, verification, documentation, and decision evidence stay inside the repository. There they get PR review and version control, and you can read them offline. CSARC does not replace Backstage, Minder, or a language's native tooling. It composes Copier, GitHub, uv, Cargo, pnpm, the Go toolchain, OSV, Syft, and Release Please into one repository lifecycle. That lifecycle has clear ownership and clear failure boundaries.
 
 ### Who this fits
 
-A good fit if you: already have a GitHub repository that cannot risk a template overwriting it; are starting to let coding agents into day-to-day development; want several repositories to share one governance baseline; care about supply-chain evidence, change history, and auditability; do not yet need, or cannot yet staff, a central platform. If you just want to scaffold an empty project quickly with no ongoing governance, a lighter project template probably fits better.
+CSARC fits if you: have a GitHub repository that a template overwrite would damage; are starting to use coding agents in daily development; want several repositories to share one governance baseline; care about supply-chain evidence, change history, and auditability; do not yet need, or cannot yet staff, a central platform. To scaffold an empty project quickly with no ongoing governance, a lighter project template probably fits better.
 {{< /disclosure >}}
 
 {{< disclosure key="about-beliefs" title="What we choose to believe" >}}
 - Build and verify a candidate before writing anything.
 - Product content always has a clear owner.
-- A capability that cannot be proven is never claimed as working.
-- Be honest about degrading when the platform cannot support something.
+- Never claim that an unproven capability works.
+- When the platform cannot support something, report the degradation honestly.
 - Automation owns the repetitive judgment calls; people own the important decisions.
-- Documentation is navigation -- specs, ADRs, GitHub history, and tests are what actually constitute durable project memory.
+- Documentation is navigation. Specs, ADRs, GitHub history, and tests are the durable project memory.
 {{< /disclosure >}}
 {{< /ops >}}
 {{< /slide >}}
@@ -226,20 +226,20 @@ A good fit if you: already have a GitHub repository that cannot risk a template 
 {{< legacy >}}
       <header>
         <h2>The template carries every change<span class="accent"> to the right place</span></h2>
-        <p class="subtitle"><strong>CI/CD here means:</strong> once a change is submitted, a separate clean environment re-checks it before deciding whether it can merge or ship -- it does not mean automatic deployment to production.</p>
-        <p class="subtitle">For example: the team is adding a sign-in-timeout reminder to the product -- the five steps below all use this example.</p>
+        <p class="subtitle"><strong>CI/CD here means:</strong> after you submit a change, a separate clean environment checks it again and decides whether it can merge or ship. It does not mean automatic deployment to production.</p>
+        <p class="subtitle">Example: the team adds a sign-in-timeout reminder to the product. The five steps below all use this example.</p>
       </header>
       <div class="pipeline-map">
         <div class="pipeline-track" aria-label="Everyday development and delivery flow">
           <article class="pipeline-stage">
             <span class="pipeline-phase">Step 1｜State it clearly</span>
             <h3>Open the work</h3>
-            <p><strong>Person:</strong> writes an Issue (a work item) -- "Add a sign-in-timeout reminder" -- with the completion condition that a reminder shows before timeout, backed by a test. <strong>Template:</strong> the form prompts for the required fields. <strong>Result:</strong> one clearly scoped, independently verifiable piece of work.</p>
+            <p><strong>Person:</strong> writes an Issue (a work item), "Add a sign-in-timeout reminder". Its completion condition: a reminder shows before timeout, and a test proves it. <strong>Template:</strong> the form prompts for the required fields. <strong>Result:</strong> one clearly scoped, independently verifiable piece of work.</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">Step 2｜Make the change</span>
             <h3>Complete the change</h3>
-            <p><strong>Person/AI:</strong> changes the code following in-repo guidance, running the most relevant local check first. <strong>Template:</strong> prepares that guidance and the check scripts. <strong>Result:</strong> a self-checked change ready to send for review.</p>
+            <p><strong>Person/AI:</strong> changes the code by the in-repo guidance and runs the most relevant local check first. <strong>Template:</strong> prepares that guidance and the check scripts. <strong>Result:</strong> a self-checked change ready to send for review.</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">Step 3｜Hand it to the team</span>
@@ -249,7 +249,7 @@ A good fit if you: already have a GitHub repository that cannot risk a template 
           <article class="pipeline-stage">
             <span class="pipeline-phase">Step 4｜The system helps</span>
             <h3>Verify and check dependencies</h3>
-            <p><strong>GitHub:</strong> selects the verification tier from the trusted default branch, then runs the matching check against the PR's exact commit on a GitHub-hosted runner; a dependency change also gets checked against known vulnerabilities on its own hosted schedule. <strong>Template:</strong> selects the verification the change actually needs. <strong>Result:</strong> the merge verdict comes from traceable hosted execution evidence, not a statement written by the contributor.</p>
+            <p><strong>GitHub:</strong> selects the verification tier from the trusted default branch. Then it runs the matching check against the PR's exact commit on a GitHub-hosted runner. A hosted schedule also checks a dependency change against known vulnerabilities. <strong>Template:</strong> selects the verification the change needs. <strong>Result:</strong> the merge verdict comes from traceable hosted execution evidence, not from the contributor's statement.</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">Step 5｜Confirm the result</span>
@@ -259,14 +259,14 @@ A good fit if you: already have a GitHub repository that cannot risk a template 
         </div>
         <div class="pipeline-loop" aria-label="CI feedback loop">
           <strong>↺ A check fails → fix it on the same work branch → update the same PR → get a fresh result</strong>
-          <span>A new problem found after merge gets its own, clearly scoped Issue, instead of reopening the branch that already merged.</span>
+          <span>A new problem found after merge gets its own clearly scoped Issue. Do not reopen the merged branch.</span>
         </div>
         <div class="pipeline-foundation" aria-label="Platform capability underneath the whole flow">
-          <div class="pipeline-foundation-label"><strong>The template prepares this first</strong><span>Most users just follow the prompts; only a maintainer adjusts settings.</span></div>
+          <div class="pipeline-foundation-label"><strong>The template prepares this first</strong><span>Most users follow the prompts; only a maintainer adjusts settings.</span></div>
           <article class="pipeline-foundation-card"><h3>Work format</h3><p>Issue and PR forms prompt for the necessary content.</p></article>
           <article class="pipeline-foundation-card"><h3>Verification and security rules</h3><p>Selects the necessary checks by change content and flags dependency risk.</p></article>
           <article class="pipeline-foundation-card"><h3>Merge settings</h3><p>Applies the protection the GitHub plan actually supports.</p></article>
-          <article class="pipeline-foundation-card best"><h3>Version and release</h3><p>The flow is configured as a candidate; it counts as active only after a successful default-branch run.</p></article>
+          <article class="pipeline-foundation-card best"><h3>Version and release</h3><p>The flow is a configured candidate. It is active only after a successful default-branch run.</p></article>
         </div>
       </div>
 {{< /legacy >}}
@@ -280,61 +280,61 @@ A good fit if you: already have a GitHub repository that cannot risk a template 
 | Read verification and dependency results | The template selects the necessary checks; package changes also prove that the saved version list still installs |
 | Review and merge | Merge into the correct branch after the result and human review are clear |
 
-Users do not need to memorize workflow or script names. Current automation covers work items, PR rules, necessary verification, and exact version materialization in the original release-worthy PR.
+You do not need to memorize workflow or script names. Current automation covers work items, PR rules, necessary verification, and exact version materialization in the original release-worthy PR.
 
 **Responsibility handoff (local scripts → GitHub Actions → PR gate → Release):**
 
-- **Local scripts (`Active`):** developers first run focused checks for the changed owners; `scripts/verify-fast` is optional when a broad diagnostic is useful. Hosted mode does not rerun `scripts/verify-template.sh` locally just because the tier is full; local full is reserved for a documented fallback or diagnostic.
-- **GitHub Actions (`Active`):** once a PR opens, the trusted base workflow classifies the required tier, checks out the exact candidate commit, and runs the risk-owned verification once for that head on a GitHub-hosted runner. Merge and release accept only successful evidence bound to the repository, commit/tree, tier, command, toolchain, and GitHub Actions identity.
-- **PR gate (depends on the GitHub plan):** where supported, a Ruleset / branch protection blocks a merge that failed checks or lacks review; where not supported, it is marked `DEGRADED` and falls back to human discipline (see "Rules governance").
-- **Release (`Candidate`):** the original PR materializes the version; hosted `release.yml` publishes it by default, while a maintainer or agent may run the same `scripts/publish-release` locally when Actions is unhealthy (see "Version / delivery").
+- **Local scripts (`Active`):** developers first run focused checks for the changed owners. `scripts/verify-fast` is optional when a broad diagnostic is useful. In hosted mode, a full tier alone is no reason to rerun `scripts/verify-template.sh` locally; local full is reserved for a documented fallback or diagnostic.
+- **GitHub Actions (`Active`):** when a PR opens, the trusted base workflow classifies the required tier and checks out the exact candidate commit. It runs the risk-owned verification once for that head on a GitHub-hosted runner. Merge and release accept only successful evidence bound to the repository, commit/tree, tier, command, toolchain, and GitHub Actions identity.
+- **PR gate (depends on the GitHub plan):** where supported, a Ruleset / branch protection blocks a merge with failed checks or no review. Where not supported, the gate is marked `DEGRADED` and falls back to human discipline (see "Rules governance").
+- **Release (`Candidate`):** the original PR materializes the version. Hosted `release.yml` publishes it by default. When Actions is unhealthy, a maintainer or agent can run the same `scripts/publish-release` locally (see "Version / delivery").
 
 {{< detail key="flow-foundation" title="Three foundations across the whole flow" >}}
 - **08 Governance:** prepares repository policy, then applies only the controls the live GitHub plan supports.
 - **09 Template updates:** Copier carries policy changes back through reviewable PRs.
 - **10 Repo-site:** keeps practices, limits, evidence, and decisions discoverable.
 
-A failed check is fixed in the same PR. A new problem found after merge becomes a separate, bounded Issue.
+Fix a failed check in the same PR. A new problem found after merge becomes a separate, bounded Issue.
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
 
 {{< slide key="files" track="files" class="dense" eyebrow="File map" title="The template puts required settings in the right place" subtitle="This lists the major files currently generated; template updates never silently overwrite product-owned content." legacy="false" >}}
 {{< standard key="files-mode-standard" title="Update flow and integrated tools" >}}
-Where a file lives matters less than who can change it. Every file falls into one of three ownership categories: **template-led** (a template update may change it; avoid editing it directly after generation), **shared** (you can edit it directly, but the next template update may ask you to merge in a diff), or **project-owned** (entirely yours -- the template never overwrites it).
+Who can change a file matters more than where it lives. Every file has one of three ownership categories: **template-led** (a template update can change it; do not edit it directly after generation), **shared** (you can edit it, but the next template update can ask you to merge a diff), or **project-owned** (entirely yours; the template never overwrites it).
 
-<div class="capability-map"><div class="capability-node"><h3>Template settings <span class="ownership-tag shared">Shared</span></h3><p><code>.csarc/config.yml</code> and <code>policies/</code> keep only governance, review, release, optional-feature, and owner intent; plan and live capability are detected separately.</p></div><div class="capability-node"><h3>GitHub workflow <span class="ownership-tag template">Template-led</span></h3><p><code>.github/</code>: Issue/PR forms and automated checks.</p></div><div class="capability-node"><h3>Agent rules <span class="ownership-tag shared">Shared</span></h3><p><code>AGENTS.md</code>: how an agent works in this repository.</p></div><div class="capability-node"><h3>Project docs <span class="ownership-tag shared">Shared</span></h3><p><code>README.md</code>, <code>docs/</code>, <code>site/</code>: docs for people, and the site you're reading right now.</p></div><div class="capability-node"><h3>Product code <span class="ownership-tag project">Project-owned</span></h3><p><code>src/</code> (plus <code>go.mod</code>, <code>cmd/</code>, and <code>internal/</code> when Go is selected): the actual product code, tests, and specs.</p></div></div>
+<div class="capability-map"><div class="capability-node"><h3>Template settings <span class="ownership-tag shared">Shared</span></h3><p><code>.csarc/config.yml</code> and <code>policies/</code> keep only governance, review, release, optional-feature, and owner intent. The template detects plan and live capability separately.</p></div><div class="capability-node"><h3>GitHub workflow <span class="ownership-tag template">Template-led</span></h3><p><code>.github/</code>: Issue/PR forms and automated checks.</p></div><div class="capability-node"><h3>Agent rules <span class="ownership-tag shared">Shared</span></h3><p><code>AGENTS.md</code>: how an agent works in this repository.</p></div><div class="capability-node"><h3>Project docs <span class="ownership-tag shared">Shared</span></h3><p><code>README.md</code>, <code>docs/</code>, <code>site/</code>: docs for people, and the site you are reading now.</p></div><div class="capability-node"><h3>Product code <span class="ownership-tag project">Project-owned</span></h3><p><code>src/</code> (plus <code>go.mod</code>, <code>cmd/</code>, and <code>internal/</code> when Go is selected): the actual product code, tests, and specs.</p></div></div>
 
 Switch to Maintenance mode for the full file tree and each file's owner.
 
-When the template finds a file it can update, it first builds a candidate in an isolated environment on the side, without touching this repo, then compares files one by one:
+When the template finds a file it can update, it first builds a candidate in an isolated environment. This repo stays untouched. Then the template compares the files one by one:
 
 <div class="plan-grid">
-  <article class="plan-card current"><h3>Update the worktree when there's no conflict</h3><p>The update applies directly, no action needed.</p></article>
-  <article class="plan-card team"><h3>Keep your content when there's a conflict</h3><p>Only the affected files are listed; your content stays untouched.</p></article>
-  <article class="plan-card enterprise"><h3>Always reviewed by PR before reaching the real branch</h3><p>Either way, a person reviews and merges it; nothing silently overwrites your content.</p></article>
+  <article class="plan-card current"><h3>Update the worktree when there's no conflict</h3><p>The update applies directly; no action is necessary.</p></article>
+  <article class="plan-card team"><h3>Keep your content when there's a conflict</h3><p>The template lists only the affected files; your content stays untouched.</p></article>
+  <article class="plan-card enterprise"><h3>Always reviewed by PR before reaching the real branch</h3><p>In both cases, a person reviews and merges it. Nothing silently overwrites your content.</p></article>
 </div>
 
-The template already wires up the tools you'd otherwise have to find and configure yourself: project generation and updates, code security scanning, dependency-update reminders, known-vulnerability scanning, release notes, and the repo site you're reading right now.
+The template already connects the tools you would otherwise find and configure yourself: project generation and updates, code security scanning, dependency-update reminders, known-vulnerability scanning, release notes, and this repo site.
 {{< /standard >}}
 
 {{< ops key="files-mode-ops" title="Technical detail on the update mechanism and tools" >}}
 {{< file-map >}}
 
 {{< disclosure key="files-map-scope" title="Why the file map only lists path, purpose, and responsibility" >}}
-The side navigation already links each item to its page, and the maintainer-only "CI/CD settings" appendix already lists verification entry points per step in more detail than this view could add; the tree view therefore avoids duplicating a page-name or verification-entry column.
+The side navigation already links each item to its page. The maintainer-only "CI/CD settings" appendix lists the verification entry points of each step in more detail. So the tree view has no page-name or verification-entry column.
 
-The "responsibility" column is also editing guidance: avoid editing a `Template-led` file directly in a generated repo -- route the change through Template updates instead; a `Shared` file is a reasonable place to edit directly, but the next template update may ask you to merge in a diff; a `Project-owned` file is entirely yours, and the template never touches it.
+The "responsibility" column is also editing guidance. Do not edit a `Template-led` file directly in a generated repo; send the change through Template updates. You can edit a `Shared` file directly, but the next template update can ask you to merge a diff. A `Project-owned` file is entirely yours; the template never touches it.
 {{< /disclosure >}}
 
 {{< disclosure key="files-update" title="How updates protect product content" >}}
-Copier attempts updates on a short branch. A conflict only lists the affected files and leaves the repository unchanged; adjust them, rerun, and then review the PR. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.
+Copier tries updates on a short branch. A conflict only lists the affected files and leaves the repository unchanged. Adjust the files, rerun, and then review the PR. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.
 
-Workflows, policies, scripts, and documents shared by root and `template/` are kept in sync. Files that differ because of project choices are verified by generating a real project. New repositories receive the release Action; adopted repositories keep their product-owned workflow.
+Root and `template/` keep their shared workflows, policies, scripts, and documents in sync. A real generated project verifies the files that differ by project choice. New repositories receive the release Action; adopted repositories keep their product-owned workflow.
 {{< /disclosure >}}
 
 {{< disclosure key="files-tools" title="Tools actually used" >}}
-Only tools this template directly integrates, executes, or produces into the repository. External alternatives stay on the Similar tools comparison; language toolchains (`uv`, `ty`, `pnpm`, `rustfmt`, `Clippy`, `Cargo`, `gofmt`, `go vet`) stay on the Languages slide. Current versions live in `uv.lock`, the pinned Action SHA, or the install script named below; this table never restates them.
+This table lists only tools that this template integrates, executes, or produces into the repository. External alternatives stay on the Similar tools comparison; language toolchains (`uv`, `ty`, `pnpm`, `rustfmt`, `Clippy`, `Cargo`, `gofmt`, `go vet`) stay on the Languages slide. Current versions live in `uv.lock`, the pinned Action SHA, or the install script named below; this table never restates them.
 
 | Tool | Purpose | Where it appears | Scope | License |
 | --- | --- | --- | --- | --- |
@@ -353,28 +353,28 @@ Only tools this template directly integrates, executes, or produces into the rep
 {{< legacy >}}
       <header>
         <h2>Step 1｜<span class="accent">Turn a request into work that is ready to start</span></h2>
-        <p class="subtitle"><strong>Baseline.</strong> One Issue defines one change that can be completed independently; only use a Milestone when several work items share an outcome and deadline.</p>
+        <p class="subtitle"><strong>Baseline.</strong> One Issue defines one change that can be completed independently. Use a Milestone only when several work items share an outcome and deadline.</p>
       </header>
-      <p class="context-line"><strong>What the template does｜</strong>keeps Issue and Milestone content consistent, so a person or an agent knows what to solve and what "done" means before starting.</p>
-      <p class="context-line"><strong>For example｜</strong>Issue: add a sign-in-timeout reminder / completion condition: a reminder shows before timeout, backed by a test; the work branch matches this Issue; the PR delivers only this one change.</p>
-      <div class="relation-map"><div class="relation-track"><div class="relation-col"><div class="relation-group"><span class="relation-group-label">Only when needed</span><strong>Milestone</strong><span class="relation-group-note">Only put multiple Issues into the same Milestone when they need a shared deadline or shared acceptance</span></div><span class="relation-group-arrow" aria-hidden="true">↓</span><article class="relation-node"><span class="relation-kind">State it clearly</span><h3>Issue</h3><p>Problem, completion criteria, verification, and owner; add no other document once that is enough to start.</p></article></div><article class="relation-node"><span class="relation-kind">Start implementing</span><h3>Work branch</h3><p>One short-lived branch per Issue; do not mix unrelated work into it.</p></article><article class="relation-node"><span class="relation-kind">Review, then merge</span><h3>PR</h3><p>Matches the same Issue; merges to main only after checks and human review pass.</p></article></div></div>
-      <p class="context-line"><strong>Next step｜</strong>open an Issue and cut a work branch to start implementing; naming rules, Milestone detail, Issue splitting, and exceptions are covered in Maintenance mode.</p>
+      <p class="context-line"><strong>What the template does｜</strong>keeps Issue and Milestone content consistent. Before starting, a person or an agent knows what to solve and what "done" means.</p>
+      <p class="context-line"><strong>For example｜</strong>Issue: add a sign-in-timeout reminder / completion condition: a reminder shows before timeout, and a test proves it. The work branch matches this Issue; the PR delivers only this one change.</p>
+      <div class="relation-map"><div class="relation-track"><div class="relation-col"><div class="relation-group"><span class="relation-group-label">Only when needed</span><strong>Milestone</strong><span class="relation-group-note">Put multiple Issues into one Milestone only when they need a shared deadline or shared acceptance</span></div><span class="relation-group-arrow" aria-hidden="true">↓</span><article class="relation-node"><span class="relation-kind">State it clearly</span><h3>Issue</h3><p>Problem, completion criteria, verification, and owner. When that is enough to start, add no other document.</p></article></div><article class="relation-node"><span class="relation-kind">Start implementing</span><h3>Work branch</h3><p>One short-lived branch per Issue; do not mix unrelated work into it.</p></article><article class="relation-node"><span class="relation-kind">Review, then merge</span><h3>PR</h3><p>Matches the same Issue. Merges to main only after checks and human review pass.</p></article></div></div>
+      <p class="context-line"><strong>Next step｜</strong>open an Issue and create a work branch to start implementation. Maintenance mode covers naming rules, Milestone detail, Issue splitting, and exceptions.</p>
 {{< /legacy >}}
 
 {{< basic >}}
 ### Our choice
 
 - **Overall:** turn the request into one Issue that can be completed and verified independently.
-- **Work branch:** when implementation starts, create one short-lived `type/<Issue>-short-slug` branch per Issue and do not mix unrelated work into it.
-- **Milestone:** create one only when several Issues share an outcome, deadline, or delivery batch, and give it one lifecycle tracking Issue.
-  - Structure it as one tracking Issue → several main Issues attached directly to the Milestone (no Feature parent) → a Sub-issue under a main Issue only when needed.
-  - When research or a Feature expands into that delivery, the originating Issue becomes one of the main Issues; main Issues, Sub-issues, and their PRs all belong to the same Milestone.
-  - Title it `Milestone <number>: <Milestone title>`; the text after the colon must exactly match the Milestone title.
+- **Work branch:** when implementation starts, create one short-lived `type/<Issue>-short-slug` branch per Issue. Do not mix unrelated work into it.
+- **Milestone:** create one only when several Issues share an outcome, deadline, or delivery batch. Give it one lifecycle tracking Issue.
+  - Structure: one tracking Issue → several main Issues attached directly to the Milestone (no Feature parent) → a Sub-issue under a main Issue only when needed.
+  - When research or a Feature expands into that delivery, the originating Issue becomes a main Issue. Main Issues, Sub-issues, and their PRs all belong to the same Milestone.
+  - Title it `Milestone <number>: <Milestone title>`. The text after the colon must exactly match the Milestone title.
   - Keep approvals, objections, and early termination in the body or comments, not the title.
-  - Work may start only after at least one person other than the proposer agrees and no objection remains unresolved.
-  - Under the default delivery-branch strategy, use exactly one active `dev/m<Milestone>-*` branch for the Milestone; all of its work branches merge there.
-- **Issue:** choose the Feature, Task, Bug, or Documentation form, then state the problem, acceptance criteria, and verification.
-  - Use a clear English title; the creator owns the Issue by default.
+  - Start work only after at least one person other than the proposer agrees and no objection is unresolved.
+  - Under the default delivery-branch strategy, use exactly one active `dev/m<Milestone>-*` branch for the Milestone. All of its work branches merge there.
+- **Issue:** choose the Feature, Task, Bug, or Documentation form. Then state the problem, acceptance criteria, and verification.
+  - Use a clear English title. By default, the creator owns the Issue.
 - **Exceptions:** close repeated work as Duplicate. Define urgent work as a Bug first; the PR / merge section owns its delivery route.
 
 {{< disclosure key="work-item-details" title="Issue types and splitting rules" >}}
@@ -382,12 +382,12 @@ Only tools this template directly integrates, executes, or produces into the rep
 - Task is work that can be completed and verified independently.
 - Bug is a result that differs from expectations.
 - Documentation changes only documentation or examples.
-- Keep work together when one completion condition and one body of evidence can prove it. Create a Sub-issue when work can be completed independently or required follow-up exceeds the original scope.
-- A Parent describes the shared outcome that is not complete yet; Dependency expresses ordering instead.
+- Keep work together when one completion condition and one body of evidence can prove it. Create a Sub-issue when work can be completed independently or necessary follow-up exceeds the original scope.
+- A Parent describes a shared outcome that is not complete yet. Dependency expresses order.
 {{< /disclosure >}}
 
 {{< disclosure key="method-alternatives" title="Other common approaches" >}}
-- **Start first, document when needed:** finish small, clear work directly; add a plan only for work that spans sessions, has dependencies, or carries higher risk.
+- **Start first, document when needed:** finish small, clear work directly. Add a plan only for work that spans sessions, has dependencies, or carries higher risk.
 - **Specification first:** clarify requirements, design, and task breakdown before development begins.
 - **Change proposal:** review a proposed change separately, then merge it into the official specification after acceptance.
 - **Complexity-based workflow:** use a short path for small work and add discovery, design, roles, and review only for larger work.
@@ -402,37 +402,37 @@ Only tools this template directly integrates, executes, or produces into the rep
 {{< legacy >}}
       <header>
         <h2>Step 2｜<span class="accent">Define AI rules before implementation</span></h2>
-        <p class="subtitle"><strong>Baseline.</strong> An Issue bounds the work; <code>AGENTS.md</code> explains how to work; code and tests provide evidence, and people retain product direction and material-risk decisions.</p>
+        <p class="subtitle"><strong>Baseline.</strong> An Issue bounds the work. <code>AGENTS.md</code> explains how to work. Code and tests provide evidence. People keep product direction and material-risk decisions.</p>
       </header>
-      <p class="context-line"><strong>What the template does｜</strong>generates and checks what an agent must read before starting, where it may change files, how to isolate parallel work, and what evidence to leave; only custom policy, material decisions, and exceptions need a person.</p>
-      <div class="capability-map cols-3"><div class="capability-node"><h3>Issue: this time's scope</h3><p>States what to complete this time and what "done" means; scope and progress live here, while material decisions live in an approved spec/ADR (a written record of the requirement and the architecture decision behind it).</p></div><div class="capability-node"><h3>AGENTS.md: how to work in this repo</h3><p>The working rulebook that travels with the repository under version control; an agent reads it before starting anything, instead of guessing at convention.</p></div><div class="capability-node"><h3>Evidence and decisions</h3><p>scripts/tests provide verification evidence anyone can rerun; requirement direction, material trade-offs, and irreversible operations still stay with a person.</p></div></div>
-      <p class="context-line"><strong>Next step｜</strong>point your agent at <code>AGENTS.md</code> and let it start working; change isolation, verification evidence, and template-update rules are covered in Maintenance mode.</p>
+      <p class="context-line"><strong>What the template does｜</strong>generates and checks the agent rules: what to read before starting, where to change files, how to isolate parallel work, and what evidence to leave. Only custom policy, material decisions, and exceptions need a person.</p>
+      <div class="capability-map cols-3"><div class="capability-node"><h3>Issue: this time's scope</h3><p>States what to complete this time and what "done" means. Scope and progress live here. Material decisions live in an approved spec/ADR (a written record of the requirement and its architecture decision).</p></div><div class="capability-node"><h3>AGENTS.md: how to work in this repo</h3><p>The working rulebook that travels with the repository under version control. An agent reads it before it starts, instead of guessing at convention.</p></div><div class="capability-node"><h3>Evidence and decisions</h3><p>scripts/tests provide verification evidence that anyone can rerun. Requirement direction, material trade-offs, and irreversible operations stay with a person.</p></div></div>
+      <p class="context-line"><strong>Next step｜</strong>point your agent at <code>AGENTS.md</code> and let it start. Maintenance mode covers change isolation, verification evidence, and template-update rules.</p>
 {{< /legacy >}}
 
 {{< basic >}}
 ### Our choice
 
 - **Automated by default:** the template generates and checks the AI rules; only custom policy, material decisions, and exceptions need a person.
-- **Work and context:** GitHub Issues and PRs record work; approved specs and ADRs retain long-lived decisions, and a plan is added only when needed.
+- **Work and context:** GitHub Issues and PRs record work. Approved specs and ADRs keep long-lived decisions. Add a plan only when needed.
 - **AI rules:** the root `AGENTS.md`; `CLAUDE.md` is only a thin import.
 - **Change isolation:** each writable task uses its own branch and worktree; read-only work does not.
 - **Verification evidence:** a local program is the only logic; an Action only calls it.
-- **Decisions and authorization:** people keep material decisions; review and merge rules are defined only by Rules governance.
-- **Template creation and updates:** Copier owns the shared baseline; an existing repository's updates are defined by Template upgrades.
+- **Decisions and authorization:** people keep material decisions. Only Rules governance defines review and merge rules.
+- **Template creation and updates:** Copier owns the shared baseline. Template upgrades defines updates for an existing repository.
 
 {{< disclosure key="agents-priority-and-isolation" title="Rule priority and change isolation" >}}
-- **Rule priority:** the root `AGENTS.md` governs the whole repository; add a nearer `AGENTS.md` in a subtree only when its commands or safety boundaries genuinely differ, in which case the nearer rule wins inside that subtree while everything else still falls back to the root. `CLAUDE.md` always just thinly imports the root `AGENTS.md` and never redefines rules of its own.
-- **Change isolation:** each writable task uses its own Git branch and worktree, so parallel work never interferes; read-only work (for example, just looking something up) needs neither a branch nor a worktree.
+- **Rule priority:** the root `AGENTS.md` governs the whole repository. Add a nearer `AGENTS.md` in a subtree only when its commands or safety boundaries differ. The nearer rule then wins inside that subtree; everything else falls back to the root. `CLAUDE.md` only imports the root `AGENTS.md` and never defines its own rules.
+- **Change isolation:** each writable task uses its own Git branch and worktree, so parallel work never interferes. Read-only work (for example, a lookup) needs no branch or worktree.
 {{< /disclosure >}}
 
 {{< disclosure key="agents-alternatives" title="Other common approaches" >}}
 - **In-repo guidance:** keep fixed commands and boundaries under version control so different agents read the same rules.
 - **Spec-artifact relay:** produce a spec, plan, and tasks for large work first, then hand each step to an agent in turn.
-- **Roles and orchestration:** use dedicated roles, skills, or queues to coordinate multiple agents; fits once the workload already needs extra coordination.
+- **Roles and orchestration:** use dedicated roles, skills, or queues to coordinate multiple agents. This fits when the workload already needs extra coordination.
 - **Human checkpoints:** pause for a decision before requirements, material trade-offs, external impact, and irreversible operations.
 {{< /disclosure >}}
 
-`README.md` serves people, `AGENTS.md` serves every agent, and `template/AGENTS.md.jinja` plus `copier.yml` emit only commands the selected profile can run. `scripts/cleanup-worktrees` and `scripts/test-worktree-cleanup` handle safe cleanup; `scripts/verify`, `.github/workflows/`, and `policies/` keep rules, evidence, automation, and governance separate.
+`README.md` serves people, `AGENTS.md` serves every agent, and `template/AGENTS.md.jinja` plus `copier.yml` emit only commands the selected profile can run. `scripts/cleanup-worktrees` and `scripts/test-worktree-cleanup` do safe cleanup; `scripts/verify`, `.github/workflows/`, and `policies/` keep rules, evidence, automation, and governance separate.
 
 {{< config-guidance track="agents" >}}
 {{< /basic >}}
@@ -440,46 +440,46 @@ Only tools this template directly integrates, executes, or produces into the rep
 
 {{< slide key="contract" track="contract" eyebrow="Step 03" title="Get local feedback first; let CI produce trusted evidence" subtitle="Issue PRs are tiered by change scope; full verification is reserved for high-risk boundaries." legacy="false"  class="candidate-slide" >}}
 {{< standard key="contract-mode-standard" title="Change size decides how heavy verification gets" >}}
-Developers first run the most relevant local check for quick feedback. Once a PR opens, GitHub selects the tier from the trusted base workflow, checks out the exact candidate commit on a GitHub-hosted runner, and executes the matching verification. Merge and release consume evidence from that hosted run, bound to the repository, commit/tree, tier, command, and toolchain. The system decides which tier applies from the change's scope:
+Developers first run the most relevant local check for quick feedback. When a PR opens, GitHub selects the tier from the trusted base workflow. It checks out the exact candidate commit on a GitHub-hosted runner and executes the matching verification. Merge and release use evidence from that hosted run, bound to the repository, commit/tree, tier, command, and toolchain. The change's scope decides the tier:
 
 | Release level | Review | Minimum suite |
 | --- | --- | --- |
 | beta | peer approval or exact-head admin authorization, as configured | fast; risky paths escalate to full |
 | stable | peer approval or exact-head admin authorization, as configured | full |
 
-The route declares the channel: Milestone work is beta, while promotion, standalone work, and hotfixes are stable. Changed-path classification may raise this floor but never lower it. Local and hosted checks use the same resolved result.
+The route declares the channel: Milestone work is beta; promotion, standalone work, and hotfixes are stable. Changed-path classification can raise this floor but never lower it. Local and hosted checks use the same resolved result.
 {{< /standard >}}
 
 {{< ops key="contract-mode-ops" title="The tiering rule and today's automation status" >}}
-- **During development:** run only the focused check that proves the current change (for example `uv run pytest <path>` or `uv run ruff check <path>`), using fresh output before claiming completion. Hosted mode does not rerun the aggregate suite locally merely because the final route is full.
-- **Work PR (topic branch → main or `dev/m*`):** `scripts/release_level.py` resolves beta or stable from a trusted Issue or Milestone declaration; `scripts/ci_tier.py` then raises the minimum suite from the event, labels, and changed paths. `early` and `formal` are project declarations, not per-Issue levels. Conflicting declarations and unknown high-risk paths fail closed.
+- **During development:** run only the focused check that proves the current change (for example `uv run pytest <path>` or `uv run ruff check <path>`). Use fresh output before you claim completion. In hosted mode, a full final route alone is no reason to rerun the aggregate suite locally.
+- **Work PR (topic branch → main or `dev/m*`):** `scripts/release_level.py` resolves beta or stable from a trusted Issue or Milestone declaration. Then `scripts/ci_tier.py` raises the minimum suite from the event, labels, and changed paths. `early` and `formal` are project declarations, not per-Issue levels. Conflicting declarations and unknown high-risk paths fail closed.
 - **When full verification is needed:** only for a Milestone or canary delivery, an urgent fix, a merge queue, a manual dispatch, or an unknown high-risk path the system cannot safely narrow.
-- **One implementation, re-executed by the hosted job (#834):** GitHub Actions has one least-privilege `verify` job, and a new commit on the same PR cancels the previous run. The base workflow selects the tier and command, then runs `scripts/verify-fast` / `scripts/verify-template.sh` (`scripts/verify` in a generated repository) against the exact candidate tree. Merge and release accept only fresh, successful evidence from the GitHub Actions App on a GitHub-hosted runner; a handwritten commit trailer, wrong repository/tree/tier, or untrusted signer fails closed.
-- **Repository scope:** an ordinary project verifies only its own change. The template repository's full verification also runs the `large`-marked Copier create / adopt / update regression tests, which actually generate a project and verify the components it preserves — not just check that files exist.
+- **One implementation, re-executed by the hosted job (#834):** GitHub Actions has one least-privilege `verify` job. A new commit on the same PR cancels the previous run. The base workflow selects the tier and command. Then it runs `scripts/verify-fast` / `scripts/verify-template.sh` (`scripts/verify` in a generated repository) against the exact candidate tree. Merge and release accept only fresh, successful evidence from the GitHub Actions App on a GitHub-hosted runner. A handwritten commit trailer, wrong repository/tree/tier, or untrusted signer fails closed.
+- **Repository scope:** an ordinary project verifies only its own change. The template repository's full verification also runs the `large`-marked Copier create / adopt / update regression tests. They generate a real project and verify the components it preserves, not only that files exist.
 
-Verification logic lives only in repository scripts and tests. GitHub Actions uses the trusted base to choose the tier, fixes the execution identity, and calls that same implementation rather than duplicating the checks. A candidate branch can still modify its own scripts and tests, so CODEOWNERS, human review, and the required check jointly protect the verification policy itself.
+Verification logic lives only in repository scripts and tests. GitHub Actions uses the trusted base to choose the tier and fixes the execution identity. It calls that same implementation and does not duplicate the checks. A candidate branch can still change its own scripts and tests. So CODEOWNERS, human review, and the required check together protect the verification policy itself.
 
 {{< disclosure key="contract-root-state" title="Root repository state (2026-09-03)" >}}
-<aside class="config-guidance" data-audience="maintainer"><p>Dependency vulnerability scanning (<code>osv.yml</code>) is still candidate on the template repository's own root: the workflow has landed on <code>main</code> and is registered active by GitHub, but its trigger set is only <code>schedule</code> (Mondays 03:17 UTC) and <code>workflow_dispatch</code> — no <code>pull_request</code> — so it cannot pre-register from a candidate branch, and no scheduled or dispatched run has fired yet, so it does not meet this page's (or <code>docs/ci-policy.md</code>'s) bar for live run evidence. A newly generated repository is active from its first commit, since Copier's first commit lands directly on that repository's own <code>main</code>.</p></aside>
+<aside class="config-guidance" data-audience="maintainer"><p>Dependency vulnerability scanning (<code>osv.yml</code>) is still candidate on the template repository's own root. The workflow is on <code>main</code>, and GitHub registers it as active. But its only triggers are <code>schedule</code> (Mondays 03:17 UTC) and <code>workflow_dispatch</code>, with no <code>pull_request</code>. So it cannot pre-register from a candidate branch. No scheduled or dispatched run has fired yet, so it does not meet this page's (or <code>docs/ci-policy.md</code>'s) bar for live run evidence. A newly generated repository is active from its first commit, because Copier's first commit lands directly on that repository's own <code>main</code>.</p></aside>
 {{< /disclosure >}}
 
 {{< disclosure key="contract-automation" title="What automation is actually running today" >}}
-The states below are checked line by line against `docs/ci-policy.md`'s "Current automation" table and a live query (2026-09-03), not carried forward from whatever this page said at build time:
+Each state below was checked line by line against `docs/ci-policy.md`'s "Current automation" table and a live query (2026-09-03). None is copied from an earlier version of this page:
 
-- **Active:** CI (`ci.yml`), PR policy (`pr-policy.yml`), Work item lifecycle (`work-item-lifecycle.yml`, folding in Issue triage, Milestone sync, and Work Issue closure), Spec to Issue (`spec-to-issue.yml`), reviewer assignment (`governance-comment.yml`), and Dependabot (a native GitHub feature) are all registered with a recent successful live run.
-- **A known limitation that is now fixed:** Work Issue closure used to check out `pull_request.base.sha`, so the `close-work` command — which only exists after the merge — could not be found and the run failed. #401 / PR #453 (merged 2026-09-02) switched it to `pull_request.merge_commit_sha`; a successful live run followed on 2026-09-03. Milestone lifecycle's approval/closure coverage (`tests/test_milestone_approval.py` / `tests/test_milestone_closure.py`) is also in this candidate; its tracking Issue #400 closed as completed on 2026-09-02.
+- **Active:** CI (`ci.yml`), PR policy (`pr-policy.yml`), Work item lifecycle (`work-item-lifecycle.yml`, which includes Issue triage, Milestone sync, and Work Issue closure), Spec to Issue (`spec-to-issue.yml`), reviewer assignment (`governance-comment.yml`), and Dependabot (a native GitHub feature). All are registered with a recent successful live run.
+- **A known limitation that is now fixed:** Work Issue closure used to check out `pull_request.base.sha`. The `close-work` command exists only after the merge, so the run could not find it and failed. #401 / PR #453 (merged 2026-09-02) switched it to `pull_request.merge_commit_sha`; a successful live run followed on 2026-09-03. Milestone lifecycle's approval/closure coverage (`tests/test_milestone_approval.py` / `tests/test_milestone_closure.py`) is also in this candidate; its tracking Issue #400 closed as completed on 2026-09-02.
 - **Depends on which repository:** dependency vulnerability scanning (OSV) is active in a generated repository; it is still candidate on the template's own root, for the reason in the aside above.
 - **Candidate, not re-verified here:** current Version/Release (`release.yml`) status lives in `docs/ci-policy.md`'s "Version, release, delivery, and deployment" matrix.
-- **Not active:** dedicated promotion, release-handoff, registry-publisher, consumption, live-integration, and deployment workflows do not exist, and are not conditional options waiting to be wired in.
+- **Not active:** dedicated promotion, release-handoff, registry-publisher, consumption, live-integration, and deployment workflows do not exist. They are not conditional options that wait for setup.
 {{< /disclosure >}}
 
 {{< disclosure key="contract-cost" title="What the two verification suites cost" >}}
-These numbers come from `docs/ci-policy.md`'s most recent measurement. They set cost expectations, not a permanent SLA — a rerun will report different numbers.
+These numbers come from `docs/ci-policy.md`'s most recent measurement. They set cost expectations, not a permanent SLA. A rerun reports different numbers.
 
-- `fast`: on 2026-09-01, with a warm cache on the same machine, a source-only scope took about 59 seconds and a scope also touching policy/template files took about 99 seconds; the full PR feedback window runs about 1-4 minutes (#428).
-- Documentation-only work is still `fast`, but it runs only shared safety checks and docs-scope owners without starting product-language toolchains.
-- `full`: on #940's 2026-09-23 candidate, local execution took 919 seconds and hosted execution took 400 seconds. Hosted Regression tests accounted for 387 seconds and the other six stages for 13 seconds. #955 therefore removes the duplicate local-plus-hosted run in hosted mode without changing the seven stages or their test set.
-- Cost changes: the hosted run summary lists the pytest total, the slowest cases, and the change in `large` tests versus the PR base; a `full` total more than 15% above the checked-in baseline only raises a warning, with no hard seconds gate. A new `large` test needs a stated replacement or irreplaceable reason in the PR (#999).
+- `fast`: on 2026-09-01, with a warm cache on the same machine, a source-only scope took about 59 seconds. A scope that also touched policy/template files took about 99 seconds. The full PR feedback window is about 1-4 minutes (#428).
+- Documentation-only work is still `fast`. It runs only shared safety checks and docs-scope owners and starts no product-language toolchains.
+- `full`: on #940's 2026-09-23 candidate, local execution took 919 seconds and hosted execution took 400 seconds. Hosted Regression tests took 387 seconds and the other six stages 13 seconds. So #955 removes the duplicate local-plus-hosted run in hosted mode. The seven stages and their test set do not change.
+- Cost changes: the hosted run summary lists the pytest total, the slowest cases, and the change in `large` tests versus the PR base. A `full` total more than 15% above the checked-in baseline only raises a warning; no hard seconds gate exists. A new `large` test needs a stated replacement or irreplaceable reason in the PR (#999).
 {{< /disclosure >}}
 
 {{< config-guidance track="contract" >}}
@@ -490,18 +490,18 @@ These numbers come from `docs/ci-policy.md`'s most recent measurement. They set 
 {{< legacy >}}
       <header>
         <h2>Step 4｜<span class="accent">Each language manages itself</span></h2>
-        <p class="subtitle"><strong>Baseline.</strong> Choose a project language and the template produces the matching version, lockfile, formatting, static checks, tests, and build configuration.</p>
+        <p class="subtitle"><strong>Baseline.</strong> Choose a project language, and the template produces the matching version, lockfile, formatting, static checks, tests, and build configuration.</p>
       </header>
-      <p class="context-line"><strong>What the template does｜</strong>you only select the languages this repo actually uses; the template wires up each language's native checks, while everything still flows through the same PR pipeline.</p>
+      <p class="context-line"><strong>What the template does｜</strong>you select only the languages this repo uses. The template connects each language's native checks, and all of them use the same PR pipeline.</p>
       <p class="context-line"><strong>The shared pipeline｜</strong>select a language → generate its matching tooling and lockfile → run format/lint/test/package → hand the result to the same verification entry point (see "Verify / CI").</p>
       <div class="capability-map"><div class="capability-node"><h3>Python</h3><p>Checks formatting, types, tests, and the installable package.</p></div><div class="capability-node"><h3>Rust</h3><p>Checks formatting, common mistakes, tests, and whether the release build packages.</p></div><div class="capability-node"><h3>TypeScript</h3><p>Checks formatting, types, tests, and the installable package.</p></div><div class="capability-node"><h3>Go</h3><p>Checks formatting, common mistakes, tests, and whether the module builds.</p></div></div>
-      <p class="context-line"><strong>Next step｜</strong>just check the languages you need at creation or adoption; several at once combine checks and a shared item still runs once; other approaches are covered in Maintenance mode.</p>
+      <p class="context-line"><strong>Next step｜</strong>select the languages you need at creation or adoption. Several languages combine their checks, and a shared item still runs once. Maintenance mode covers other approaches.</p>
 {{< /legacy >}}
 
 {{< basic >}}
 ### Our choice
 
-Choose a project language and the template prepares the matching checks:
+Choose a project language, and the template prepares the matching checks:
 
 - **Every project:** checks work rules, documentation, secrets, and dependency safety.
 - **Python:** checks formatting, types, tests, and the installable package.
@@ -509,7 +509,7 @@ Choose a project language and the template prepares the matching checks:
 - **TypeScript:** checks formatting, types, tests, and the installable package.
 - **Go:** checks formatting, common mistakes, tests, and the build.
 
-Each language is its own independent component (module), selected independently. Selecting several languages combines their modules while each shared check still runs once; the documentation does not enumerate combinations. Version sources and lockfiles stay independent too: Python reads `pyproject.toml`/`uv.lock`, Rust reads `Cargo.toml`/`Cargo.lock`, TypeScript reads `package.json`/`pnpm-lock.yaml`, and Go reads `go.mod` (plus `go.sum` when it has dependencies); after a change, just run the single verification entry point listed below under "Fixed baseline | One entry point verifies and packages."
+Each language is an independent component (module) that you select independently. Several selected languages combine their modules, and each shared check still runs once. The documentation does not list combinations. Version sources and lockfiles also stay independent: Python reads `pyproject.toml`/`uv.lock`, Rust reads `Cargo.toml`/`Cargo.lock`, TypeScript reads `package.json`/`pnpm-lock.yaml`, and Go reads `go.mod` (plus `go.sum` when it has dependencies). After a change, run the single verification entry point listed below under "Fixed baseline | One entry point verifies and packages."
 
 ### Other common approaches
 
@@ -525,12 +525,12 @@ Each language is its own independent component (module), selected independently.
 {{< legacy >}}
       <header>
         <h2>Step 5｜<span class="accent">Update, check, and record third-party packages separately</span></h2>
-        <p class="subtitle"><strong>Baseline.</strong> Where a package updates from, whether it can be reinstalled, whether it has a known vulnerability, and what a release actually contains are four things worth confirming separately.</p>
+        <p class="subtitle"><strong>Baseline.</strong> Confirm four things separately: where a package updates from, whether it reinstalls, whether it has a known vulnerability, and what a release contains.</p>
       </header>
-      <p class="context-line"><strong>For example｜</strong>when development adds or updates a third-party package, the template splits "can it be reinstalled," "is there an update," "is there a known vulnerability," and "what did the release actually install" into four separate, sequential steps:</p>
-      <div class="capability-map"><div class="capability-node"><h3>1｜Lock what gets installed</h3><p>Reinstalls from the locked-version list (lockfile), so every run gets the same packages. <strong>You'll see:</strong> install/CI use the locked versions directly. <strong>Blocks merge?</strong> Yes, if the lockfile and the declared versions disagree.</p></div><div class="capability-node"><h3>2｜Dependabot opens an update PR</h3><p>The automated update service opens a PR weekly; ordinary releases wait a three-day observation window, security patches never do. <strong>You'll see:</strong> an update PR waiting for review. <strong>Blocks merge?</strong> Not automatically, but it still has to pass ordinary PR verification.</p></div><div class="capability-node"><h3>3｜OSV checks known vulnerabilities</h3><p>The known-vulnerability scan checks dependency changes and delivery candidates, without waiting for the observation window. <strong>You'll see:</strong> scan results attached to the PR or delivery candidate. <strong>Blocks merge?</strong> Yes, if a known vulnerability turns up.</p></div><div class="capability-node"><h3>4｜Release produces an SBOM</h3><p>At release time, lists the packages the artifact actually contains (a bill of materials), for later investigation. <strong>You'll see:</strong> the SBOM file attached to the Release. <strong>Blocks merge?</strong> No -- it's an inventory, not a gate.</p></div></div>
-      <p class="context-line"><strong>Keep in mind｜</strong>a lockfile only guarantees the packages reinstall -- it says nothing about known vulnerabilities; a known security patch never waits out the three-day observation window; OSV only recognizes already-disclosed vulnerabilities, so it cannot guarantee catching every problem; and an SBOM is an inventory for investigation -- it does not, by itself, patch or block any vulnerability.</p>
-      <p class="context-line"><strong>Next step｜</strong>a package update opens a PR on its own -- review and merge it when you see it; why each protection stays separate is covered in Maintenance mode.</p>
+      <p class="context-line"><strong>For example｜</strong>when development adds or updates a third-party package, the template uses four separate, sequential steps. They answer "can it be reinstalled," "is there an update," "is there a known vulnerability," and "what did the release actually install":</p>
+      <div class="capability-map"><div class="capability-node"><h3>1｜Lock what gets installed</h3><p>Reinstalls from the locked-version list (lockfile), so every run gets the same packages. <strong>You'll see:</strong> install/CI use the locked versions directly. <strong>Blocks merge?</strong> Yes, if the lockfile and the declared versions disagree.</p></div><div class="capability-node"><h3>2｜Dependabot opens an update PR</h3><p>The automated update service opens a PR weekly. Ordinary releases wait a three-day observation window; security patches never do. <strong>You'll see:</strong> an update PR waiting for review. <strong>Blocks merge?</strong> Not automatically, but it must still pass ordinary PR verification.</p></div><div class="capability-node"><h3>3｜OSV checks known vulnerabilities</h3><p>The known-vulnerability scan checks dependency changes and delivery candidates. It does not wait for the observation window. <strong>You'll see:</strong> scan results attached to the PR or delivery candidate. <strong>Blocks merge?</strong> Yes, if a known vulnerability turns up.</p></div><div class="capability-node"><h3>4｜Release produces an SBOM</h3><p>At release time, lists the packages in the artifact (a bill of materials) for later investigation. <strong>You'll see:</strong> the SBOM file attached to the Release. <strong>Blocks merge?</strong> No -- it's an inventory, not a gate.</p></div></div>
+      <p class="context-line"><strong>Keep in mind｜</strong>a lockfile only guarantees that the packages reinstall; it says nothing about known vulnerabilities. A known security patch never waits for the three-day observation window. OSV recognizes only disclosed vulnerabilities, so it cannot guarantee that it catches every problem. An SBOM is an inventory for investigation; by itself, it does not patch or block a vulnerability.</p>
+      <p class="context-line"><strong>Next step｜</strong>a package update opens a PR automatically. Review and merge it when you see it. Maintenance mode explains why each protection stays separate.</p>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -541,7 +541,7 @@ Routine updates and security checks run automatically. People step in only for u
 | Risk | What the template does today |
 | --- | --- |
 | A dependency change cannot be reproduced | PR verification reinstalls from the locked-version list (lockfile), so every run receives the same packages |
-| A newly published malicious version | GitHub's automated update service (Dependabot) groups update PRs; ordinary releases wait three days, while security updates do not |
+| A newly published malicious version | GitHub's automated update service (Dependabot) groups update PRs; ordinary releases wait three days, security updates do not |
 | A disclosed vulnerability goes unnoticed | The Open Source Vulnerabilities scan (OSV) checks dependency changes and delivery candidates; a weekly scan covers periods without PRs |
 | Nobody knows what a release contains | A software bill of materials (SBOM) lists packages in the artifact; dependency security verifies it when delivery produces the artifact |
 
@@ -554,10 +554,10 @@ Routine updates and security checks run automatically. People step in only for u
 
 ### Other common approaches
 
-- **Automated update service:** periodically opens an upgrade PR, suited to a team that does not want to patrol versions by hand.
-- **Package installation policy:** pins installable versions and observes a release right after it ships, lowering the risk that two installs differ.
-- **Vulnerability scanning:** checks a public vulnerability database, catching an existing risk even with no update PR in sight.
-- **Software bill of materials (SBOM):** lists the packages a release actually contains, for incident investigation and user verification.
+- **Automated update service:** periodically opens an upgrade PR. It suits a team that does not want to watch versions by hand.
+- **Package installation policy:** pins installable versions and observes a release right after it ships. This lowers the risk that two installs differ.
+- **Vulnerability scanning:** checks a public vulnerability database. It catches an existing risk even when no update PR exists.
+- **Software bill of materials (SBOM):** lists the packages a release contains, for incident investigation and user verification.
 
 {{< config-guidance track="supply" >}}
 {{< /basic >}}
@@ -567,11 +567,11 @@ Routine updates and security checks run automatically. People step in only for u
 {{< legacy >}}
       <header>
         <h2>Step 6｜<span class="accent">Make completed changes reviewable and deliverable</span></h2>
-        <p class="subtitle"><strong>Baseline.</strong> This page starts once a PR is ready: a work PR completes one Issue, while a Milestone delivery PR confirms both the batch and its version without another version PR.</p>
+        <p class="subtitle"><strong>Baseline.</strong> This page starts when a PR is ready. A work PR completes one Issue. A Milestone delivery PR confirms both the batch and its version, with no extra version PR.</p>
       </header>
-      <p class="context-line"><strong>What the template does｜</strong>carries a completed change to the right branch, confirms it links back to its work, passes verification, and closes that work once merged.</p>
-      <div class="capability-map cols-3"><div class="capability-node"><h3>Standalone work</h3><p>topic → main: one PR completes one reviewable Issue; merging it closes the same-numbered Issue.</p></div><div class="capability-node"><h3>Milestone work</h3><p>topic → <code>dev/m*</code> → delivery PR → main: each PR in the batch lands in <code>dev/m*</code> first, then the delivery PR fully verifies and delivers the whole batch into main once everything is done.</p></div><div class="capability-node"><h3>Exception: hotfix</h3><p>A fix branch may target main directly, but still needs an Issue, review, and full verification.</p></div></div>
-      <p class="context-line"><strong>Next step｜</strong>open a work PR once an Issue is done; PR title format, branch naming, and other merge-model comparisons are covered in Maintenance mode.</p>
+      <p class="context-line"><strong>What the template does｜</strong>moves a completed change to the right branch. It confirms that the change links to its work and passes verification, and closes that work after merge.</p>
+      <div class="capability-map cols-3"><div class="capability-node"><h3>Standalone work</h3><p>topic → main: one PR completes one reviewable Issue. The merge closes the same-numbered Issue.</p></div><div class="capability-node"><h3>Milestone work</h3><p>topic → <code>dev/m*</code> → delivery PR → main: each PR in the batch lands in <code>dev/m*</code> first. When all work is done, the delivery PR fully verifies the whole batch and delivers it into main.</p></div><div class="capability-node"><h3>Exception: hotfix</h3><p>A fix branch can target main directly, but it still needs an Issue, review, and full verification.</p></div></div>
+      <p class="context-line"><strong>Next step｜</strong>open a work PR when an Issue is done. Maintenance mode covers PR title format, branch naming, and other merge-model comparisons.</p>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -586,18 +586,18 @@ Routine updates and security checks run automatically. People step in only for u
 {{< disclosure key="pr-version-intent" title="PR titles, branches, and exceptions" >}}
 - Work branches use `type/<Issue>-short-slug`, and the PR links the matching open Issue.
 - PR titles use the Angular / Conventional Commits form `type(scope)!: English summary`: `feat` adds a feature, `fix` corrects behavior, `docs` changes documentation, `refactor` restructures code, `test` changes tests, `build` changes builds or dependencies, `ci` changes automation, `chore` performs maintenance, and `revert` undoes a change. Scope and `!` are optional. Release intent is minor for `feat`, patch for `fix` / `revert`, major for `!`, and no release for the other types.
-- The PR carries one lowercase work label derived from the Issue Type (or its fallback label when Types are unavailable); its Milestone matches the Issue, and the PR author must be an assignee.
+- The PR carries one lowercase work label derived from the Issue Type (or its fallback label when Types are unavailable). Its Milestone matches the Issue, and the PR author must be an assignee.
 - Milestone work targets `dev/m<Milestone>-*`; ordinary standalone work targets `main` directly.
-- A Milestone Promotion PR uses an exact two-parent bridge to include both its delivery source and current main, with no final sync PR. `sync/main-to-*` remains only for an owner-recorded early dependency or a `dev/i*` canary; it never fans out to every branch.
-- Only an explicitly labeled standalone hotfix may target main directly. Rules governance decides who may merge.
+- A Milestone Promotion PR uses an exact two-parent bridge to include both its delivery source and current main. No final sync PR is necessary. `sync/main-to-*` stays only for an owner-recorded early dependency or a `dev/i*` canary; it never fans out to every branch.
+- Only an explicitly labeled standalone hotfix can target main directly. Rules governance decides who can merge.
 {{< /disclosure >}}
 
 ### Other common approaches
 
-- **GitHub Flow:** every completed PR goes straight to main -- the shortest path, suited to teams that deliver continuously.
-- **Long-lived integration branches:** several work items are accepted together on a dev/release branch, at the cost of keeping them in sync.
-- **Stacked PRs:** a large change splits into dependent smaller PRs for a more focused review, at the cost of maintaining stack order.
-- **Merge queue:** approved PRs are re-verified against the latest main and merged in order, which needs platform gate support.
+- **GitHub Flow:** every completed PR goes straight to main. This is the shortest path and suits teams that deliver continuously.
+- **Long-lived integration branches:** a dev/release branch accepts several work items together. The cost is keeping them in sync.
+- **Stacked PRs:** a large change splits into dependent smaller PRs for a more focused review. The cost is maintaining stack order.
+- **Merge queue:** approved PRs are verified again against the latest main and merged in order. This needs platform gate support.
 
 {{< config-guidance track="pr" >}}
 {{< /basic >}}
@@ -609,21 +609,21 @@ Routine updates and security checks run automatically. People step in only for u
         <h2>Step 7｜<span class="accent">Version rules and what follows an artifact</span></h2>
         <p class="subtitle"><strong>Merging is not releasing, and releasing is not deploying.</strong> Before merge, every release-worthy work PR ends in one exact release-only commit that updates the version and CHANGELOG.</p>
       </header>
-      <p class="context-line"><strong>Design flow｜</strong>a PR title declares version impact; while the PR is draft, the agent materializes its beta or stable version, and CI plus the merge lifecycle reconstruct the exact tree before the publisher can run.</p>
-      <div class="relation-map"><div class="relation-track cols-4"><article class="relation-node"><span class="relation-kind">1｜Work merges</span><h3>Milestone work</h3><p>Each Issue's work PR lands in dev/m* first, preserving focused review and acceptance.</p></article><article class="relation-node"><span class="relation-kind">2｜Delivery and version</span><h3>Promotion PR</h3><p>One PR carries the whole batch plus its version and CHANGELOG into main.</p></article><article class="relation-node"><span class="relation-kind">3｜Release created</span><h3>Release and closure</h3><p>The system verifies the artifact, checksum, and SBOM, publishes the immutable GitHub Release, then closes the tracker and Milestone.</p></article><article class="relation-node"><span class="relation-kind">4｜Not the template's job</span><h3>Deployment</h3><p>The template's job ends at Release; deploying to a real runtime is configured by each individual project.</p></article></div></div>
-      <p class="context-line"><strong>Next step｜</strong>merging ordinary work into main already completes delivery; Milestone branches, hotfixes, and other version-tool comparisons are covered in Maintenance mode.</p>
+      <p class="context-line"><strong>Design flow｜</strong>a PR title declares version impact. While the PR is draft, the agent materializes its beta or stable version. CI and the merge lifecycle reconstruct the exact tree before the publisher can run.</p>
+      <div class="relation-map"><div class="relation-track cols-4"><article class="relation-node"><span class="relation-kind">1｜Work merges</span><h3>Milestone work</h3><p>Each Issue's work PR lands in dev/m* first, which keeps review and acceptance focused.</p></article><article class="relation-node"><span class="relation-kind">2｜Delivery and version</span><h3>Promotion PR</h3><p>One PR carries the whole batch plus its version and CHANGELOG into main.</p></article><article class="relation-node"><span class="relation-kind">3｜Release created</span><h3>Release and closure</h3><p>The system verifies the artifact, checksum, and SBOM, publishes the immutable GitHub Release, then closes the tracker and Milestone.</p></article><article class="relation-node"><span class="relation-kind">4｜Not the template's job</span><h3>Deployment</h3><p>The template's job ends at Release. Each project configures its own deployment to a real runtime.</p></article></div></div>
+      <p class="context-line"><strong>Next step｜</strong>a merge of ordinary work into main completes delivery. Maintenance mode covers Milestone branches, hotfixes, and other version-tool comparisons.</p>
 {{< /legacy >}}
 
 {{< basic >}}
 ### Our choice
 
 - **Version intent:** a PR title states major, minor, patch, or no-release impact without reserving an exact number.
-- **Public versions:** Milestone work publishes `X.Y.Z-beta.N` after landing on `dev/m*`; when the tracker declares checkpoints up front, only each checkpoint's terminal Issue publishes one beta and other work defers to it; Milestone promotion, standalone work, and hotfixes publish unsuffixed stable releases. RC is not a separate stage.
-- **Release and closure:** after a materialized PR merges and verification passes, the system creates the immutable tag, GitHub Release, explicit artifacts, checksums, and SBOM. Only successful promotion publication closes the tracker and Milestone; failure leaves both open.
+- **Public versions:** Milestone work publishes `X.Y.Z-beta.N` after it lands on `dev/m*`. When the tracker declares checkpoints up front, only each checkpoint's terminal Issue publishes one beta; other work defers to it. Milestone promotion, standalone work, and hotfixes publish unsuffixed stable releases. RC is not a separate stage.
+- **Release and closure:** after a materialized PR merges and verification passes, the system creates the immutable tag, GitHub Release, explicit artifacts, checksums, and SBOM. Only a successful promotion publication closes the tracker and Milestone; a failure leaves both open.
 - **Delivery:** merging to `main` is repository delivery. Every release-worthy work PR carries its reviewed version candidate; a Milestone promotion PR carries the final stable batch candidate.
-- **Standalone work:** when one Issue can be reviewed and verified independently and has no shared deadline or cross-Issue dependency, it needs no Milestone and may target `main` directly.
-- **Hotfix:** only an urgent defect in `main` uses this route. It still needs a Bug Issue and full verification. When `admin_bypass` allows it, an admin may merge without an immediate peer only through an exact-head, reason-bound emergency path that automatically opens a post-merge peer-review item.
-- **Deployment:** operating the product in a real runtime with health checks and recovery belongs to the consuming product, not this template.
+- **Standalone work:** an Issue that can be reviewed and verified independently, with no shared deadline or cross-Issue dependency, needs no Milestone. It can target `main` directly.
+- **Hotfix:** only an urgent defect in `main` uses this route. It still needs a Bug Issue and full verification. When `admin_bypass` allows it, an admin can merge without an immediate peer. The admin must use an exact-head, reason-bound emergency path, which automatically opens a post-merge peer-review item.
+- **Deployment:** the consuming product, not this template, operates the product in a real runtime with health checks and recovery.
 
 {{< disclosure key="deploy-capability-status" title="Every capability's current status, side by side" >}}
 | Capability | Current status | Current behavior |
@@ -632,76 +632,76 @@ Routine updates and security checks run automatically. People step in only for u
 | Exact version and changelog | Candidate | The original delivery PR ends in one exact release-only commit; CI and the merge lifecycle reconstruct its tree |
 | Tag and GitHub Release | Candidate / Blocked | The shared publisher runs after the same-PR candidate merges and then closes a successful Milestone |
 | Checksums and SBOM | Configured | Included in the same candidate path; Active only after its first successful run |
-| Production-side attestation | Removed (#439) | Zero active workflow ever consumed the release-attestation settings; #439 removed the setting surface itself rather than leave an option that cannot deliver a result. A consuming product adds real attestation through a separate Issue/ADR |
-| Consumption-side verification | Conditional | `scripts/verify_release_consumption.py` checks provenance independently of the production-side setting above; it becomes a gate only once a real consumer explicitly adopts it |
-| PyPI, npm, and GHCR | Not applicable | The root publishes to no registry; #439 removed the dormant PyPI/npm/GHCR prompts because zero workflow consumed them, so generated projects no longer expose these settings either. A consuming product adds its own OIDC publisher through a separate Issue/ADR |
+| Production-side attestation | Removed (#439) | No active workflow ever consumed the release-attestation settings. #439 removed the setting surface itself instead of keeping an option that cannot deliver a result. A consuming product adds real attestation through a separate Issue/ADR |
+| Consumption-side verification | Conditional | `scripts/verify_release_consumption.py` checks provenance independently of the production-side setting above. It becomes a gate only when a real consumer explicitly adopts it |
+| PyPI, npm, and GHCR | Not applicable | The root publishes to no registry. #439 removed the dormant PyPI/npm/GHCR prompts because no workflow consumed them, so generated projects also no longer expose these settings. A consuming product adds its own OIDC publisher through a separate Issue/ADR |
 {{< /disclosure >}}
 
 {{< disclosure key="standalone-delivery" title="When standalone work must join a Milestone" >}}
-An Issue may branch from the latest `main`, target `main`, and close through `Closes #N` when it can be accepted on its own and has no shared deadline, batch acceptance, cross-Issue dependency, or isolated test environment. If any of those needs appears, assign the Issue to the appropriate Milestone before implementation and use `dev/m*`; the standalone route cannot bypass batch review.
+An Issue can branch from the latest `main`, target `main`, and close through `Closes #N` if it meets two conditions. It can be accepted on its own. It has no shared deadline, batch acceptance, cross-Issue dependency, or isolated test environment. If one of those needs appears, assign the Issue to the correct Milestone before implementation and use `dev/m*`. The standalone route cannot bypass batch review.
 {{< /disclosure >}}
 
 {{< disclosure key="deploy-ordering" title="Delivery ordering, artifacts, and registry boundaries" >}}
-Direct mode rereads the default-branch head before writing and delivers only when the latest `main`, source, tag, CHANGELOG, and promotion evidence agree; workflow concurrency is not treated as FIFO. The artifact workflow accepts only a release-source run ID, creates a digest and SBOM, ignores arbitrary tag pushes, and does not repeat full CI.
+Direct mode reads the default-branch head again before it writes. It delivers only when the latest `main`, source, tag, CHANGELOG, and promotion evidence agree. Workflow concurrency is not treated as FIFO. The artifact workflow accepts only a release-source run ID and creates a digest and SBOM. It ignores arbitrary tag pushes and does not repeat full CI.
 
-GitHub Release is the portable baseline for every profile. Registry publishing and container delivery are product-owned extensions because the template does not ship an active publisher for them. `scripts/release_policy.py` detects GitHub release capabilities and configures versions; `scripts/promotion_gate.py` validates promotion.
+GitHub Release is the portable baseline for every profile. Registry publishing and container delivery are product-owned extensions, because the template ships no active publisher for them. `scripts/release_policy.py` detects GitHub release capabilities and configures versions; `scripts/promotion_gate.py` validates promotion.
 {{< /disclosure >}}
 
 {{< disclosure key="hotfix-delivery" title="Hotfix review, verification, and evidence" >}}
-A hotfix uses a Bug Issue without a Milestone and adds only `hotfix` to the Issue. Its PR carries `bug` and `hotfix`, uses `fix/<Issue>-*` and `fix(scope): summary`, and targets `main`; full verification still applies. At beta or above, the emergency path requires one live admin to be the Issue proposer, exact-head authorizer, and merge actor, with a recorded reason; it then opens a `needs-manual-review` Issue automatically. No other PR may use this exception. Undisclosed security defects use a GitHub Security Advisory instead.
+A hotfix uses a Bug Issue without a Milestone and adds only `hotfix` to the Issue. Its PR carries `bug` and `hotfix`, uses `fix/<Issue>-*` and `fix(scope): summary`, and targets `main`; full verification still applies. At beta or above, the emergency path requires one live admin as the Issue proposer, exact-head authorizer, and merge actor, with a recorded reason. Then it opens a `needs-manual-review` Issue automatically. No other PR can use this exception. Undisclosed security defects use a GitHub Security Advisory instead.
 {{< /disclosure >}}
 
 {{< disclosure key="manual-release-boundary" title="Automatic-release ownership" >}}
-The template root and each new repository are configured to publish through their own release workflow. An adopted repository keeps its product-owned workflow. Every path still needs one owner, least privileges, full-SHA pins, a timeout, concurrency behavior, failure recovery, and a runner-cost ceiling; historical runs remain reference evidence only.
+The template root and each new repository are configured to publish through their own release workflow. An adopted repository keeps its product-owned workflow. Every path still needs one owner, least privileges, full-SHA pins, a timeout, concurrency behavior, failure recovery, and a runner-cost ceiling. Historical runs are only reference evidence.
 
-Adoption and update never infer this from a workflow filename. `.csarc/config.yml`, the adoption plan, the Markdown report, and `.csarc/provenance.json` all disclose the same explicit `release_ownership` — `csarc-owned`, `product-owned`, or `verification-only` — plus the selected workflow path, its required `workflow_dispatch` inputs, the settings owner, whether immutable Releases are required, and the reason a repository degrades to `verification-only` (no writer found, or more than one). CSARC never dispatches a product-owned workflow or infers its input contract from a name; it only reads what the workflow itself declares.
+Adoption and update never infer this from a workflow filename. `.csarc/config.yml`, the adoption plan, the Markdown report, and `.csarc/provenance.json` all disclose the same explicit `release_ownership`: `csarc-owned`, `product-owned`, or `verification-only`. They also disclose the selected workflow path, its required `workflow_dispatch` inputs, the settings owner, and whether immutable Releases are required. They give the reason when a repository degrades to `verification-only` (no writer found, or more than one). CSARC never dispatches a product-owned workflow or infers its input contract from a name. It only reads what the workflow itself declares.
 
-A generated repository with `release_ownership: csarc-owned` (including this template's own root) uses one `scripts/publish-release` implementation from hosted `release.yml` or, when Actions is unhealthy, from a maintainer or agent's local admin/write identity. Every release-worthy change has already materialized and reviewed its beta or stable candidate in the original delivery PR; switching the publisher never creates another version PR or skips hosted `verify`/`title`/`review`. Publication downloads and re-verifies the artifacts and GitHub's signed immutable-release attestation. See [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md) and the [release-security-and-dependencies ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md).
+A generated repository with `release_ownership: csarc-owned` (including this template's own root) uses one `scripts/publish-release` implementation. It runs from hosted `release.yml` or, when Actions is unhealthy, from a maintainer or agent's local admin/write identity. Every release-worthy change already materialized and reviewed its beta or stable candidate in the original delivery PR. A publisher switch never creates another version PR or skips hosted `verify`/`title`/`review`. Publication downloads and verifies again the artifacts and GitHub's signed immutable-release attestation. See [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md) and the [release-security-and-dependencies ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md).
 
-A generated repository with `release_ownership: csarc-owned` (including this template's own root) uses one `scripts/publish-release` implementation from hosted `release.yml` or, when Actions is unhealthy, from a maintainer or agent's local admin/write identity. Every release-worthy change has already materialized and reviewed its beta or stable candidate in the original delivery PR; switching the publisher never creates another version PR or skips hosted `verify`/`title`/`review`. Publication downloads and re-verifies the artifacts and GitHub's signed immutable-release attestation. See [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md) and the [release-security-and-dependencies ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md).
+A generated repository with `release_ownership: csarc-owned` (including this template's own root) uses one `scripts/publish-release` implementation. It runs from hosted `release.yml` or, when Actions is unhealthy, from a maintainer or agent's local admin/write identity. Every release-worthy change already materialized and reviewed its beta or stable candidate in the original delivery PR. A publisher switch never creates another version PR or skips hosted `verify`/`title`/`review`. Publication downloads and verifies again the artifacts and GitHub's signed immutable-release attestation. See [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md) and the [release-security-and-dependencies ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md).
 
-After a Milestone promotion publishes successfully, the publisher shared by hosted and local execution records delivery and Release evidence and closes both the tracker and Milestone; failures leave both open. Work branches are removed after merge; a Milestone delivery branch waits until closure and unfinished work are handled.
+After a Milestone promotion publishes successfully, the shared hosted/local publisher records delivery and Release evidence. Then it closes both the tracker and Milestone; a failure leaves both open. Work branches are removed after merge. A Milestone delivery branch stays until closure and all unfinished work are resolved.
 {{< /disclosure >}}
 
 {{< disclosure key="release-notes-format" title="Where to read release history, and what the format means" >}}
-To learn what actually changed in a version, why it shipped, and how it differs from the
-prior one, go straight to GitHub's
-[Releases page](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases): one
-Release per version, always carrying four fields — the **version number** (the Release
-title, equal to the `vMAJOR.MINOR.PATCH` tag), the **release date** (GitHub's own publish
-timestamp, shown automatically), and a **change summary** (GitHub's auto-generated "What's
-Changed" list built from the PR titles merged since the prior version, plus a full-compare
-link back to it), plus a **work-level list** that names each included work item and release
-level and uses the highest level for this version.
+To learn what changed in a version, why it shipped, and how it differs from the
+prior one, go to GitHub's
+[Releases page](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/releases). Each
+version has one Release with four fields. The **version number** is the Release
+title, equal to the `vMAJOR.MINOR.PATCH` tag. The **release date** is GitHub's own publish
+timestamp, shown automatically. The **change summary** is GitHub's auto-generated "What's
+Changed" list of the PR titles merged since the prior version, with a full-compare
+link to it. The **work-level list** names each included work item and its release
+level, and uses the highest level for this version.
 
-None of the four is hand-typed, and none varies by who runs the release: whether GitHub
-Actions triggers it automatically or a maintainer runs `scripts/publish-release` locally
-because Actions looks unhealthy, both paths call the exact same `scripts/converge-release-tag`
+Nobody types the four fields by hand, and they do not change with who runs the release.
+GitHub Actions can trigger it automatically, or a maintainer can run `scripts/publish-release`
+locally because Actions looks unhealthy. Both paths call the same `scripts/converge-release-tag`
 script and the same `gh release create ... --generate-notes` command to produce the Release
-body — there is no second implementation that could drift into a different style.
+body. No second implementation exists that could drift into a different style.
 
-The root `CHANGELOG.md` is a different, equally real view of the same history: it groups
-changes by Conventional Commit type (Breaking Changes, Features, Bug Fixes), while the GitHub
-Release body lists merged PRs under "What's Changed." The two are not expected to match word
-for word — same underlying changes, two different groupings. Every Release is not required to
-carry a "Known limitations" or "Backward compatibility" section: most versions have nothing
-substantive to say there, and a limitation that holds across many releases (not one version in
-particular) belongs here and in `docs/ci-policy.md` instead of being repeated release after
+The root `CHANGELOG.md` is a different, equally real view of the same history. It groups
+changes by Conventional Commit type (Breaking Changes, Features, Bug Fixes). The GitHub
+Release body lists merged PRs under "What's Changed." The two do not have to match word
+for word: they show the same changes in two different groupings. A Release does not need
+a "Known limitations" or "Backward compatibility" section. Most versions have nothing
+substantive to say there. A limitation that holds across many releases (not one version)
+belongs here and in `docs/ci-policy.md`; do not repeat it in each
 release. The full format contract and the reasoning behind this scope live in the "Release
 說明文字的最低格式規範" section of
 [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md).
 {{< /disclosure >}}
 
 {{< disclosure key="deploy-alternatives" title="Other common approaches" >}}
-- **Release metadata rules:** the repository keeps Release Please-compatible configuration, while `release_policy.py` materializes version and CHANGELOG in the original PR.
-- **semantic-release:** publishes fully automatically from commit convention once CI succeeds.
+- **Release metadata rules:** the repository keeps Release Please-compatible configuration. `release_policy.py` materializes version and CHANGELOG in the original PR.
+- **semantic-release:** publishes fully automatically from commit convention after CI succeeds.
 - **Changesets:** manages version impact for multiple packages and a workspace through changeset files.
 {{< /disclosure >}}
 
 {{< config-guidance track="deploy" >}}
 
 {{< disclosure key="deploy-version-sources" title="Version sources and what must stay in sync" >}}
-<aside class="selection-note"><strong>Current boundary</strong><span>No PAT, GitHub App, registry token, or empty deployment environment is required. New repositories use the CSARC workflow; adopted repositories keep their own release process. Registry publishing and attestation remain optional.</span></aside>
+<aside class="selection-note"><strong>Current boundary</strong><span>No PAT, GitHub App, registry token, or empty deployment environment is necessary. New repositories use the CSARC workflow; adopted repositories keep their own release process. Registry publishing and attestation remain optional.</span></aside>
 <table class="decision-register" aria-label="Version sources and sync scope">
   <thead><tr><th>Version scope</th><th>Single source</th><th>Must stay in sync</th><th>Independent status</th></tr></thead>
   <tbody>
@@ -710,8 +710,8 @@ release. The full format contract and the reasoning behind this scope live in th
     <tr><td>Generated project release</td><td>its own generated <code>.release-please-manifest.json</code></td><td>that project's own manifest, package, CHANGELOG, tag, and artifacts</td><td>Starts at <code>0.1.0</code>, independent of the template's version</td></tr>
   </tbody>
 </table>
-<p class="context-line"><strong>SemVer scope｜</strong>the whole template uses exactly one SemVer number: <code>fix(scope)</code> bumps patch, <code>feat(scope)</code> bumps minor, and <code>!</code> bumps major; scope may be tagged <code>ci</code>, <code>python</code>, <code>typescript</code>, or <code>template</code>, and any incompatibility in a supported profile counts as a breaking change for the whole template.</p>
-<aside class="selection-note"><strong>Product-owned extension: package and container publishing</strong><span>GitHub Release is the portable baseline. PyPI, npm, GHCR, and artifact attestation have no active template publisher, so a setting toggle alone cannot claim they are enabled; a product with a real registry, owner, and deployment need implements these separately with short-lived OIDC, a dedicated environment, verification, and recovery.</span></aside>
+<p class="context-line"><strong>SemVer scope｜</strong>the whole template uses exactly one SemVer number. <code>fix(scope)</code> bumps patch, <code>feat(scope)</code> bumps minor, and <code>!</code> bumps major. The scope can be <code>ci</code>, <code>python</code>, <code>typescript</code>, or <code>template</code>. Any incompatibility in a supported profile is a breaking change for the whole template.</p>
+<aside class="selection-note"><strong>Product-owned extension: package and container publishing</strong><span>GitHub Release is the portable baseline. PyPI, npm, GHCR, and artifact attestation have no active template publisher, so a setting toggle alone cannot claim they are enabled. A product with a real registry, owner, and deployment need implements them separately. It uses short-lived OIDC, a dedicated environment, verification, and recovery.</span></aside>
 {{< /disclosure >}}
 {{< /basic >}}
 {{< /slide >}}
@@ -720,41 +720,41 @@ release. The full format contract and the reasoning behind this scope live in th
 {{< legacy >}}
       <header>
         <h2>Detect the GitHub plan first,<span class="accent"> then apply only what it can actually enforce</span></h2>
-        <p class="subtitle"><strong>Baseline｜</strong>writing a rule into the repo doesn't mean GitHub can actually enforce it; the template checks the platform's capability first, then decides between enforcing it or degrading explicitly.</p>
+        <p class="subtitle"><strong>Baseline｜</strong>a rule written into the repo is not always a rule GitHub can enforce. The template checks the platform's capability first. Then it enforces the rule or degrades explicitly.</p>
       </header>
       <p class="context-line"><strong>Flow｜</strong>desired policy → check the GitHub plan and permissions → can enforce: apply and verify → cannot enforce: mark <code>DEGRADED</code> and leave the responsibility with a person.</p>
-      <div class="relation-map"><div class="relation-track"><article class="relation-node"><span class="relation-kind">PR opened</span><h3>Review intent</h3><p>The system best-effort selects a non-author live collaborator with maintain/admin permission; the review check then evaluates peer approval, the configured admin bypass, and available Copilot evidence.</p></article><article class="relation-node"><span class="relation-kind">Check the plan and permissions</span><h3>Can it be enforced?</h3><p>The template checks the current plan, repository visibility, and permissions to judge whether it can create a Ruleset (GitHub's own enforced merge rule).</p></article><article class="relation-node"><span class="relation-kind">Two outcomes</span><h3>Apply and verify, or degrade explicitly</h3><p>When it can enforce, it applies the rule and verifies it took effect in <code>check</code>; when it cannot, it marks <code>DEGRADED</code> and falls back to human discipline, never pretending it is already enforced.</p></article></div></div>
-      <p class="context-line"><strong>Next step｜</strong>after a plan change or upgrade, just reapply settings once; which outcome this repository is actually in today, and the full capability of the Team and Enterprise tiers, are covered in Maintenance mode.</p>
+      <div class="relation-map"><div class="relation-track"><article class="relation-node"><span class="relation-kind">PR opened</span><h3>Review intent</h3><p>The system tries to select a non-author live collaborator with maintain/admin permission. Then the review check evaluates peer approval, the configured admin bypass, and available Copilot evidence.</p></article><article class="relation-node"><span class="relation-kind">Check the plan and permissions</span><h3>Can it be enforced?</h3><p>The template checks the current plan, repository visibility, and permissions. They decide whether it can create a Ruleset (GitHub's own enforced merge rule).</p></article><article class="relation-node"><span class="relation-kind">Two outcomes</span><h3>Apply and verify, or degrade explicitly</h3><p>If it can enforce, it applies the rule and <code>check</code> verifies the effect. If it cannot, it marks <code>DEGRADED</code> and falls back to human discipline. It never claims that the rule is enforced.</p></article></div></div>
+      <p class="context-line"><strong>Next step｜</strong>after a plan change or upgrade, apply the settings again once. Maintenance mode shows this repository's current outcome and the full capability of the Team and Enterprise tiers.</p>
 {{< /legacy >}}
 
 {{< basic >}}
 The template prepares an optional CODEOWNER, chooses reviewers from live permissions, and declares repository defaults and branch rules. A maintainer then checks the live repository:
 
-- supported controls are applied and verified;
-- an unavailable paid control is reported as `DEGRADED` and replaced with an explicit human step, never described as enforced;
-- a fixable mismatch fails until corrected.
+- the template applies and verifies supported controls;
+- it reports an unavailable paid control as `DEGRADED` and replaces it with an explicit human step, never described as enforced;
+- a fixable mismatch fails until someone corrects it.
 
 {{< disclosure key="governance-live-status" title="This repository's own real status right now (checked 2026-09-07)" >}}
-The `Innoguard-Cyber-Arch` API reports this repository is on the Free plan with **public** visibility. GitHub already has an `enforcement: active` Ruleset named "CSARC protected branches" (created 2026-09-03), applied to `main` and `dev/m*`: all three `title`/`verify`/`review` status checks must pass, the review check evaluates `admin_bypass` and available Copilot evidence, and force-push is forbidden. This repository explicitly uses `verification_mode: hosted`, `release_trigger: manual`, and `admin_bypass: always`; admin bypass replaces only peer approval and never skips the remaining required evidence. The former `actions_fallback` is retired (Issue #1071): an Actions outage uses the governance-switch route.
+The `Innoguard-Cyber-Arch` API reports that this repository is on the Free plan with **public** visibility. GitHub already has an `enforcement: active` Ruleset named "CSARC protected branches" (created 2026-09-03) on `main` and `dev/m*`. All three `title`/`verify`/`review` status checks must pass. The review check evaluates `admin_bypass` and available Copilot evidence, and force-push is forbidden. This repository explicitly uses `verification_mode: hosted`, `release_trigger: manual`, and `admin_bypass: always`. Admin bypass replaces only peer approval and never skips the remaining required evidence. The former `actions_fallback` is retired (Issue #1071): an Actions outage uses the governance-switch route.
 
-This maps to the "Free + public, or Pro personal + private" row in the table below, not the **private** degraded scenario the Free row describes in the "Full capability at each Free/Team/Enterprise tier" cards further down (that card describes what happens on Free + *private*, where the REST/GraphQL Ruleset-creation API refuses the request, so only the desired state can be kept while it is marked `DEGRADED`); this repository is public, so it takes the path that applies and verifies directly. If the plan or visibility changes later, rerunning `plan`/`apply`/`check` reflects the latest state -- this records the fact as of when it was checked, not a permanent guarantee, and it does not mean every repository using this template looks the same.
+This matches the "Free + public, or Pro personal + private" row in the table below. It is not the **private** degraded scenario of the Free card in "Full capability at each Free/Team/Enterprise tier" further down. That card describes Free + *private*, where the REST/GraphQL Ruleset-creation API refuses the request. There, only the desired state is kept, marked `DEGRADED`. This repository is public, so it takes the path that applies and verifies directly. If the plan or visibility changes later, run `plan`/`apply`/`check` again to show the latest state. This records the fact at the check date, not a permanent guarantee. Other repositories that use this template can differ.
 {{< /disclosure >}}
 
 {{< disclosure key="governance-capability" title="Plan capability, activation, and upgrade conditions" >}}
 | GitHub state | What the template can do | Human responsibility |
 | --- | --- | --- |
 | Free + public, or Pro personal + private | Apply and check the repository Ruleset | Review the planned change before applying it |
-| Free organization + private | Apply baseline settings and retain the desired Ruleset in `policies/rulesets.json` | Best-effort request a reviewer; there is no enforced merge gate |
+| Free organization + private | Apply baseline settings and keep the desired Ruleset in `policies/rulesets.json` | Best-effort request a reviewer; no enforced merge gate exists |
 | Team / Enterprise organization + private | Validate a configured CODEOWNER, then apply and check the Ruleset | Approve organization-level identity, network, audit, or irreversible changes separately |
 
-Capability is enabled by evidence, not by a predefined maturity label or calendar date. Re-run `plan`, `apply`, and `check` after a visibility or plan change. A real unsupported capability stays `DEGRADED`; an unexpected API or configuration error stops.
+Evidence enables a capability, not a predefined maturity label or calendar date. Run `plan`, `apply`, and `check` again after a visibility or plan change. A real unsupported capability stays `DEGRADED`; an unexpected API or configuration error stops.
 {{< /disclosure >}}
 
 {{< disclosure key="governance-plan-tiers" title="Full capability at each Free / Team / Enterprise tier" >}}
 <div class="plan-grid">
-  <article class="plan-card current"><h3>Free <span class="plan-state">Current</span></h3><p><strong>Review intent is preserved while enforcement may degrade:</strong> the hosted workflow selects a non-author <code>maintain</code>/<code>admin</code> user from live repository collaborators, while local mode uses the local lifecycle instead; a private repository keeps its desired Ruleset in <code>policies/rulesets.json</code>, and check reports DEGRADED.</p><ul><li>Copilot entitlement is never inferred from the Free plan name; unproven availability falls back to the human rule</li><li>Without a merge gate, review history cannot masquerade as platform enforcement</li></ul></article>
-  <article class="plan-card team"><h3>Team <span class="plan-state">Minimum recommended</span></h3><p><strong>Adds:</strong> a private-repository Ruleset, protected branches, and required checks; the review check still evaluates peer approval or the configured admin bypass.</p><ul><li>A configured CODEOWNERS team must exist with repository write access</li><li>The template can apply the repository's existing Ruleset directly</li></ul></article>
-  <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">Organization-wide</span></h3><p><strong>Adds:</strong> SAML SSO/SCIM, internal repositories, private/internal deployment protection, private Pages, audit log streaming, and IP allow lists.</p><ul><li>An organization or Enterprise Ruleset can govern centrally</li><li>Currently only detected and reported, never changed automatically</li></ul></article>
+  <article class="plan-card current"><h3>Free <span class="plan-state">Current</span></h3><p><strong>Review intent stays while enforcement can degrade:</strong> the hosted workflow selects a non-author <code>maintain</code>/<code>admin</code> user from live repository collaborators. Local mode uses the local lifecycle instead. A private repository keeps its desired Ruleset in <code>policies/rulesets.json</code>, and check reports DEGRADED.</p><ul><li>Copilot entitlement is never inferred from the Free plan name; unproven availability falls back to the human rule</li><li>Without a merge gate, review history cannot pose as platform enforcement</li></ul></article>
+  <article class="plan-card team"><h3>Team <span class="plan-state">Minimum recommended</span></h3><p><strong>Adds:</strong> a private-repository Ruleset, protected branches, and required checks. The review check still evaluates peer approval or the configured admin bypass.</p><ul><li>A configured CODEOWNERS team must exist with repository write access</li><li>The template can apply the repository's existing Ruleset directly</li></ul></article>
+  <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">Organization-wide</span></h3><p><strong>Adds:</strong> SAML SSO/SCIM, internal repositories, private/internal deployment protection, private Pages, audit log streaming, and IP allow lists.</p><ul><li>An organization or Enterprise Ruleset can govern centrally</li><li>The template only detects and reports these today; it never changes them automatically</li></ul></article>
 </div>
 {{< /disclosure >}}
 
@@ -777,24 +777,24 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 | Live fact and derived value (not saved) | `repository_url`, `project_slug` | `repository_url` is read from the GitHub origin/`GH_REPO` every time, and an explicit value binds one plan only; `project_slug` is derived from the repository name | repo-site's clone instructions |
 | Project choice | `scheduled_checks` | `governance-drift` by default; add `template-update` or clear the list | `governance-drift` generates the daily `governance-drift.yml` and drift checker; `template-update` generates the weekly notification |
 
-The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier `_src_path` and `_commit` metadata. Plan, billing, Copilot entitlement, token permissions, and Pages availability are live `allowed`/`blocked`/`unknown` observations, not settings. Low-frequency GitHub details stay in native repository settings or `policies/` instead of expanding the CSARC schema.
+The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier `_src_path` and `_commit` metadata. Plan, billing, Copilot entitlement, token permissions, and Pages availability are live `allowed`/`blocked`/`unknown` observations, not settings. Low-frequency GitHub details stay in native repository settings or `policies/`; they do not expand the CSARC schema.
 
-A generated project using `documentation_mode: template-and-content` runs the same rendering engine and components as this template repository's own root site (Issue #681), just with much leaner content. It resolves explicit `[[key]]` tokens only from the keys listed above: settings from `.csarc/config.yml`, the name, description, and repository URL from the managed site data, and the license from `LICENSE`; an unknown key stops the build, so the site cannot invent a second settings schema. Project content and theme choices stay under `docs/site/content/` and `docs/site/theme.css`, owned by the consuming project. See `docs/documentation-policy.md` for the complete ownership and migration contract.
+A generated project with `documentation_mode: template-and-content` runs the same rendering engine and components as this template repository's own root site (Issue #681), with much leaner content. It resolves explicit `[[key]]` tokens only from the keys listed above. Settings come from `.csarc/config.yml`; the name, description, and repository URL come from the managed site data; the license comes from `LICENSE`. An unknown key stops the build, so the site cannot invent a second settings schema. Project content and theme choices stay under `docs/site/content/` and `docs/site/theme.css`, and the consuming project owns them. See `docs/documentation-policy.md` for the complete ownership and migration contract.
 {{< /disclosure >}}
 
 {{< disclosure key="governance-exceptions" title="How to record a temporary exception" >}}
-Use a linked Issue to record the proposer, a different approver, expiry, evidence, and recovery action. The exception may narrow a control only when the platform cannot provide it or a time-bounded incident requires recovery. It cannot claim a missing check passed, expose a privileged token to pull-request code, or silently become permanent. Close the exception only after recovery is verified; renew it through another explicit approval.
+Use a linked Issue to record the proposer, a different approver, expiry, evidence, and recovery action. The exception can narrow a control only when the platform cannot provide it or a time-bounded incident requires recovery. It cannot claim a missing check passed, expose a privileged token to pull-request code, or silently become permanent. Close the exception only after recovery is verified; renew it through another explicit approval.
 {{< /disclosure >}}
 
 {{< config-guidance track="governance" >}}
 
 {{< disclosure key="governance-plan-behavior" title="GitHub plan vs. apply/check behavior, side by side" >}}
-<aside class="selection-note"><strong>Rollout and exception principles</strong><span><code>plan</code> checks the account plan, repo visibility, any configured CODEOWNER, and the Ruleset API first; when an identity does not exist, is not visible, or lacks repo write access, it stops outright instead of being masked by the Free-private degraded path. A capability activates only once a live check proves it works, never by assumed maturity or date. Free private cannot enforce a Ruleset; `governance-comment.yml` only makes a best-effort review request from live maintain/admin collaborators and is not a merge gate. Every temporary exception is recorded in an Issue with who requested it, a second approver, an expiry date, evidence, and a recovery plan; a check that never ran cannot be written up as passing. Full administrative-field verification uses an administrator's Administration-read credential from a trusted checkout, never a token exposed to PR code. A GitHub plan upgrade, an irreversible operation, and an organization permission change all need a separate organization-owner approval.</span></aside>
+<aside class="selection-note"><strong>Rollout and exception principles</strong><span><code>plan</code> first checks the account plan, repo visibility, any configured CODEOWNER, and the Ruleset API. If an identity does not exist, is not visible, or lacks repo write access, it stops. The Free-private degraded path does not hide the problem. A capability activates only when a live check proves it works, never by assumed maturity or date. Free private cannot enforce a Ruleset. `governance-comment.yml` only makes a best-effort review request from live maintain/admin collaborators; it is not a merge gate. Record every temporary exception in an Issue with the requester, a second approver, an expiry date, evidence, and a recovery plan. A check that never ran cannot be reported as passing. Full administrative-field verification uses an administrator's Administration-read credential from a trusted checkout, never a token exposed to PR code. A GitHub plan upgrade, an irreversible operation, and an organization permission change each need a separate organization-owner approval.</span></aside>
 <table class="decision-register" aria-label="GitHub plan vs. apply/check behavior">
   <thead><tr><th>GitHub plan and visibility</th><th><code>apply</code> result</th><th><code>check</code>/PR/CI behavior</th></tr></thead>
   <tbody>
     <tr><td>Free + public</td><td>Applies and enables a Ruleset over REST</td><td>Verifies the effective rule on <code>main</code>; missing or mismatched fails</td></tr>
-    <tr><td>Free organization + private</td><td>Applies the baseline settings and keeps the desired Ruleset in <code>policies/rulesets.json</code>; the public API cannot create a Ruleset here</td><td>Marked <code>DEGRADED</code>; the workflow only makes a best-effort review request, and a red check or missing approval can never masquerade as a platform merge gate</td></tr>
+    <tr><td>Free organization + private</td><td>Applies the baseline settings and keeps the desired Ruleset in <code>policies/rulesets.json</code>; the public API cannot create a Ruleset here</td><td>Marked <code>DEGRADED</code>; the workflow only makes a best-effort review request. A red check or missing approval can never pose as a platform merge gate</td></tr>
     <tr><td>Pro individual account + private</td><td>Applies and enables a Ruleset</td><td>Same as Free public</td></tr>
     <tr><td>Team/Enterprise organization + private</td><td>Validates an optional CODEOWNER, then applies and enables a Ruleset</td><td>Required status checks become the merge gate; the review check enforces peer approval, the configured admin bypass, and available Copilot rules, and policy mismatch fails closed</td></tr>
   </tbody>
@@ -806,45 +806,45 @@ Use a linked Issue to record the proposer, a different approver, expiry, evidenc
 
 {{< slide key="template-release" track="template-release" eyebrow="Step 09" title="Copier keeps repositories aligned, and the template dogfoods its rules" subtitle="A template defect affects many projects, so creation, adoption, and update all run as real tests." legacy="false"  class="candidate-slide" >}}
 {{< standard key="template-release-mode-standard" title="How template updates reach your repository safely" >}}
-After the template publishes a new version, your repository gets an update notice or a person triggers it manually; Copier (the tool that creates and keeps updating the template) first produces a dry-run candidate **outside** your repository, then compares files one by one:
+After the template publishes a new version, your repository gets an update notice, or a person starts the update manually. Copier (the tool that creates and keeps updating the template) first makes a dry-run candidate **outside** your repository. Then it compares the files one by one:
 
 <div class="plan-grid">
-  <article class="plan-card current"><h3>No conflict</h3><p>Updates the matching files in the worktree; main itself has not changed yet.</p></article>
-  <article class="plan-card team"><h3>Conflict</h3><p>Only the affected files are listed, keeping your repository unchanged; you adjust and rerun.</p></article>
-  <article class="plan-card enterprise"><h3>Human review, then merge</h3><p>Either way, a normal PR carries out full review and only merges into main once it passes -- no step ever skips review to touch main directly.</p></article>
+  <article class="plan-card current"><h3>No conflict</h3><p>Updates the matching files in the worktree; main itself does not change yet.</p></article>
+  <article class="plan-card team"><h3>Conflict</h3><p>Lists only the affected files and keeps your repository unchanged. You adjust and rerun.</p></article>
+  <article class="plan-card enterprise"><h3>Human review, then merge</h3><p>In both cases, a normal PR gets full review and merges into main only after it passes. No step skips review to touch main directly.</p></article>
 </div>
 
-Three places each own something different: `template/` is the single source of what the template delivers; `.csarc/config.yml` records what this project has chosen and which version it is currently updated to; your product code and specs are entirely yours, and the template always lists a conflict for you to confirm rather than silently overwriting it.
+Three places each own something different. `template/` is the single source of what the template delivers. `.csarc/config.yml` records this project's choices and its current template version. Your product code and specs are entirely yours. The template always lists a conflict for you to confirm; it never silently overwrites your content.
 {{< /standard >}}
 
 {{< ops key="template-release-mode-ops" title="Single source, verification flow, and current automation boundary" >}}
-- `template/` is the only delivered source; root keeps the template repository's own GitHub governance and dogfood configuration only because that is how GitHub reads it, and `scripts/sync-paired-files.sh` generates root's paired-file copies under `template/`.
-- `.csarc/config.yml` is both Copier's update record and the repository's only template configuration. Languages, governance, and optional capabilities read from it, while branch routes come from Issue and Milestone metadata; later extensions add settings here instead of creating another configuration file.
-- A new repository selects its languages and capabilities, then receives a baseline it can verify directly. Selecting several languages only combines their independent components (modules); it never builds a combination-specific pipeline.
-- A first adoption uses a pinned, full-SHA CLI release outside the repository to produce an external change plan; the dry-run never executes a target-owned helper or product hook and read-only inventories GitHub Issue Types and labels. The report uses `Bug`／`Feature`／`Task` for Issue work types and lowercase `bug`／`enhancement`／`documentation` for PR classification and fallback, listing safe mappings that can be accepted together and custom items that need individual review without changing remote metadata. Once a person approves that same undrifted plan, the CLI verifies an isolated candidate before writing it, and the first PR then reviews the source, plan, diff, and local results.
-- After that first merge, the default branch supplies the trusted PR policy and read-only CI verifies the candidate. Updates still begin with a dry-run preview, and only apply to the target once the candidate content and conflicts are fully verified; a conflict leaves the repository unchanged so it can be corrected, rerun, and reviewed by a normal PR and trusted-base checks.
-- If an existing repository was created directly by Copier, `_commit` may still be a release tag or short SHA. `csarc status` classifies it as `migrate` and reports the current value and format; after reviewing it, the maintainer runs `update --check --accept-legacy --from-release <tag>` to bind it to the immutable, attested, signature-verified Release's full SHA. Provenance that already claims to be verified but disagrees still fails closed.
-- The optional update notice checks weekly and only creates or refreshes one Issue; it never modifies the repository automatically.
+- `template/` is the only delivered source. Root keeps the template repository's own GitHub governance and dogfood configuration only because GitHub reads it there. `scripts/sync-paired-files.sh` generates root's paired-file copies under `template/`.
+- `.csarc/config.yml` is both Copier's update record and the repository's only template configuration. Languages, governance, and optional capabilities read from it; branch routes come from Issue and Milestone metadata. Later extensions add settings here and create no other configuration file.
+- A new repository selects its languages and capabilities, then receives a baseline it can verify directly. Several selected languages only combine their independent components (modules); the template never builds a combination-specific pipeline.
+- A first adoption uses a pinned, full-SHA CLI release outside the repository to produce an external change plan. The dry-run never executes a target-owned helper or product hook, and it reads GitHub Issue Types and labels read-only. The report uses `Bug`／`Feature`／`Task` for Issue work types and lowercase `bug`／`enhancement`／`documentation` for PR classification and fallback. It lists safe mappings that can be accepted together and custom items that need individual review, and changes no remote metadata. When a person approves that same undrifted plan, the CLI verifies an isolated candidate before it writes. Then the first PR reviews the source, plan, diff, and local results.
+- After that first merge, the default branch supplies the trusted PR policy, and read-only CI verifies the candidate. Updates still begin with a dry-run preview. They apply to the target only after full verification of the candidate content and conflicts. A conflict leaves the repository unchanged. You can then correct it, rerun, and get review through a normal PR and trusted-base checks.
+- If Copier created an existing repository directly, `_commit` can still be a release tag or short SHA. `csarc status` classifies it as `migrate` and reports the current value and format. After review, the maintainer runs `update --check --accept-legacy --from-release <tag>` to bind it to the immutable, attested, signature-verified Release's full SHA. Provenance that claims to be verified but disagrees still fails closed.
+- The optional update notice checks weekly and only creates or refreshes one Issue. It never changes the repository automatically.
 
 {{< disclosure key="copier-update" title="Copier + root dogfood + create/adopt/update regression" >}}
-[Copier](https://github.com/copier-org/copier) records source, language, and answers, then reapplies newer template revisions to an editable repository. A person approves the first adoption. A later update conflict leaves the repository unchanged so the affected files can be corrected, rerun, and reviewed in a PR. GitHub Template copies only once and forgets source and answers, while PyScaffold would create a second update mechanism, so neither fits this requirement.
+[Copier](https://github.com/copier-org/copier) records source, language, and answers, then applies newer template revisions to an editable repository. A person approves the first adoption. A later update conflict leaves the repository unchanged, so you can correct the affected files, rerun, and review them in a PR. GitHub Template copies only once and forgets source and answers. PyScaffold would create a second update mechanism. So neither fits this requirement.
 {{< /disclosure >}}
 
 {{< disclosure key="template-release-scope" title="Single source, runtime baselines, and the root-only boundary" >}}
-Root `.csarc/config.yml` records the capabilities the template repository selects for itself. A generated repository additionally records Copier's source and revision and writes changes through `csarc update --data`. The template source does not invent `_src_path` or `_commit` values that point back to itself and would immediately go stale. The settings schema is a closed list ([SPEC-009](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/specs/SPEC-009-project-settings.md)) and an unknown field fails on read; a derived template that needs a new setting updates SPEC-009 first.
+Root `.csarc/config.yml` records the capabilities the template repository selects for itself. A generated repository also records Copier's source and revision and writes changes through `csarc update --data`. The template source does not invent `_src_path` or `_commit` values that point back to itself, because they would go stale immediately. The settings schema is a closed list ([SPEC-009](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/specs/SPEC-009-project-settings.md)), and an unknown field fails on read. A derived template that needs a new setting updates SPEC-009 first.
 
-`template-update` in `scheduled_checks` generates `template-update.yml` and `check-template-update` only when selected. Public sources need no secret; private sources use a repository secret limited to read-only access to that template source.
+`template-update` in `scheduled_checks` generates `template-update.yml` and `check-template-update` only when selected. Public sources need no secret. Private sources use a repository secret with only read access to that template source.
 
 `scripts/sync-paired-files.sh` makes root the single source of paired files, and `--check` verifies copied content and executable bits. `profiles/catalog.yaml` records runtime baselines and their evidence. Python and Node baselines advance only after their own thirty-day observation period (`profiles/catalog.yaml`'s `stable_release_observation_days: 30`).
 
-`scripts/verify-template.sh` runs create/adopt/update fixtures only in the template repository and is never delivered downstream; generated repositories use the smaller `scripts/verify` entry point. The first-adoption machine plan stays outside the target, so proposed files cannot rewrite their own evidence. After the first PR merges, its base supplies the trusted PR policy and read-only CI runs candidate verification.
+`scripts/verify-template.sh` runs create/adopt/update fixtures only in the template repository and is never delivered downstream. Generated repositories use the smaller `scripts/verify` entry point. The first-adoption machine plan stays outside the target, so proposed files cannot rewrite their own evidence. After the first PR merges, its base supplies the trusted PR policy, and read-only CI runs candidate verification.
 {{< /disclosure >}}
 
 {{< disclosure key="template-release-status" title="Current automation boundary" >}}
-- **Active:** a CLI dry-run builds only a static candidate and treats the target as data; after plan approval, target-owned verification runs in the candidate and must pass before the target is written. Template full verification's Regression tests stage reruns all three paths, including the `large`-marked Copier create/adopt/update matrix, and its Package smoke test stage separately confirms the wheel builds and its published entry point runs from the built artifact.
+- **Active:** a CLI dry-run builds only a static candidate and treats the target as data. After plan approval, target-owned verification runs in the candidate and must pass before the target is written. Template full verification's Regression tests stage reruns all three paths, including the `large`-marked Copier create/adopt/update matrix. Its Package smoke test stage separately confirms that the wheel builds and that its published entry point runs from the built artifact.
 - **Manual:** a person approves the external plan, source, and first adoption PR.
-- **Pending:** the update-notice workflow (`template-update.yml.jinja`) and checker script (`check-template-update`) are restored, and a Copier fixture test verifies they are generated only when selected; `tests/test_template_update_notifications.py` covers the checker's own update-detection and Issue create/edit logic, including its fail-closed behavior on a check error, but no hosted scheduled run has been observed, so live-schedule execution is not yet claimed.
-- **Retired:** remote governance and delivery orchestration do not return with this page; reviewer assignment is restored and covered under Rules governance instead.
+- **Pending:** the update-notice workflow (`template-update.yml.jinja`) and checker script (`check-template-update`) are restored. A Copier fixture test verifies that they are generated only when selected. `tests/test_template_update_notifications.py` covers the checker's own update-detection and Issue create/edit logic, including its fail-closed behavior on a check error. No hosted scheduled run has been observed, so this page does not claim live-schedule execution yet.
+- **Retired:** remote governance and delivery orchestration do not return with this page. Reviewer assignment is restored, and Rules governance covers it.
 {{< /disclosure >}}
 
 {{< config-guidance track="template-release" >}}
@@ -855,32 +855,32 @@ Root `.csarc/config.yml` records the capabilities the template repository select
 {{< legacy >}}
       <header>
         <h2>A single file stays deliverable forever,<span class="accent"> platform features are only a bonus</span></h2>
-        <p class="subtitle"><strong>Choice confirmed.</strong> The single <code>docs/index.html</code> file can be downloaded, forwarded, and opened offline; GitHub Pages or any other hosting is an extra option, never a requirement.</p>
+        <p class="subtitle"><strong>Choice confirmed.</strong> You can download, forward, and open the single <code>docs/index.html</code> file offline. GitHub Pages or other hosting is an extra option, never a requirement.</p>
       </header>
-      <p class="context-line"><strong>Following on from the last page｜</strong>if process and rules can only live inside config files, a team has a hard time understanding them together, so the same repository also produces a shareable write-up of how it works -- the site you're reading right now.</p>
-      <p class="context-line"><strong>Problem and goal｜</strong>keep the distinctive presentation design and single-file delivery, without leaving content, styling, interaction, source choices, and word-for-word tests tangled inside one hand-maintained file.</p>
-      <div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>Source</h3><p>Bilingual Markdown in <code>site/content/</code>, kept apart from layout and code so nothing needs manual syncing.</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>Render</h3><p>A built-in Python engine assembles the content structure -- no Node or extra templating engine needed.</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>Output</h3><p><code>docs/index.html</code> embeds every style, script, and image; each page fits one screen, nothing to scroll to find the point.</p></article><article class="step-flow-item"><span class="step-flow-number">4</span><h3>Reader</h3><p>Download it and open it in a browser to see the whole page; Pages or other hosting is only one more way to browse, never a requirement.</p></article></div>
-      <p class="context-line"><strong>Next step｜</strong>download <code>docs/index.html</code> and it is ready to share offline; source structure, theme customization, and access-control detail are covered in Maintenance mode.</p>
+      <p class="context-line"><strong>Following on from the last page｜</strong>if process and rules live only inside config files, a team has difficulty understanding them together. So the same repository also produces a shareable write-up of how it works: this site.</p>
+      <p class="context-line"><strong>Problem and goal｜</strong>keep the distinctive presentation design and single-file delivery. Do not tangle content, styling, interaction, source choices, and word-for-word tests inside one hand-maintained file.</p>
+      <div class="step-flow"><article class="step-flow-item"><span class="step-flow-number">1</span><h3>Source</h3><p>Bilingual Markdown in <code>site/content/</code>, separate from layout and code, so nothing needs manual syncing.</p></article><article class="step-flow-item"><span class="step-flow-number">2</span><h3>Render</h3><p>A built-in Python engine assembles the content structure. It needs no Node or extra templating engine.</p></article><article class="step-flow-item"><span class="step-flow-number">3</span><h3>Output</h3><p><code>docs/index.html</code> embeds every style, script, and image. Each page fits one screen, so you do not scroll to find the point.</p></article><article class="step-flow-item"><span class="step-flow-number">4</span><h3>Reader</h3><p>Download it and open it in a browser to see the whole page. Pages or other hosting is only one more way to browse, never a requirement.</p></article></div>
+      <p class="context-line"><strong>Next step｜</strong>download <code>docs/index.html</code> to share it offline. Maintenance mode covers source structure, theme customization, and access-control detail.</p>
 {{< /legacy >}}
 
 {{< basic >}}
 ### Our choice
 
 - `site/content/` holds bilingual Markdown with matching content keys.
-- `site/static/styles.css` retains the presentation identity; `scripts/repo_site_blocks.py`'s declarative block parser produces the shared content structure.
+- `site/static/styles.css` keeps the presentation identity; `scripts/repo_site_blocks.py`'s declarative block parser produces the shared content structure.
 - `scripts/render_site.py` embeds CSS, JavaScript, fonts, and images and rejects external runtime assets.
-- `./scripts/build-repo-site` regenerates the output; `./scripts/build-repo-site --check` only verifies the source and version compatibility, without writing files.
+- `./scripts/build-repo-site` regenerates the output; `./scripts/build-repo-site --check` only verifies the source and version compatibility and writes no files.
 
 {{< disclosure key="portable-bundle" title="Markdown + the Python render engine → self-contained HTML" >}}
-`docs/adr/` preserves canonical choices. `scripts/build_repo_site.py` owns content and HTML; the unchanged `scripts/render_site.py` only embeds assets and enforces safety checks. The final `docs/index.html` opens offline through `file://` without Pages, a CDN, or a JavaScript package runtime. This single downloadable HTML file is a committed baseline feature, not a stopgap -- even once Pages or other hosting exists, this downloadable, offline-capable output stays.
+`docs/adr/` preserves canonical choices. `scripts/build_repo_site.py` owns content and HTML; the unchanged `scripts/render_site.py` only embeds assets and enforces safety checks. The final `docs/index.html` opens offline through `file://` without Pages, a CDN, or a JavaScript package runtime. This single downloadable HTML file is a committed baseline feature, not a stopgap. Even when Pages or other hosting exists, this downloadable, offline-capable output stays.
 {{< /disclosure >}}
 
 {{< disclosure key="docs-site-access" title="Access and maintenance boundaries" >}}
 `noindex` and `robots.txt` reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.
 
-The renderer resolves the same Rules-governance-approved `.csarc/config.yml` keys documented in the governance configuration table above; it does not define a second, site-only list. A generated project keeps its prose in `docs/site/content/_index.zh-tw.md` / `_index.en.md`, its navigation in `docs/site/data/navigation.json`, and its theme overrides in `docs/site/theme.css`, rebuilds with `./.csarc/scripts/build-repo-site`, and never edits the generated `docs/index.html` / `docs/index.en.html` directly.
+The renderer resolves the same Rules-governance-approved `.csarc/config.yml` keys that the governance configuration table above documents. It defines no second, site-only list. A generated project keeps its prose in `docs/site/content/_index.zh-tw.md` / `_index.en.md`, its navigation in `docs/site/data/navigation.json`, and its theme overrides in `docs/site/theme.css`. It rebuilds with `./.csarc/scripts/build-repo-site` and never edits the generated `docs/index.html` / `docs/index.en.html` directly.
 
-**Custom theme for this page (the root site, Issue #527):** the `.csarc/config.yml` / `docs/site/theme.css` path above belongs to a generated project's own repo-site. A maintainer who forks or vendors this template repository itself and wants to restyle its own root repo site uses `site/theme.css` instead. Scope stays deliberately narrow: only override CSS custom properties already declared in `site/static/styles.css`'s `:root` block, plus narrow, purely-visual declarations on existing block-level classes -- no new HTML, JavaScript, or layout rules; ordinary PR review is the only gate, no extra tooling. This file always exists and is always inlined by the engine; it ships empty, so the default output keeps the template's palette unchanged:
+**Custom theme for this page (the root site, Issue #527):** the `.csarc/config.yml` / `docs/site/theme.css` path above belongs to a generated project's own repo-site. A maintainer who forks or vendors this template repository and wants to restyle its root repo site uses `site/theme.css` instead. The scope is deliberately narrow. Override only CSS custom properties already declared in `site/static/styles.css`'s `:root` block, plus narrow, purely-visual declarations on existing block-level classes. Add no new HTML, JavaScript, or layout rules. Ordinary PR review is the only gate; no extra tooling exists. This file always exists, and the engine always inlines it. It ships empty, so the default output keeps the template's palette unchanged:
 
 ```css
 :root {
@@ -888,13 +888,13 @@ The renderer resolves the same Rules-governance-approved `.csarc/config.yml` key
 }
 ```
 
-Rebuild with `./scripts/build-repo-site` after editing. This is a structural addition to the presentation template, so `site/version.json`'s `template` version and the `scripts/check-repo-site-versions` compatibility check cover it; see the "根網站自訂主題" section of `docs/adr/portable-repo-site.md` for the full record.
+Rebuild with `./scripts/build-repo-site` after you edit it. This is a structural addition to the presentation template, so `site/version.json`'s `template` version and the `scripts/check-repo-site-versions` compatibility check cover it. See the "根網站自訂主題" section of `docs/adr/portable-repo-site.md` for the full record.
 {{< /disclosure >}}
 
 {{< disclosure key="docs-site-alternatives" title="Other common approaches" >}}
-- **Hand-edit the single file directly:** stays offline, but source, presentation, and tests end up tightly coupled.
-- **Load multiple files at runtime:** easy to forget a file when forwarding it, and `file://` behavior is also limited by the browser.
-- **Adopt a documentation platform right away:** no proven need yet for multi-page search, translation, or a cross-repo catalog.
+- **Hand-edit the single file directly:** stays offline, but source, presentation, and tests become tightly coupled.
+- **Load multiple files at runtime:** a forwarded copy can easily miss a file, and the browser also limits `file://` behavior.
+- **Adopt a documentation platform right away:** no need for multi-page search, translation, or a cross-repo catalog is proven yet.
 - **Save a full conversation transcript automatically:** mixes in unconfirmed assumptions, sensitive context, and noise.
 {{< /disclosure >}}
 
@@ -903,23 +903,23 @@ Rebuild with `./scripts/build-repo-site` after editing. This is a structural add
 {{< /slide >}}
 
 {{< slide key="bridge" audience="maintainer" eyebrow="May 2026 internal presentation" title="Review the original principles against today's implementation" subtitle="Revisits the SDLC ideas shared internally in May 2026 and marks what is retained, adjusted, or deferred; click a row for the three-sentence call." class="legacy-slide bridge-slide" legacy="false" >}}
-      <p class="bridge-intro">This page explains which May 2026 ideas were kept, adjusted, or deferred; day-to-day operation still follows each Journey and the current policy documents.</p>
+      <p class="bridge-intro">This page shows which May 2026 ideas were kept, adjusted, or deferred. Daily operation still follows each Journey and the current policy documents.</p>
       <table class="bridge-table" aria-label="Page-by-page comparison of the May deck and today's design">
         <colgroup><col class="page-col"><col class="topic-col"><col class="status-col"><col class="decision-col"></colgroup>
         <thead><tr><th>Page</th><th>May deck topic</th><th>Outcome</th><th>Current decision (click)</th></tr></thead>
         <tbody>
-          <tr><td>p.3</td><td>Core SDLC stages</td><td><span class="bridge-status keep">Keep</span></td><td><details class="bridge-detail drop-down"><summary>Center plan-through-monitor on GitHub</summary><div class="bridge-popover"><p><strong>May deck｜</strong>The core order of plan, build, test, deploy, monitor is kept.</p><p><strong>This round｜</strong>Work items, templates, pull requests, automated checks, and delivery settings all live in GitHub, for easier ongoing maintenance.</p><p><strong>Implementation｜</strong>Not every project deploys or monitors, but all of them follow the same work-planning, change-review, and verification rules first.</p></div></details></td></tr>
-          <tr><td>p.4</td><td>Jira ticket</td><td><span class="bridge-status adjust">Adjust</span></td><td><details class="bridge-detail drop-down"><summary>Every change starts as a minimal GitHub Issue</summary><div class="bridge-popover"><p><strong>May deck｜</strong>Jira's Epic → Story → Task split is replaced this round by only the necessary GitHub Issue, Milestone, and spec.</p><p><strong>This round｜</strong>A one-off task picks one type and states the problem and completion criteria; a complex request opens a planning Issue first, then an approved spec creates the implementation Issue. New scope gets its own Issue.</p><p><strong>Implementation｜</strong><code>work-item.yml</code> requires a type plus two required fields (problem, completion criteria) and one optional one; <code>work-item-lifecycle.yml</code> assigns the opener; the PR workflow checks the label, branch, and the matching open Issue.</p></div></details></td></tr>
-          <tr><td>p.5</td><td>Version control</td><td><span class="bridge-status adjust">Adjust</span></td><td><details class="bridge-detail drop-down"><summary>A delivery branch is a CI integration boundary, not a pretend environment</summary><div class="bridge-popover"><p><strong>May deck｜</strong>Parallel branches are kept, but no project is required to have a physical DEV environment.</p><p><strong>This round｜</strong>Standalone work branches from the latest <code>main</code> and returns straight to <code>main</code>; only a Milestone needing joint acceptance uses <code>dev/m*</code>, an independent canary uses a temporary <code>dev/i*</code>, and a hotfix also fixes <code>main</code> directly.</p><p><strong>Implementation｜</strong>An ordinary PR runs the checks its risk requires; Milestone/canary delivery and a hotfix run full verification; syncing the latest main only happens at final delivery or when a dependency is explicitly recorded.</p></div></details></td></tr>
-          <tr><td>p.6</td><td>PR and review</td><td><span class="bridge-status adjust">Strengthen</span></td><td><details class="bridge-detail drop-down"><summary>Issue, numbered branch, and PR form one fixed chain</summary><div class="bridge-popover"><p><strong>May deck｜</strong>A PR stays the only entry point into a protected branch; the three-tier review model becomes an explicit <code>solo</code> or <code>peer</code> policy.</p><p><strong>This round｜</strong>An ordinary PR needs its matching-numbered Issue and CI. When available, a clean exact-head Copilot review may satisfy either review policy; otherwise the declared human path applies.</p><p><strong>Implementation｜</strong>Branches are fixed as <code>type/123-short-slug</code>, and a PR body always carries <code>Closes #123</code>; <code>governance-comment.yml</code> chooses a non-author maintainer or admin from live repository permissions instead of storing a reviewer list.</p></div></details></td></tr>
-          <tr><td>p.7</td><td>CI automation pipeline</td><td><span class="bridge-status keep">Keep</span></td><td><details class="bridge-detail drop-down"><summary>Local and CI share one entry point, tiered by risk</summary><div class="bridge-popover"><p><strong>May deck｜</strong>Automatic triggers, tests, formatting, and static-error checks are all kept.</p><p><strong>This round｜</strong>An ordinary Issue PR runs fast; promotion, hotfix, merge queue, and unknown high-risk paths run full; OSV, Zizmor, and remote governance run on their own scope or schedule.</p><p><strong>Implementation｜</strong>A fixed <code>verify</code> aggregate keeps a skipped workflow from leaving a stuck Pending; delivery sync and promotion-route classification fold into the <code>title</code> policy; a candidate's full run is never cancelled, while an ordinary PR's new commit cancels its own stale run. A Ruleset, once available, requires <code>title</code>, <code>verify</code>, and <code>review</code>.</p></div></details></td></tr>
-          <tr><td>p.8</td><td>CD project management</td><td><span class="bridge-status adjust">Adjust</span></td><td><details class="bridge-detail drop-down"><summary>Every release-worthy PR reviews delivery and version together</summary><div class="bridge-popover"><p><strong>May deck｜</strong>The original default was DEV → STAGING → Canary → PROD; this round does not require every project to copy all four tiers.</p><p><strong>This round｜</strong>Every CSARC-owned release-worthy PR carries its beta or stable version and changelog before merge; no follow-up version PR is created.</p><p><strong>Implementation｜</strong>After merge, the shared publisher creates the checksum, SBOM, artifact, and immutable GitHub Release, then closes a successful Milestone. Attestation and consumption-side gates stay optional.</p></div></details></td></tr>
-          <tr><td>p.9</td><td>Observability</td><td><span class="bridge-status defer">Phase 2</span></td><td><details class="bridge-detail"><summary>Monitoring and on-call are only for services actually running live</summary><div class="bridge-popover"><p><strong>May deck｜</strong>Runbooks, logs, metrics, tracing, recovery, and on-call stay a phase-two effort.</p><p><strong>This round｜</strong>Only introduced for continuously running services; tools are picked by the actual cloud, environment, and owner instead of committing to Datadog or PagerDuty upfront.</p><p><strong>Implementation｜</strong>Test data is managed separately as PII-free, creatable, disposable fixtures, instead of folding test-data management into live monitoring.</p></div></details></td></tr>
-          <tr><td>p.10</td><td>Copilot → Agent</td><td><span class="bridge-status defer">Phased</span></td><td><details class="bridge-detail"><summary>Controlled AI collaboration first; automatic retry only once mature</summary><div class="bridge-popover"><p><strong>May deck｜</strong>The direction of AI growing from code completion into running full tasks is kept, but never to the point of reducing an engineer to writing only prompts.</p><p><strong>This round｜</strong>In this first phase, an agent researches, proposes a plan, makes the change, verifies it, and opens a PR against a clear work item; parallel writable tasks each use their own branch and Git worktree, and tooling convenience is handled by an agent kit.</p><p><strong>Implementation｜</strong><code>AGENTS.md</code> plus the shared verification commands bound how work happens; <code>actions.json</code> keeps Actions read-only by default and unable to approve a PR, and a Ruleset requires human approval. The worktree manager is not CI/CD and gets no extra secret or merge permission.</p></div></details></td></tr>
-          <tr><td>p.11</td><td>AI first review</td><td><span class="bridge-status adjust">Adjust</span></td><td><details class="bridge-detail"><summary>Deterministic tools decide; AI only adds suggestions</summary><div class="bridge-popover"><p><strong>May deck｜</strong>AI first review is kept, but code formatting and common mistakes move to a formatter, linter, and static check running reliably instead.</p><p><strong>This round｜</strong>AI review only adds contextual-error notes, test-gap flags, a risk summary, and fix suggestions -- it is never treated as proof something passed.</p><p><strong>Implementation｜</strong>Only CI, peer review, and a named owner can decide to merge; AI holds no approval, merge, or secret-reading permission.</p></div></details></td></tr>
-          <tr><td>p.12</td><td>AI CI/CD log</td><td><span class="bridge-status defer">Phase 2</span></td><td><details class="bridge-detail"><summary>Summarize failures first; automatic recovery only for mature deployments</summary><div class="bridge-popover"><p><strong>May deck｜</strong>AI may summarize a CI failure first; automatic rollback applies only to a deployment that already has a real environment and reliable health signals.</p><p><strong>This round｜</strong>A failing PR test blocks the merge and gets fixed with a new commit -- never skipped; if <code>main</code> itself breaks, a recovery PR lands plus a tracking work item.</p><p><strong>Implementation｜</strong>Automatic recovery is only considered once health signals, a stop threshold, reproducible recovery, and full logging are all mature.</p></div></details></td></tr>
-          <tr><td>p.13</td><td>AI docs and knowledge base</td><td><span class="bridge-status defer">Phased</span></td><td><details class="bridge-detail"><summary>Maintain in-repo documentation first; hosting and RAG wait</summary><div class="bridge-popover"><p><strong>May deck｜</strong>Keeping docs in sync is kept; letting AI search docs before answering (RAG) becomes optional.</p><p><strong>This round｜</strong>README, specs, and <code>docs/index.html</code> all travel through PRs with the code; a generated project separately keeps an updatable template and content files that are never overwritten.</p><p><strong>Implementation｜</strong>Local AI reviews documentation consistency for each candidate; PR policy only verifies the four-state result and exact head, without another hosted AI job. Cloudflare hosting and RAG remain unwired; RAG waits for an approved source, owner, access policy, citations, and test questions.</p></div></details></td></tr>
-          <tr><td>p.14</td><td>Legacy modernization</td><td><span class="bridge-status remove">Optional</span></td><td><details class="bridge-detail"><summary>Legacy-system rework is a project's own need, not a shared template default</summary><div class="bridge-popover"><p><strong>May deck｜</strong>Mentioned using AI to help modernize a legacy system; this round does not fold it into the shared template every project must use.</p><p><strong>This round｜</strong>This is a specific project's own transformation work: first characterize current behavior with tests, then replace it in small steps reviewed through short PRs, keeping a rollback path.</p><p><strong>Implementation｜</strong>A dedicated template or guide gets built only once a real legacy system, its risk, and its benefit exist -- never by placing an empty tool into every new project upfront.</p></div></details></td></tr>
+          <tr><td>p.3</td><td>Core SDLC stages</td><td><span class="bridge-status keep">Keep</span></td><td><details class="bridge-detail drop-down"><summary>Center plan-through-monitor on GitHub</summary><div class="bridge-popover"><p><strong>May deck｜</strong>The core order of plan, build, test, deploy, monitor is kept.</p><p><strong>This round｜</strong>Work items, templates, pull requests, automated checks, and delivery settings all live in GitHub, which makes ongoing maintenance easier.</p><p><strong>Implementation｜</strong>Not every project deploys or monitors. But all projects first follow the same work-planning, change-review, and verification rules.</p></div></details></td></tr>
+          <tr><td>p.4</td><td>Jira ticket</td><td><span class="bridge-status adjust">Adjust</span></td><td><details class="bridge-detail drop-down"><summary>Every change starts as a minimal GitHub Issue</summary><div class="bridge-popover"><p><strong>May deck｜</strong>This round, only the necessary GitHub Issue, Milestone, and spec replace Jira's Epic → Story → Task split.</p><p><strong>This round｜</strong>A one-off task picks one type and states the problem and completion criteria. A complex request opens a planning Issue first; then an approved spec creates the implementation Issue. New scope gets its own Issue.</p><p><strong>Implementation｜</strong><code>work-item.yml</code> requires a type, two required fields (problem, completion criteria), and has one optional field. <code>work-item-lifecycle.yml</code> assigns the opener. The PR workflow checks the label, branch, and the matching open Issue.</p></div></details></td></tr>
+          <tr><td>p.5</td><td>Version control</td><td><span class="bridge-status adjust">Adjust</span></td><td><details class="bridge-detail drop-down"><summary>A delivery branch is a CI integration boundary, not a pretend environment</summary><div class="bridge-popover"><p><strong>May deck｜</strong>Parallel branches are kept, but no project must have a physical DEV environment.</p><p><strong>This round｜</strong>Standalone work branches from the latest <code>main</code> and returns straight to <code>main</code>. Only a Milestone that needs joint acceptance uses <code>dev/m*</code>. An independent canary uses a temporary <code>dev/i*</code>, and a hotfix also fixes <code>main</code> directly.</p><p><strong>Implementation｜</strong>An ordinary PR runs the checks its risk requires. Milestone/canary delivery and a hotfix run full verification. A sync of the latest main happens only at final delivery or for an explicitly recorded dependency.</p></div></details></td></tr>
+          <tr><td>p.6</td><td>PR and review</td><td><span class="bridge-status adjust">Strengthen</span></td><td><details class="bridge-detail drop-down"><summary>Issue, numbered branch, and PR form one fixed chain</summary><div class="bridge-popover"><p><strong>May deck｜</strong>A PR stays the only entry point into a protected branch. The three-tier review model becomes an explicit <code>solo</code> or <code>peer</code> policy.</p><p><strong>This round｜</strong>An ordinary PR needs its matching-numbered Issue and CI. When available, a clean exact-head Copilot review can satisfy either review policy; otherwise the declared human path applies.</p><p><strong>Implementation｜</strong>Branches use the fixed form <code>type/123-short-slug</code>, and a PR body always carries <code>Closes #123</code>. <code>governance-comment.yml</code> chooses a non-author maintainer or admin from live repository permissions; it stores no reviewer list.</p></div></details></td></tr>
+          <tr><td>p.7</td><td>CI automation pipeline</td><td><span class="bridge-status keep">Keep</span></td><td><details class="bridge-detail drop-down"><summary>Local and CI share one entry point, tiered by risk</summary><div class="bridge-popover"><p><strong>May deck｜</strong>Automatic triggers, tests, formatting, and static-error checks are all kept.</p><p><strong>This round｜</strong>An ordinary Issue PR runs fast. Promotion, hotfix, merge queue, and unknown high-risk paths run full. OSV, Zizmor, and remote governance run on their own scope or schedule.</p><p><strong>Implementation｜</strong>A fixed <code>verify</code> aggregate prevents a stuck Pending from a skipped workflow. The <code>title</code> policy includes delivery sync and promotion-route classification. A candidate's full run is never cancelled; an ordinary PR's new commit cancels its own stale run. When a Ruleset is available, it requires <code>title</code>, <code>verify</code>, and <code>review</code>.</p></div></details></td></tr>
+          <tr><td>p.8</td><td>CD project management</td><td><span class="bridge-status adjust">Adjust</span></td><td><details class="bridge-detail drop-down"><summary>Every release-worthy PR reviews delivery and version together</summary><div class="bridge-popover"><p><strong>May deck｜</strong>The original default was DEV → STAGING → Canary → PROD. This round, a project does not have to copy all four tiers.</p><p><strong>This round｜</strong>Every CSARC-owned release-worthy PR carries its beta or stable version and changelog before merge. No follow-up version PR is created.</p><p><strong>Implementation｜</strong>After merge, the shared publisher creates the checksum, SBOM, artifact, and immutable GitHub Release. Then it closes a successful Milestone. Attestation and consumption-side gates stay optional.</p></div></details></td></tr>
+          <tr><td>p.9</td><td>Observability</td><td><span class="bridge-status defer">Phase 2</span></td><td><details class="bridge-detail"><summary>Monitoring and on-call are only for services actually running live</summary><div class="bridge-popover"><p><strong>May deck｜</strong>Runbooks, logs, metrics, tracing, recovery, and on-call stay a phase-two effort.</p><p><strong>This round｜</strong>Introduced only for continuously running services. The actual cloud, environment, and owner decide the tools; there is no upfront commitment to Datadog or PagerDuty.</p><p><strong>Implementation｜</strong>Test data stays separate as PII-free, creatable, disposable fixtures. Test-data management is not part of live monitoring.</p></div></details></td></tr>
+          <tr><td>p.10</td><td>Copilot → Agent</td><td><span class="bridge-status defer">Phased</span></td><td><details class="bridge-detail"><summary>Controlled AI collaboration first; automatic retry only once mature</summary><div class="bridge-popover"><p><strong>May deck｜</strong>The direction of AI growing from code completion into full tasks is kept. But an engineer never becomes someone who only writes prompts.</p><p><strong>This round｜</strong>In this first phase, an agent researches, proposes a plan, makes the change, verifies it, and opens a PR against a clear work item. Parallel writable tasks each use their own branch and Git worktree. An agent kit provides tooling convenience.</p><p><strong>Implementation｜</strong><code>AGENTS.md</code> and the shared verification commands bound how work happens. <code>actions.json</code> keeps Actions read-only by default and unable to approve a PR, and a Ruleset requires human approval. The worktree manager is not CI/CD and gets no extra secret or merge permission.</p></div></details></td></tr>
+          <tr><td>p.11</td><td>AI first review</td><td><span class="bridge-status adjust">Adjust</span></td><td><details class="bridge-detail"><summary>Deterministic tools decide; AI only adds suggestions</summary><div class="bridge-popover"><p><strong>May deck｜</strong>AI first review is kept. But a reliable formatter, linter, and static check now catch code formatting and common mistakes.</p><p><strong>This round｜</strong>AI review only adds contextual-error notes, test-gap flags, a risk summary, and fix suggestions. It is never proof that something passed.</p><p><strong>Implementation｜</strong>Only CI, peer review, and a named owner can decide to merge. AI holds no approval, merge, or secret-reading permission.</p></div></details></td></tr>
+          <tr><td>p.12</td><td>AI CI/CD log</td><td><span class="bridge-status defer">Phase 2</span></td><td><details class="bridge-detail"><summary>Summarize failures first; automatic recovery only for mature deployments</summary><div class="bridge-popover"><p><strong>May deck｜</strong>AI can summarize a CI failure first. Automatic rollback applies only to a deployment with a real environment and reliable health signals.</p><p><strong>This round｜</strong>A failing PR test blocks the merge, and a new commit fixes it; it is never skipped. If <code>main</code> itself breaks, a recovery PR lands with a tracking work item.</p><p><strong>Implementation｜</strong>Automatic recovery is considered only when health signals, a stop threshold, reproducible recovery, and full logging are all mature.</p></div></details></td></tr>
+          <tr><td>p.13</td><td>AI docs and knowledge base</td><td><span class="bridge-status defer">Phased</span></td><td><details class="bridge-detail"><summary>Maintain in-repo documentation first; hosting and RAG wait</summary><div class="bridge-popover"><p><strong>May deck｜</strong>Docs sync is kept. AI search of docs before answering (RAG) becomes optional.</p><p><strong>This round｜</strong>README, specs, and <code>docs/index.html</code> all travel through PRs with the code. A generated project keeps an updatable template separate from content files that are never overwritten.</p><p><strong>Implementation｜</strong>Local AI reviews documentation consistency for each candidate. PR policy only verifies the four-state result and exact head; there is no extra hosted AI job. Cloudflare hosting and RAG are not connected. RAG waits for an approved source, owner, access policy, citations, and test questions.</p></div></details></td></tr>
+          <tr><td>p.14</td><td>Legacy modernization</td><td><span class="bridge-status remove">Optional</span></td><td><details class="bridge-detail"><summary>Legacy-system rework is a project's own need, not a shared template default</summary><div class="bridge-popover"><p><strong>May deck｜</strong>Mentioned AI help to modernize a legacy system. This round does not add it to the shared template that every project uses.</p><p><strong>This round｜</strong>This is a specific project's own transformation work. First characterize current behavior with tests. Then replace it in small steps through short reviewed PRs, and keep a rollback path.</p><p><strong>Implementation｜</strong>A dedicated template or guide is built only when a real legacy system, its risk, and its benefit exist. An empty tool is never placed in every new project upfront.</p></div></details></td></tr>
         </tbody>
       </table>
 
@@ -939,13 +939,13 @@ GitHub plan, repository visibility, organization policy, and token identity all 
 {{< /slide >}}
 
 {{< slide key="rollout" track="rollout" audience="archive" eyebrow="Phased rollout" title="Phased rollout, verifiable and stoppable at every step" subtitle="Three tiers: basic capability ships today; future and optional capability states its own trigger condition." class="legacy-slide review-notes-slide" legacy="true" >}}
-<aside class="selection-note"><strong>Current state｜2026-09-03</strong><span>The technical view below keeps the original three-tier rollout judgment for audit; each tier's actual state is authoritative in <code>profiles/catalog.yaml</code> and its verification scripts, not repeated here.</span></aside>
+<aside class="selection-note"><strong>Current state｜2026-09-03</strong><span>The technical view below keeps the original three-tier rollout judgment for audit. <code>profiles/catalog.yaml</code> and its verification scripts are authoritative for each tier's actual state; this page does not repeat it.</span></aside>
 {{< legacy >}}
       <header>
         <h2>Phased rollout,<span class="accent"> verifiable and stoppable at every step</span></h2>
-        <p class="subtitle"><strong>Three tiers｜</strong>basic capability already ships with the template; future and optional capability states its own trigger condition instead of an empty placeholder file pretending to be done.</p>
+        <p class="subtitle"><strong>Three tiers｜</strong>basic capability already ships with the template. Future and optional capability states its own trigger condition; no empty placeholder file pretends to be done.</p>
       </header>
-      <p class="context-line"><strong>Problem and goal｜</strong>adopting a template, CI, deployment, monitoring, and AI all at once makes it hard to tell where something broke; phasing gives every step its own completion condition.</p>
+      <p class="context-line"><strong>Problem and goal｜</strong>if you adopt a template, CI, deployment, monitoring, and AI all at once, it is hard to tell where something broke. Phasing gives every step its own completion condition.</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">Other common approach</span><h3>Turn everything on at once, by hype or by date</h3><ul><li><strong>Flip a single switch:</strong> a mistake spreads to every project at once</li><li><strong>Unlock by a fixed date:</strong> a date passing does not mean the conditions for use are met</li><li><strong>Ship every language together:</strong> an unverified profile is only an empty promise</li></ul></article>
         <article class="decision-step recommended"><span class="step-label">Our choice</span><h3>Three tiers are rollout conditions, not dates</h3><p><strong>Basic rollout:</strong> CI/CD-only, Python-only, TypeScript-only, and mixed profiles ship today, along with Issue/spec, PR/CI, local verification, OSV, dependency policy, and the repo site. Free plans detect their own capability and apply what is available; private repositories never claim Ruleset enforcement they cannot get.<br><strong>Verified in production:</strong> release handoff, traceable artifacts, and Release attestation consumer verification are live, together with the first real CI-only downstream repository's adoption and Copier update; shared governance and CI-only composition are beta.<br><strong>Still trialing:</strong> Python, TypeScript, and mixed composition each still need one more real consuming repository before promotion to beta.<br><strong>Future or optional:</strong> a central catalog/governance platform, multi-repository support, Go/Rust, site hosting/login, deployment, monitoring, RAG, and autonomous agents.</p></article>
@@ -993,7 +993,7 @@ GitHub plan, repository visibility, organization policy, and token identity all 
 | Backstage, Confluence, or another internal portal | Can govern several internal documents together | One site does not justify an IT/platform-operated service today |
 
 {{< disclosure key="access-control-limit" title="What exists and what it cannot do" >}}
-`docs/index.html` contains `noindex,nofollow`, while `docs/robots.txt` asks crawlers to stay away, but the repository and GitHub Pages remain publicly readable. Neither mechanism authenticates a reader; anyone can read, download, or forward the content. Issue #79 preserves the interim record, while Issue #425 owns the host, identity-provider, data-policy, and audit-policy planning. Before returning the repository to private, inventory the Issues, pull requests, and commits created while public; handle any sensitive-information discovery as a separate security incident rather than assuming a visibility change erases exposure.
+`docs/index.html` contains `noindex,nofollow`, and `docs/robots.txt` asks crawlers to stay away. But the repository and GitHub Pages remain publicly readable. Neither mechanism authenticates a reader; anyone can read, download, or forward the content. Issue #79 preserves the interim record. Issue #425 owns the host, identity-provider, data-policy, and audit-policy planning. Before you return the repository to private, inventory the Issues, pull requests, and commits created while public. Treat any sensitive-information discovery as a separate security incident; a visibility change does not erase exposure.
 {{< /disclosure >}}
 
 <aside class="config-guidance"><strong>Where this is configured</strong><ul><li><strong>Current state:</strong> <code>.csarc/config.yml</code> records <code>project_visibility: public</code>; <code>policies/pages.json</code> continues publishing from <code>main:/docs</code></li><li><strong>Indexing preference:</strong> <code>&lt;meta name="robots"&gt;</code> in <code>docs/index.html</code> plus <code>docs/robots.txt</code>; neither provides access control</li><li><strong>Decision record:</strong> <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">Issue #79</a> (interim record) / <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/425" target="_blank" rel="noreferrer">Issue #425</a> (current hosting/access-control planning)</li></ul></aside>
@@ -1005,19 +1005,19 @@ GitHub plan, repository visibility, organization policy, and token identity all 
       <header>
         <span class="selection-sequence">Decision appendix</span>
         <h2>Key decisions｜<span class="accent">Rules, reasons, and deliberate omissions</span></h2>
-        <p class="subtitle">The original supplementary document has been folded into this page; detail follows the executable configuration, updated through an Issue/PR when conditions change.</p>
+        <p class="subtitle">This page now contains the original supplementary document. The executable configuration decides the detail; an Issue/PR updates it when conditions change.</p>
       </header>
       <table class="decision-register" aria-label="Template core decision register">
         <thead><tr><th>Review question</th><th>Current decision and reason</th></tr></thead>
         <tbody>
-          <tr><td>Plan and <code>main</code> protection</td><td>Free private applies baseline settings and preserves Ruleset policy, but the public API cannot create a Ruleset, so <code>main</code> is still not enforced; upgrading to Team plus a CODEOWNERS team, or an approved switch to public, is what turns approval and required checks into a real merge gate.</td></tr>
-          <tr><td>Work scope and ownership</td><td>Issue-first; a title is a 12-80 character English summary of the outcome, the body may be written in any language; the opener becomes the default owner. New requirements beyond the acceptance criteria get a separate Issue.</td></tr>
-          <tr><td>Template update boundary</td><td><code>template/</code> is the delivery source, and root lets the template govern itself; Copier updates policy while protecting product code and specs, and paired verification scripts prevent drift.</td></tr>
-          <tr><td>Language and code quality</td><td>Python, Rust, TypeScript, and Go are independent modules, selectable in any combination; Python uses uv, Ruff, ty, and pytest, Rust uses Rust 1.98, rustfmt, Clippy, and Cargo, TypeScript uses Node 24, pnpm, Biome, and Vitest, and Go uses Go 1.27, gofmt, go vet, go test, and go build.</td></tr>
-          <tr><td>CI, versioning, and delivery</td><td>Local and CI share <code>scripts/verify</code>; PR-policy regression cases prove a wrong route is rejected. Day-to-day work runs fast, promotion runs full, and Release Please maintains one SemVer only at verified delivery boundaries.</td></tr>
-          <tr><td>Dependencies and supply chain</td><td>A three-day observation window watches for an unknown malicious release; OSV checks disclosed vulnerabilities; hashes verify content consistency; an SBOM lists an artifact's packages; and the resolver separately proves the version range is installable — none of the five substitutes for another.</td></tr>
-          <tr><td>AI, documentation, and future capability</td><td><code>AGENTS.md</code> is the AI rulebook; the README and repo site serve people. Hugo/hosted login, deployment, monitoring, and RAG all need an owner, a real use case, and verification before adoption.</td></tr>
-          <tr><td>Verification and test resources</td><td>"Done" requires files and tests; verification only uses a local scratch project or this repository's own Issues, branches, PRs, and Actions — never a separate GitHub repository created only for testing.</td></tr>
+          <tr><td>Plan and <code>main</code> protection</td><td>Free private applies baseline settings and preserves Ruleset policy. But the public API cannot create a Ruleset, so <code>main</code> is still not enforced. An upgrade to Team plus a CODEOWNERS team, or an approved switch to public, turns approval and required checks into a real merge gate.</td></tr>
+          <tr><td>Work scope and ownership</td><td>Issue-first. A title is a 12-80 character English summary of the outcome; the body can use any language. The opener becomes the default owner. New requirements beyond the acceptance criteria get a separate Issue.</td></tr>
+          <tr><td>Template update boundary</td><td><code>template/</code> is the delivery source, and root lets the template govern itself. Copier updates policy and protects product code and specs. Paired verification scripts prevent drift.</td></tr>
+          <tr><td>Language and code quality</td><td>Python, Rust, TypeScript, and Go are independent modules that you can select in any combination. Python uses uv, Ruff, ty, and pytest. Rust uses Rust 1.98, rustfmt, Clippy, and Cargo. TypeScript uses Node 24, pnpm, Biome, and Vitest. Go uses Go 1.27, gofmt, go vet, go test, and go build.</td></tr>
+          <tr><td>CI, versioning, and delivery</td><td>Local and CI share <code>scripts/verify</code>; PR-policy regression cases prove that a wrong route is rejected. Daily work runs fast, promotion runs full, and Release Please maintains one SemVer only at verified delivery boundaries.</td></tr>
+          <tr><td>Dependencies and supply chain</td><td>A three-day observation window watches for an unknown malicious release. OSV checks disclosed vulnerabilities. Hashes verify content consistency. An SBOM lists an artifact's packages. The resolver separately proves that the version range is installable. None of the five replaces another.</td></tr>
+          <tr><td>AI, documentation, and future capability</td><td><code>AGENTS.md</code> is the AI rulebook; the README and repo site serve people. Hugo/hosted login, deployment, monitoring, and RAG each need an owner, a real use case, and verification before adoption.</td></tr>
+          <tr><td>Verification and test resources</td><td>"Done" requires files and tests. Verification uses only a local scratch project or this repository's own Issues, branches, PRs, and Actions. It never uses a separate GitHub repository created only for testing.</td></tr>
         </tbody>
       </table>
 {{< /legacy >}}
@@ -1035,10 +1035,10 @@ GitHub plan, repository visibility, organization policy, and token identity all 
 | Verification resources | Use local temporary projects or this repository; never create a GitHub repository only for testing |
 
 {{< disclosure key="principles-transcript" title="How durable decisions are recorded" >}}
-Agents do not save raw conversations. Only a user-confirmed durable architecture, security, compatibility, or platform constraint is summarized into an Issue and then written to `docs/adr/` or `docs/decisions/` through a scoped PR. Executable configuration remains authoritative, and changed conditions are updated through another Issue and PR.
+Agents do not save raw conversations. An agent summarizes only a user-confirmed durable architecture, security, compatibility, or platform constraint into an Issue. A scoped PR then writes it to `docs/adr/` or `docs/decisions/`. Executable configuration stays authoritative. Another Issue and PR record changed conditions.
 {{< /disclosure >}}
 
-<p class="review-note-footer"><strong>Verification commitment:</strong> <code>./scripts/verify-template.sh</code> actually runs a new project, an existing-project adoption, and the same adopted repository's Copier update plus its full post-update verification; this root-only script is never shipped downstream.</p>
+<p class="review-note-footer"><strong>Verification commitment:</strong> <code>./scripts/verify-template.sh</code> runs a new project, an existing-project adoption, and the same adopted repository's Copier update with its full post-update verification. This root-only script is never shipped downstream.</p>
 {{< /basic >}}
 {{< /slide >}}
 
@@ -1047,20 +1047,20 @@ Agents do not save raw conversations. Only a user-confirmed durable architecture
       <header>
         <span class="selection-sequence">Decision appendix</span>
         <h2>External benchmark and live evidence｜<span class="accent">A solid foundation, not a complete platform</span></h2>
-        <p class="subtitle">Conclusion: new-project creation, Copier updates, and local/synthetic verification are genuinely solved; OSV, Release, and the first real CI-only consuming repository all have live, successful evidence. Governance remains bound by the GitHub plan, and language modules are accepted through a reproducible lifecycle and native tooling.</p>
+        <p class="subtitle">Conclusion: new-project creation, Copier updates, and local/synthetic verification are solved. OSV, Release, and the first real CI-only consuming repository all have live, successful evidence. The GitHub plan still limits governance. Language modules are accepted through a reproducible lifecycle and native tooling.</p>
       </header>
       <table class="decision-register audit-register" aria-label="External benchmark and live-evidence comparison">
         <thead><tr><th>External benchmark / live evidence</th><th>Assessment</th><th>Research choice and current boundary</th></tr></thead>
         <tbody>
-          <tr><td><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Copier</a> vs <a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen</a></td><td><span class="tier-chip best">Good fit</span></td><td>The requirement is "editable after generation, still updatable later"; Copier's smart update fits better than projen, which has code continuously own the generated files — keeping the current choice.</td></tr>
-          <tr><td><a href="https://engineering.atspotify.com/2020/08/how-we-use-golden-paths-to-solve-fragmentation-in-our-software-ecosystem" target="_blank" rel="noreferrer">Spotify Golden Path</a> + <a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Backstage Catalog</a></td><td><span class="tier-chip priority">Only one layer</span></td><td>This is currently a single-repository golden-path template, not a platform with a catalog, ownership, maturity, and fleet migration; adopt once cross-team service discovery becomes a repeated pain point. → <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/105" target="_blank" rel="noreferrer">#105</a></td></tr>
-          <tr><td><a href="https://github.com/ossf/allstar" target="_blank" rel="noreferrer">Allstar</a> / <a href="https://github.com/github-community-projects/safe-settings" target="_blank" rel="noreferrer">Safe Settings</a></td><td><span class="tier-chip best">Sufficient today</span></td><td>Scheduled drift checking is already complete via <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/75" target="_blank" rel="noreferrer">#75</a>; switch to a central policy service once the fleet grows and the same class of drift keeps recurring.</td></tr>
-          <tr><td><a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets" target="_blank" rel="noreferrer">GitHub Rulesets</a> / Free private</td><td><span class="tier-chip priority">Partially solved</span></td><td>Platform capability can be detected and flagged, but Free private cannot enforce a Ruleset; <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/87" target="_blank" rel="noreferrer">#87</a> already records the unprotected state in policy, and the plan limitation remains explicit.</td></tr>
+          <tr><td><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Copier</a> vs <a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen</a></td><td><span class="tier-chip best">Good fit</span></td><td>The requirement is "editable after generation, still updatable later." Copier's smart update fits better than projen, where code continuously owns the generated files. The current choice stays.</td></tr>
+          <tr><td><a href="https://engineering.atspotify.com/2020/08/how-we-use-golden-paths-to-solve-fragmentation-in-our-software-ecosystem" target="_blank" rel="noreferrer">Spotify Golden Path</a> + <a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Backstage Catalog</a></td><td><span class="tier-chip priority">Only one layer</span></td><td>This is a single-repository golden-path template, not a platform with a catalog, ownership, maturity, and fleet migration. Adopt one when cross-team service discovery becomes a repeated pain point. → <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/105" target="_blank" rel="noreferrer">#105</a></td></tr>
+          <tr><td><a href="https://github.com/ossf/allstar" target="_blank" rel="noreferrer">Allstar</a> / <a href="https://github.com/github-community-projects/safe-settings" target="_blank" rel="noreferrer">Safe Settings</a></td><td><span class="tier-chip best">Sufficient today</span></td><td>Scheduled drift checking is already complete via <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/75" target="_blank" rel="noreferrer">#75</a>. Switch to a central policy service when the fleet grows and the same class of drift keeps recurring.</td></tr>
+          <tr><td><a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets" target="_blank" rel="noreferrer">GitHub Rulesets</a> / Free private</td><td><span class="tier-chip priority">Partially solved</span></td><td>The template can detect and flag platform capability, but Free private cannot enforce a Ruleset; <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/87" target="_blank" rel="noreferrer">#87</a> already records the unprotected state in policy, and the plan limitation remains explicit.</td></tr>
           <tr><td>Historical Release Please runs + <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer"><code>GITHUB_TOKEN</code> trigger rules</a></td><td><span class="tier-chip optional">Archived evidence</span></td><td><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32645380139" target="_blank" rel="noreferrer">An earlier run</a> proved organization policy could block an Actions-authored version PR. #925 removes that dependency: the delivery PR now materializes the candidate before merge, and the post-merge workflow only publishes and verifies it.</td></tr>
-          <tr><td>OSV reusable workflow + <a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows" target="_blank" rel="noreferrer">permission propagation</a></td><td><span class="tier-chip best">Corrected</span></td><td>A caller's permissions can only stay the same or shrink, never top up a called workflow; after <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92" target="_blank" rel="noreferrer">PR #92</a> restored the required permission, the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32646097257" target="_blank" rel="noreferrer">live run on main</a> succeeded.</td></tr>
-          <tr><td><a href="https://docs.github.com/en/actions/concepts/security/artifact-attestations" target="_blank" rel="noreferrer">Artifact Attestations</a> + <a href="https://slsa.dev/spec/v1.2/build-track-basics" target="_blank" rel="noreferrer">SLSA Build</a></td><td><span class="tier-chip partial">Product extension</span></td><td>The template's current shared baseline is an immutable GitHub Release, checksums, an SBOM, and consumer-side verification; a product that needs a registry or artifact attestation should build a real publisher, OIDC trust, and verification of its own rather than get a setting toggle with no one actually running it.</td></tr>
-          <tr><td><a href="https://github.com/ossf/scorecard" target="_blank" rel="noreferrer">OpenSSF Scorecard</a> security baseline</td><td><span class="tier-chip optional">Plan-aware</span></td><td>Pinned Actions, OSV, <code>SECURITY.md</code>, full Git history, and working-tree secret scanning already exist; a public repository enables CodeQL by default, while private/internal opts in explicitly once GitHub Code Security is licensed.</td></tr>
-          <tr><td>Real consuming repository and adoption evidence</td><td><span class="tier-chip best">Shared lifecycle proven</span></td><td>An existing private, CI-only consuming repository completed v0.2.4 adoption, kept its product customization, ran a v0.3.1 Copier update, and passed two full live checks across two PRs and one Issue; Python, Rust, TypeScript, and Go each carry their own executable beta acceptance evidence. → <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a> / <a href="pilot-adoption.md">evidence</a></td></tr>
+          <tr><td>OSV reusable workflow + <a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows" target="_blank" rel="noreferrer">permission propagation</a></td><td><span class="tier-chip best">Corrected</span></td><td>A caller's permissions can only stay the same or shrink; they never add to a called workflow. After <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92" target="_blank" rel="noreferrer">PR #92</a> restored the required permission, the <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32646097257" target="_blank" rel="noreferrer">live run on main</a> succeeded.</td></tr>
+          <tr><td><a href="https://docs.github.com/en/actions/concepts/security/artifact-attestations" target="_blank" rel="noreferrer">Artifact Attestations</a> + <a href="https://slsa.dev/spec/v1.2/build-track-basics" target="_blank" rel="noreferrer">SLSA Build</a></td><td><span class="tier-chip partial">Product extension</span></td><td>The template's current shared baseline is an immutable GitHub Release, checksums, an SBOM, and consumer-side verification. A product that needs a registry or artifact attestation builds its own real publisher, OIDC trust, and verification. A setting toggle that nobody runs is not enough.</td></tr>
+          <tr><td><a href="https://github.com/ossf/scorecard" target="_blank" rel="noreferrer">OpenSSF Scorecard</a> security baseline</td><td><span class="tier-chip optional">Plan-aware</span></td><td>Pinned Actions, OSV, <code>SECURITY.md</code>, full Git history, and working-tree secret scanning already exist. A public repository enables CodeQL by default; private/internal opts in explicitly when GitHub Code Security is licensed.</td></tr>
+          <tr><td>Real consuming repository and adoption evidence</td><td><span class="tier-chip best">Shared lifecycle proven</span></td><td>An existing private, CI-only consuming repository completed v0.2.4 adoption and kept its product customization. It ran a v0.3.1 Copier update and passed two full live checks across two PRs and one Issue. Python, Rust, TypeScript, and Go each carry their own executable beta acceptance evidence. → <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a> / <a href="pilot-adoption.md">evidence</a></td></tr>
         </tbody>
       </table>
 {{< /legacy >}}
@@ -1079,10 +1079,10 @@ Agents do not save raw conversations. Only a user-confirmed durable architecture
 | Real consuming repository | Shared lifecycle proven | An existing private, CI-only consuming repository adopted v0.2.4 and updated to v0.3.1; language modules carry separate executable beta evidence |
 
 {{< disclosure key="benchmark-gap" title="Current gaps" >}}
-There is no cross-repository catalog, comprehensive hosted governance, registry publisher, or generic deployment platform. Historical live-integration runs remain audit evidence only; active workflow claims must come from files under `.github/workflows/` and current runs. Production repositories will add operational evidence without serving as disposable language test fixtures.
+No cross-repository catalog, comprehensive hosted governance, registry publisher, or generic deployment platform exists. Historical live-integration runs are only audit evidence. Active workflow claims must come from files under `.github/workflows/` and current runs. Production repositories will add operational evidence, but they are not disposable language test fixtures.
 {{< /disclosure >}}
 
-<p class="review-note-footer"><strong>Simplicity assessment:</strong> Copier plus GitHub Actions plus standard tooling stays simple enough; the real CI-only pilot already adds live evidence for the shared lifecycle. The root-only <code>Live integration smoke</code> keeps verifying OSV, Release Please, release handoff, and governance drift; language modules keep their beta status through their own reproducible tests.</p>
+<p class="review-note-footer"><strong>Simplicity assessment:</strong> Copier plus GitHub Actions plus standard tooling stays simple enough. The real CI-only pilot already adds live evidence for the shared lifecycle. The root-only <code>Live integration smoke</code> keeps verifying OSV, Release Please, release handoff, and governance drift. Language modules keep their beta status through their own reproducible tests.</p>
 {{< /basic >}}
 {{< /slide >}}
 
@@ -1091,18 +1091,18 @@ There is no cross-repository catalog, comprehensive hosted governance, registry 
       <header>
         <span class="selection-sequence">Decision appendix</span>
         <h2>Fleet governance inventory｜<span class="accent">Audit locally, never published</span></h2>
-        <p class="subtitle">This template repository and repo-site are publicly readable; the real fleet may include private repositories, so its list is never written into site content or git history. A maintainer instead uses <code>scripts/audit-fleet-adoption</code> for a live, on-demand, terminal-only query.</p>
+        <p class="subtitle">This template repository and repo-site are publicly readable. The real fleet can include private repositories, so its list is never written into site content or git history. Instead, a maintainer uses <code>scripts/audit-fleet-adoption</code> for a live, on-demand, terminal-only query.</p>
       </header>
       <table class="decision-register audit-register" aria-label="Fleet inventory evaluation method">
         <thead><tr><th>Evaluation input</th><th>How it is obtained</th></tr></thead>
         <tbody>
           <tr><td>Repository list</td><td><code>gh repo list</code> against the real organization; never written into site content or git history</td></tr>
           <tr><td>CODEOWNERS coverage</td><td>Presence of <code>.github/CODEOWNERS</code> checked per repository via <code>gh api</code></td></tr>
-          <tr><td>Copier adoption state</td><td>Presence of <code>.csarc/config.yml</code> checked per repository via <code>gh api</code>; the source template repository is excluded since dogfooding Copier on itself also leaves this file, and it is never counted as a consuming repository</td></tr>
+          <tr><td>Copier adoption state</td><td>Presence of <code>.csarc/config.yml</code> checked per repository via <code>gh api</code>. The source template repository is excluded, because dogfooding Copier on itself also leaves this file; it is never counted as a consuming repository</td></tr>
           <tr><td>Threshold comparison</td><td>Computed against the numeric triggers already defined on the <code>fleet-governance-thresholds</code> page</td></tr>
         </tbody>
       </table>
-      <aside class="selection-note"><strong>How to run it</strong><span>A maintainer reproduces this evaluation locally with <code>./scripts/audit-fleet-adoption</code>: the script queries the organization live, computes whether the catalog and policy-enforcement thresholds are met, and prints only to standard output — it writes no file, creates no cache or artifact, and uploads nothing anywhere, so the real repository list never lands in this site or its history.</span></aside>
+      <aside class="selection-note"><strong>How to run it</strong><span>A maintainer reproduces this evaluation locally with <code>./scripts/audit-fleet-adoption</code>. The script queries the organization live, computes whether the catalog and policy-enforcement thresholds are met, and prints only to standard output. It writes no file, creates no cache or artifact, and uploads nothing, so the real repository list never lands in this site or its history.</span></aside>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -1113,10 +1113,10 @@ There is no cross-repository catalog, comprehensive hosted governance, registry 
 | Copier adoption | Presence of `.csarc/config.yml` per repository, read live via `gh api`, excluding template-source repositories that also carry it from dogfooding Copier on themselves |
 | Threshold comparison | Computed against the numeric triggers on `fleet-governance-thresholds` |
 
-Run `./scripts/audit-fleet-adoption` locally as a maintainer to reproduce this evaluation. The script queries the organization live, computes whether the fleet currently meets the catalog and policy-enforcement thresholds, and prints the result to standard output only. It never writes a file, never creates a cache or artifact, and never uploads anything anywhere, so the real repository list never lands in this site or its history.
+To reproduce this evaluation, run `./scripts/audit-fleet-adoption` locally as a maintainer. The script queries the organization live, computes whether the fleet meets the catalog and policy-enforcement thresholds, and prints the result only to standard output. It never writes a file, creates a cache or artifact, or uploads anything, so the real repository list never lands in this site or its history.
 
 {{< disclosure key="fleet-inventory-source" title="Inventory evidence and interpretation" >}}
-The script reads GitHub repositories, CODEOWNERS presence, and Copier adoption markers directly from the API; a repository with no completed scheduled drift sample is never counted as zero drift. Re-run after each new pilot and during quarterly review — a printed result reflects that moment only, and no snapshot is retained afterward.
+The script reads GitHub repositories, CODEOWNERS presence, and Copier adoption markers directly from the API. A repository with no completed scheduled drift sample is never counted as zero drift. Run it again after each new pilot and during quarterly review. A printed result shows only that moment, and no snapshot is kept.
 {{< /disclosure >}}
 
 <p class="bridge-reference reference">Inventory method: GitHub repositories, CODEOWNERS, and Copier adoption markers, queried live via `gh api` / `gh repo list`.</p>
@@ -1128,13 +1128,13 @@ The script reads GitHub repositories, CODEOWNERS presence, and Copier adoption m
       <header>
         <span class="selection-sequence">Decision appendix</span>
         <h2>Fleet governance thresholds｜<span class="accent">Measure the problem before adding a platform</span></h2>
-        <p class="subtitle">A catalog handles service visibility and ownership; policy enforcement handles cross-repository setting drift. The two problems are counted separately and get separate tools.</p>
+        <p class="subtitle">A catalog solves service visibility and ownership; policy enforcement solves cross-repository setting drift. Count the two problems separately and give them separate tools.</p>
       </header>
       <div class="decision-strip">
         <article class="decision-step recommended">
           <span class="step-label">Catalog threshold</span>
           <h3>Solves "who owns it, where does it run"</h3>
-          <p>Start a Backstage proof of concept once either condition is met: <strong>10 active consuming repositories</strong>; or at least 3 consuming repositories with <strong>2 Issues in 90 days</strong> recording an owner/service lookup that took over <strong>30 minutes</strong>. Backstage owns catalog, ownership, system relationships, and maturity visibility — it is never used to force a repository setting.</p>
+          <p>Start a Backstage proof of concept once either condition is met: <strong>10 active consuming repositories</strong>; or at least 3 consuming repositories with <strong>2 Issues in 90 days</strong> recording an owner/service lookup that took over <strong>30 minutes</strong>. Backstage owns catalog, ownership, system relationships, and maturity visibility. Never use it to force a repository setting.</p>
         </article>
         <article class="decision-step">
           <span class="step-label">Policy threshold</span>
@@ -1142,7 +1142,7 @@ The script reads GitHub repositories, CODEOWNERS presence, and Copier adoption m
           <p>With at least 5 consuming repositories, evaluate central enforcement once either condition is met: the same class of drift appears in <strong>2 or more repositories</strong> within 30 days; over <strong>20%</strong> of update PRs across two consecutive template releases stay open past <strong>5 workdays</strong>; or manual <code>apply</code>/repair work exceeds <strong>2 hours a month</strong>. Allstar suits continuous checking and enforcing security policy; Safe Settings suits pushing repository settings from a hierarchical config. Neither substitutes for a catalog.</p>
         </article>
       </div>
-      <aside class="selection-note"><strong>Current decision</strong><span>The consuming repositories meet neither threshold, and there is no usable drift-frequency sample. Keep Copier, JSON policy, the GitHub API, and daily drift checks; do not pre-deploy Backstage, Allstar, or Safe Settings.</span></aside>
+      <aside class="selection-note"><strong>Current decision</strong><span>The consuming repositories meet neither threshold, and no usable drift-frequency sample exists. Keep Copier, JSON policy, the GitHub API, and daily drift checks. Do not pre-deploy Backstage, Allstar, or Safe Settings.</span></aside>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -1152,10 +1152,10 @@ The script reads GitHub repositories, CODEOWNERS presence, and Copier adoption m
 | Central policy enforcement | At least five consuming repositories plus the same drift in 2+ repositories within 30 days; or 20%+ update PRs older than five workdays for two releases; or more than two manual repair hours per month |
 
 {{< disclosure key="fleet-thresholds-yagni" title="Conditions still required after a threshold triggers" >}}
-Open an evaluation Issue that names a platform owner, cost ceiling, trial scope, and exit criteria. Backstage handles catalog, ownership, and system relationships; Allstar or Safe Settings handles continuing policy checks and settings delivery. They do not substitute for each other. Until a threshold is met, keep Copier, JSON policy, GitHub API checks, and daily drift detection without prebuilding an external service.
+Open an evaluation Issue that names a platform owner, cost ceiling, trial scope, and exit criteria. Backstage covers catalog, ownership, and system relationships. Allstar or Safe Settings covers continuing policy checks and settings delivery. Neither replaces the other. Until a threshold is met, keep Copier, JSON policy, GitHub API checks, and daily drift detection. Do not prebuild an external service.
 {{< /disclosure >}}
 
-<aside class="config-guidance"><strong>Reevaluation</strong><ul><li>Each quarter and after every new pilot, use the GitHub API to count answers/profiles, CODEOWNERS, open update PRs, and governance-drift runs.</li><li>Drift frequency only counts a consuming repository with a completed scheduled sample; a repository with no run is never counted as zero drift.</li><li>Once triggered, open a separate Issue naming a platform owner, cost ceiling, trial scope, and exit criteria; this decision does not authorize building an external service.</li></ul></aside>
+<aside class="config-guidance"><strong>Reevaluation</strong><ul><li>Each quarter and after every new pilot, use the GitHub API to count answers/profiles, CODEOWNERS, open update PRs, and governance-drift runs.</li><li>Drift frequency counts only a consuming repository with a completed scheduled sample. A repository with no run is never counted as zero drift.</li><li>When triggered, open a separate Issue that names a platform owner, cost ceiling, trial scope, and exit criteria. This decision does not authorize building an external service.</li></ul></aside>
 <p class="bridge-reference reference">Ref. <a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Backstage Software Catalog</a>; <a href="https://github.com/ossf/allstar" target="_blank" rel="noreferrer">OpenSSF Allstar</a>; <a href="https://github.com/github-community-projects/safe-settings" target="_blank" rel="noreferrer">GitHub Safe Settings</a>. Accessed August 24, 2026.</p>
 {{< /basic >}}
 {{< /slide >}}
@@ -1165,7 +1165,7 @@ Open an evaluation Issue that names a platform owner, cost ceiling, trial scope,
       <header>
         <span class="selection-sequence">Decision appendix</span>
         <h2>Specification format decision｜<span class="accent">Default to a Task; create a Feature only for an explicit story</span></h2>
-        <p class="subtitle">Keeps the existing lightweight front matter; <code>tracking: story</code> is an explicit opt-in, never an automatic promotion just because a spec exists or work has grown.</p>
+        <p class="subtitle">Keeps the existing lightweight front matter. <code>tracking: story</code> is an explicit opt-in. A spec or growing work never promotes it automatically.</p>
       </header>
       <div class="decision-strip">
         <article class="decision-step">
@@ -1174,17 +1174,17 @@ Open an evaluation Issue that names a platform owner, cost ceiling, trial scope,
           <ul>
             <li><strong>Lifecycle:</strong> four slash commands, <code>/specify → /plan → /tasks → /implement</code>, progressively produce spec.md/plan.md/tasks.md, designed for a coding agent to execute step by step.</li>
             <li><strong>Dependency:</strong> requires installing the <code>specify</code> CLI and pairing it with a supported AI tool (Claude Code, Copilot, etc.).</li>
-            <li><strong>Sync:</strong> has no built-in idempotent "one spec maps to one GitHub Issue" sync mechanism; a project must build its own.</li>
+            <li><strong>Sync:</strong> has no built-in idempotent "one spec maps to one GitHub Issue" sync mechanism. A project must build its own.</li>
             <li><strong>Project state:</strong> <a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">github/spec-kit</a> | MIT | public, not archived, actively maintained.</li>
           </ul>
         </article>
         <article class="decision-step recommended">
           <span class="step-label">Our decision</span>
           <h3>Keep one format, using the native Issue hierarchy</h3>
-          <p><strong>Current:</strong> <code>docs/specs/*.md</code> records state in front matter; by default a <code>csarc-spec-id</code> marker syncs a Task Issue, and explicitly setting <code>tracking: story</code> syncs a Feature parent instead — both are rerunnable and never auto-split work. A Milestone is a separate delivery/release bucket with its own due date.</p>
-          <p><strong>Migration cost:</strong> switching to Spec Kit would mean rewriting <code>spec_to_issue.py</code>'s parsing and sync logic, converting every existing spec, updating verification assertions, and separately designing an equivalent Issue-sync mechanism; supporting both formats at once means maintaining two systems side by side and adds cognitive load — this Issue does neither.</p>
-          <p><strong>Reason:</strong> the current volume of specs is small, the existing pipeline is stable and already covered by regression tests, and Spec Kit's CLI/agent dependency has no clear payoff yet for one small template repository.</p>
-          <p><strong>Reevaluation condition:</strong> revisit migration or dual-format support once native sub-issues can no longer express how work actually splits and the team is willing to maintain an additional CLI/agent workflow — consistent with the existing position on the "Step 1: define the work" page.</p>
+          <p><strong>Current:</strong> <code>docs/specs/*.md</code> records state in front matter. By default, a <code>csarc-spec-id</code> marker syncs a Task Issue. An explicit <code>tracking: story</code> syncs a Feature parent instead. Both are rerunnable and never auto-split work. A Milestone is a separate delivery/release bucket with its own due date.</p>
+          <p><strong>Migration cost:</strong> a switch to Spec Kit means rewriting <code>spec_to_issue.py</code>'s parsing and sync logic and converting every existing spec. It also means updating verification assertions and separately designing an equivalent Issue-sync mechanism. Support for both formats means maintaining two systems side by side and adds cognitive load. This Issue does neither.</p>
+          <p><strong>Reason:</strong> the current volume of specs is small. The existing pipeline is stable, and regression tests already cover it. Spec Kit's CLI/agent dependency has no clear payoff yet for one small template repository.</p>
+          <p><strong>Reevaluation condition:</strong> revisit migration or dual-format support when native sub-issues can no longer express how work splits, and the team accepts an additional CLI/agent workflow. This matches the existing position on the "Step 1: define the work" page.</p>
         </article>
       </div>
 {{< /legacy >}}
@@ -1196,7 +1196,7 @@ Open an evaluation Issue that names a platform owner, cost ceiling, trial scope,
 | GitHub Spec Kit | `/specify → /plan → /tasks → /implement`; requires another CLI and supported AI tool, with no built-in one-spec-to-one-Issue synchronization |
 
 {{< disclosure key="spec-format-cost" title="Why migration is deferred and what would trigger it" >}}
-Adopting Spec Kit requires rewriting `scripts/spec_to_issue.py`, converting existing specs, updating verification assertions, and designing an equivalent Issue sync. Supporting both formats adds cognitive and maintenance cost. Reevaluate when approved specifications regularly need reliable AI decomposition into several work items and the team accepts an additional CLI/agent workflow. Issue #77 closed with this decision recorded; open a new Issue if the reevaluation conditions above are met.
+Adopting Spec Kit requires rewriting `scripts/spec_to_issue.py`, converting existing specs, updating verification assertions, and designing an equivalent Issue sync. Support for both formats adds cognitive and maintenance cost. Reevaluate when approved specifications regularly need reliable AI decomposition into several work items and the team accepts an additional CLI/agent workflow. Issue #77 closed with this decision recorded. If the reevaluation conditions above are met, open a new Issue.
 {{< /disclosure >}}
 
 <aside class="config-guidance"><strong>Where this is configured</strong><ul><li><strong>Current spec format and verification:</strong> <code>docs/specs/*.md</code> + <code>scripts/spec_to_issue.py</code></li><li><strong>Decision record:</strong> <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/77" target="_blank" rel="noreferrer">Issue #77</a> (closed, decided to keep the current format)</li></ul></aside>
