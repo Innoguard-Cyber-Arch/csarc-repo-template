@@ -226,6 +226,18 @@ def test_checker_messages_follow_the_patterns() -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_root_defaults_cover_the_cli(tmp_path: Path) -> None:
+    """#1221 AC6: the root check also reads `src/csarc_cli` messages."""
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "verify-template.sh").write_text("", "utf-8")
+    cli = tmp_path / "src" / "csarc_cli"
+    cli.mkdir(parents=True)
+    (cli / "tool.py").write_text('raise CliError("bad")\n', "utf-8")
+    result = run(tmp_path, "--all")
+    assert result.returncode == 1
+    assert "src/csarc_cli/tool.py:1:" in result.stderr
+
+
 @pytest.mark.parametrize(
     "entry",
     ["scripts/verify-fast", "scripts/verify-stage-repository-contracts"],
@@ -238,16 +250,13 @@ def test_root_verification_runs_the_check(entry: str) -> None:
 
 
 @pytest.mark.parametrize("entry", ["verify-fast.jinja", "verify.jinja"])
-def test_generated_verification_does_not_run_the_check_yet(entry: str) -> None:
-    """Generated verify gets the check in #1221; flip this test there.
-
-    Until #1220/#1221 rewrite every template message, csarc adopt and
-    update would fail on the template's own old messages.
-    """
+def test_generated_verification_runs_the_check(entry: str) -> None:
+    """Generated fast and full verification run the check (#1221 AC5)."""
     text = (ROOT / "template/.csarc/scripts" / entry).read_text(
         encoding="utf-8"
     )
-    assert "check-message-style" not in text
+    assert 'verification_step "Message pattern check"' in text
+    assert "./.csarc/scripts/check-message-style" in text
 
 
 @pytest.mark.parametrize("checker", CHECKERS, ids=["root", "template"])

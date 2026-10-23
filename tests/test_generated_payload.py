@@ -88,12 +88,7 @@ MATRIX: dict[str, dict[str, object]] = {
 # automated caller, so each one needs a reason here. The capability
 # diagnostic (#531) had none and is no longer rendered (#1129 AC5); it stays
 # a template-repository tool under root `scripts/`.
-OPERATOR_ENTRY_POINTS: dict[str, str] = {
-    # Owner decision 2026-10-23 (#1219 option A): shipped now as a manual
-    # `--all` inventory; #1221 wires it into generated verify and removes
-    # this entry once every template message conforms.
-    "check-message-style": "manual message inventory until #1221",
-}
+OPERATOR_ENTRY_POINTS: dict[str, str] = {}
 # Template-repository tools that no generated caller reaches (#1129).
 TEMPLATE_REPOSITORY_ONLY = (
     ".csarc/scripts/check-repo-capabilities",
@@ -451,6 +446,27 @@ def test_every_python_entry_imports(
     for entry in entries:
         code, _loaded = probe(project, entry, "csarc_import_probe")
         assert code == 0, entry.name
+
+
+@pytest.mark.parametrize("name", list(MATRIX))
+def test_every_rendered_message_follows_the_writing_guide(
+    renders: dict[str, Path], name: str
+) -> None:
+    """#1221 AC5: adopt and update add only conforming messages.
+
+    An adopt or update candidate changes every line the template brings,
+    so the generated message check passes only if all of them conform.
+    """
+    project = renders[name]
+    result = subprocess.run(  # noqa: S603
+        [project / ".csarc/scripts/check-message-style", "--all"],
+        cwd=project,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr[-4000:]
+    assert result.stdout.startswith("OK: Message pattern check passed")
 
 
 @pytest.mark.parametrize("name", list(MATRIX))
