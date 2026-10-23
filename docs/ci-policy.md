@@ -1048,7 +1048,7 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
   非 prerelease）並指向 `.csarc/config.yml` 的 `_commit`，才以 `ast` 讀取該 commit 上 `csarc_config.py`
   的設定表（不執行、不 import），逐一盤點新設定是否為該 release 所知、值的基本型別是否相符；已知設定仍由
   base 驗證。schema 從不取自 PR 檔案，schema 版本也不能改變；完整值驗證在下游真正升級後進行。盤點全部
-  相符時，route 輸出與 merge trace 記錄 `schema_source=release:<tag>`；其餘情況 fail closed，訊息附上盤點
+  相符時印出 `NOTICE:` 盤點，merge trace 記錄 `schema_source=release:<tag> inventory=<setting>:<kind>:<tag>,...`；其餘情況 fail closed，訊息附上盤點
   與下一步（加 label、確認升級目標是已發布正式版，或人工合併）。這個例外只在 base 已含此 reader 後生效，
   設計依據見 [`dry-run-inventory-before-action.md`](adr/dry-run-inventory-before-action.md)。
 - **Release channel floor**：delivery branch（`dev/m*`、`dev/i*`）是 beta，floor 為 fast；其他 base

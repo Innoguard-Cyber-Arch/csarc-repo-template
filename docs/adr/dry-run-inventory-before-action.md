@@ -27,7 +27,7 @@
 - `csarc adopt` 預設 dry-run，產生 machine plan 與報告，授權後才套用同一份 plan（[transactional-repository-adoption](transactional-repository-adoption.md)）。
 - `csarc update --check` 先產出更新計畫並驗證 hook 設定，不執行 hook。
 - `release_policy.py prepare-candidate` 先檢查並物化 release 候選，經 PR 審查後才發布。
-- #1239：trusted base 用 `ast` 讀取 release 的設定表，逐一盤點 base 不認得的新設定（是否為該 release 所知、值的基本型別），全部相符才放行，並記錄 `schema_source=release:<tag>`。
+- #1239：trusted base 用 `ast` 讀取 release 的設定表，逐一盤點 base 不認得的新設定（是否為該 release 所知、值的基本型別），全部相符才放行；放行時也印出盤點，並在 merge trace 記錄 `schema_source=release:<tag> inventory=...`。
 
 設計審查必須檢查新流程是否符合這三點；不符合時，要在 PR 說明理由並取得擁有者確認。Ownership：引入外部內容的各流程維護者負責。#1239 的回歸由 `tests/test_release_schema_upgrade.py` 驗證，其中包含「release 程式碼不會被執行」的測試。
 

@@ -110,15 +110,24 @@ def saved(tmp_path: Path, tag: object = TAG) -> Path:
 
 
 def test_release_inventory_reads_new_settings(
-    executor: dict[str, Any], tmp_path: Path
+    executor: dict[str, Any],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """AC1/AC3: label + stable immutable release judge the new setting."""
+    """AC1/AC3: label + stable immutable release judge the new setting.
+
+    The accepted inventory is printed so a reviewer sees what passed.
+    """
     path = upgraded(tmp_path / "candidate.yml")
     config, source = executor["read_candidate_config"](
         path, LABELS, saved(tmp_path), api_from(endpoints())
     )
     assert config["future_flag"] is True
-    assert source == f"release:{TAG}"
+    assert source == f"release:{TAG} inventory=future_flag:bool:{TAG}"
+    assert (
+        capsys.readouterr().err
+        == f"NOTICE: schema_source={source}: accepted.\n"
+    )
     base = executor["read_config"](write_config(tmp_path / "b", config_text()))
     route = executor["classify_route"]([], base, config)
     assert route.route == "ordinary"
@@ -235,7 +244,10 @@ def test_release_schema_code_is_never_executed(
     config, source = executor["read_candidate_config"](
         path, LABELS, saved(tmp_path), api_from(endpoints(hostile))
     )
-    assert (config["future_flag"], source) == (True, f"release:{TAG}")
+    assert (config["future_flag"], source) == (
+        True,
+        f"release:{TAG} inventory=future_flag:bool:{TAG}",
+    )
     assert not marker.exists()
     assert "exec(" not in COPIES["root"].read_text(encoding="utf-8")
 
@@ -311,7 +323,10 @@ def test_hosted_route_reads_the_release_schema(
 
     accepted = route("governance-switch")
     assert accepted.returncode == 0, accepted.stderr
-    assert f"schema_source=release:{TAG}" in accepted.stdout
+    assert accepted.stderr == (
+        f"NOTICE: schema_source=release:{TAG} "
+        f"inventory=future_flag:bool:{TAG}: accepted.\n"
+    )
     refused = route("")
     assert refused.returncode == 1
     assert refused.stderr.startswith(
@@ -353,12 +368,18 @@ def test_local_lifecycle_traces_the_release_schema(
     lease = {"base_sha": base_sha, "head_sha": head_sha, "base_ref": "main"}
     pull = {"head": {"ref": "fix/1239-upgrade"}}
     decision = decide(lease, pull, LABELS)
-    assert decision["schema_source"] == f"release:{TAG}"
+    assert (
+        decision["schema_source"]
+        == f"release:{TAG} inventory=future_flag:bool:{TAG}"
+    )
     assert decision["route"] == "ordinary"
     lines = lifecycle["trace_lines"](
         {"schema_source": decision["schema_source"]},
         {"actor": "agent", "head_sha": head_sha},
         "suffix",
     )
-    assert lines == [f"schema-trace: schema_source=release:{TAG} suffix"]
+    assert lines == [
+        f"schema-trace: schema_source=release:{TAG} "
+        f"inventory=future_flag:bool:{TAG} suffix"
+    ]
     assert lifecycle["trace_lines"]({"schema_source": "base"}, {}, "s") == []

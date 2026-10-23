@@ -517,7 +517,10 @@ def read_candidate_config(
         csarc_config.validate_config(
             {key: values[key] for key in values if key not in new}, path
         )
-        return values, f"release:{tag}"
+        seen = ",".join(f"{key}:{known[key][0]}:{tag}" for key in new)
+        source = f"release:{tag} inventory={seen}"
+        sys.stderr.write(f"NOTICE: schema_source={source}: accepted.\n")
+        return values, source
     raise ValueError(
         f"settings {', '.join(new)} come from a newer CSARC template release "
         f"than this base reads, and the release schema cannot verify them: "
@@ -813,7 +816,7 @@ def _route_command(args: argparse.Namespace) -> int:
     labels = {label for label in args.labels.split(",") if label}
     try:
         base = read_config(args.base_config)
-        candidate, source = read_candidate_config(
+        candidate, _ = read_candidate_config(
             args.candidate_config, labels, args.candidate_provenance
         )
     except (OSError, ValueError) as error:
@@ -833,8 +836,7 @@ def _route_command(args: argparse.Namespace) -> int:
     if args.json:
         sys.stdout.write(json.dumps(decision.as_json(), sort_keys=True) + "\n")
     else:
-        shown = "" if source == "base" else f" schema_source={source}"
-        sys.stdout.write(f"Merge route: {decision.route}{shown}\n")
+        sys.stdout.write(f"Merge route: {decision.route}\n")
         sys.stdout.writelines(f"- {reason}\n" for reason in decision.reasons)
     if args.enforce:
         try:
