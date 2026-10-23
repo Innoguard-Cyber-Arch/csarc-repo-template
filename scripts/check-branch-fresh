@@ -61,7 +61,7 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   exit 2
 fi
 if ! git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null; then
-  echo "ERROR: Branch '$branch' is missing: there is no local branch named '$branch'. Check the name." >&2
+  echo "ERROR: Branch '$branch' is missing: there is no local branch named '$branch'. Run 'git branch --list' and pass an existing name." >&2
   exit 2
 fi
 if ! git remote get-url origin >/dev/null 2>&1; then

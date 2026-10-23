@@ -17,7 +17,7 @@ pnpm_store_dir="$cache_root/pnpm/store"
 cd "$repo_root"
 
 if [[ -n "${_CSARC_PROJECT_VERIFICATION_ACTIVE:-}" ]]; then
-  echo "ERROR: Hook loop: the hook runs .csarc/scripts/verify. Remove it." >&2
+  echo "ERROR: Hook loop: the hook runs .csarc/scripts/verify. Remove that call." >&2
   exit 1
 fi
 
@@ -26,7 +26,7 @@ record_project_verification_status() {
   if [[ -n "$status_fd" ]]; then
     if [[ ! "$status_fd" =~ ^[0-9]+$ ]] ||
       ! printf '%s\n' "$1" >&"$status_fd"; then
-      echo "ERROR: Verification status descriptor is invalid: no write. Report it." >&2
+      echo "ERROR: Verification status descriptor is invalid: no write. Unset _CSARC_PROJECT_VERIFICATION_STATUS_FD." >&2
       exit 1
     fi
   fi
@@ -48,7 +48,7 @@ for workflow in .github/workflows/{pr-policy,ci}.yml; do
   [[ -f "$workflow" ]] || continue
   if grep -Eq 'secrets\.(CSARC_SYNC_TOKEN|CSARC_ADMIN_TOKEN|GH_ADMIN_TOKEN|ADMIN_TOKEN)' \
     "$workflow"; then
-    echo "ERROR: $workflow leaks an admin token: the event is untrusted. Remove it." >&2
+    echo "ERROR: $workflow leaks an admin token: the event is untrusted. Remove the secret." >&2
     exit 1
   fi
 done
@@ -190,7 +190,7 @@ PY
   python_sdist_entries="$(tar -tzf "$python_sdist")"
   grep -q '/src/{{ package_name }}/' <<<"$python_sdist_entries"
   if grep -Eq '/(\.github|policies|scripts|tests|typescript)/' <<<"$python_sdist_entries"; then
-    echo "ERROR: Python sdist is too broad: it has CI or test files. Exclude them." >&2
+    echo "ERROR: Python sdist is too broad: it has CI or test files. Exclude them in pyproject.toml." >&2
     exit 1
   fi
   verification_step "Python package import" \
@@ -202,7 +202,7 @@ PY
 
 if [[ "$mode" == "python" ]]; then
   if ! $verify_python; then
-    echo "ERROR: Python is off: not in the profile. Use another mode." >&2
+    echo "ERROR: Python is off: not in the profile. Add 'python' to 'languages'." >&2
     exit 2
   fi
   verify_python_module
@@ -211,7 +211,7 @@ fi
 
 if [[ "$mode" == "python-compatibility" ]]; then
   if ! $verify_python; then
-    echo "ERROR: Python is off: not in the profile. Use another mode." >&2
+    echo "ERROR: Python is off: not in the profile. Add 'python' to 'languages'." >&2
     exit 2
   fi
   python_version="${CSARC_PYTHON_VERSION:-3.14}"
@@ -231,7 +231,7 @@ fi
 
 if [[ "$mode" == "typescript" ]]; then
   if [[ "$verify_typescript" != "true" ]]; then
-    echo "ERROR: TypeScript is off: not in the profile. Use another mode." >&2
+    echo "ERROR: TypeScript is off: not in the profile. Add 'typescript' to 'languages'." >&2
     exit 2
   fi
   verify_typescript_module
@@ -240,7 +240,7 @@ fi
 
 if [[ "$mode" == "go" ]]; then
   if ! $verify_go; then
-    echo "ERROR: Go is off: not in the profile. Use another mode." >&2
+    echo "ERROR: Go is off: not in the profile. Add 'go' to 'languages'." >&2
     exit 2
   fi
   verify_go_module
@@ -249,7 +249,7 @@ fi
 
 if [[ "$mode" == "rust" ]]; then
   if ! $verify_rust; then
-    echo "ERROR: Rust is off: not in the profile. Use another mode." >&2
+    echo "ERROR: Rust is off: not in the profile. Add 'rust' to 'languages'." >&2
     exit 2
   fi
   verify_rust_module
@@ -413,7 +413,7 @@ if [[ "$template_mode" == "new" && "$documentation_mode" != "off" ]]; then
   )
   for heading in "${required_readme_headings[@]}"; do
     if ! grep -qFx "## $heading" README.md; then
-      echo "ERROR: README.md lacks a section: '## $heading'. Add it." >&2
+      echo "ERROR: README.md lacks a section: '## $heading'. Add that heading." >&2
       exit 1
     fi
   done
@@ -443,7 +443,7 @@ if $verify_python; then
     --resolution lowest-direct \
     --python-version "$python_version" \
     --output-file "$lower_bounds_root/requirements-min.txt"; then
-    echo "ERROR: Lower bounds failed: no resolution on Python $python_version. Raise them." >&2
+    echo "ERROR: Lower bounds failed: no resolution on Python $python_version. Raise them in pyproject.toml." >&2
     exit 1
   fi
   uv venv --python "$python_version" "$lower_bounds_root/.venv"
@@ -451,7 +451,7 @@ if $verify_python; then
     uv pip install \
     --python "$lower_bounds_root/.venv/bin/python" \
     --requirements "$lower_bounds_root/requirements-min.txt"; then
-    echo "ERROR: Lower bounds failed: no install on Python $python_version. Raise them." >&2
+    echo "ERROR: Lower bounds failed: no install on Python $python_version. Raise them in pyproject.toml." >&2
     exit 1
   fi
   verification_step "Install project at Python lower bounds" \
@@ -469,7 +469,7 @@ if $verify_python; then
     --cov \
     --cov-report=term-missing \
     --cov-fail-under={{ coverage_threshold }}; then
-    echo "ERROR: Lower bounds failed: tests fail on Python $python_version. Raise them." >&2
+    echo "ERROR: Lower bounds failed: tests fail on Python $python_version. Raise them in pyproject.toml." >&2
     exit 1
   fi
 {% else %}
@@ -478,7 +478,7 @@ if $verify_python; then
     --cov \
     --cov-report=term-missing \
     --cov-report=xml; then
-    echo "ERROR: Lower bounds failed: tests fail on Python $python_version. Raise them." >&2
+    echo "ERROR: Lower bounds failed: tests fail on Python $python_version. Raise them in pyproject.toml." >&2
     exit 1
   fi
   verification_step "Python lower-bound diff coverage" \

@@ -131,7 +131,8 @@ def _fetch_pr(repo: str, pr_number: int) -> JsonObject:
     if result.returncode != 0:
         raise RuntimeError(
             f"Cannot read pull request #{pr_number} in {repo}: "
-            f"{result.stderr.strip() or result.stdout.strip()}. Retry."
+            f"{result.stderr.strip() or result.stdout.strip()}. "
+            "Run 'gh auth status', then run it again."
         )
     return json.loads(result.stdout)
 

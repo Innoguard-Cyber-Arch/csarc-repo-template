@@ -9,7 +9,7 @@ if [[ "$documentation_mode" != "off" ]]; then
 fi
 for required_file in "${required_files[@]}"; do
   if [[ ! -f "$required_file" ]]; then
-    echo "ERROR: $required_file is missing: metadata needs it. Add it." >&2
+    echo "ERROR: $required_file is missing: metadata needs it. Run 'csarc update' to add it." >&2
     status=1
   fi
 done
@@ -22,7 +22,7 @@ reject_placeholder() {
   local field="$2"
   local placeholder="$3"
   if grep -Fq -- "$placeholder" "$file"; then
-    echo "ERROR: $file has unfinished $field: '$placeholder'. Replace it." >&2
+    echo "ERROR: $file has unfinished $field: '$placeholder'. Replace it with real text." >&2
     status=1
   fi
 }
@@ -45,7 +45,7 @@ reject_controlled_placeholder() {
     }
     END { exit !found }
   ' "$file"; then
-    echo "ERROR: $file has unfinished $field: a placeholder. Replace it." >&2
+    echo "ERROR: $file has unfinished $field: a placeholder. Replace it with real text." >&2
     status=1
   fi
 }

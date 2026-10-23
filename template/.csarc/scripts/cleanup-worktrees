@@ -61,7 +61,7 @@ if ! git rev-parse --verify --quiet "$integration_ref^{commit}" >/dev/null; then
   exit 2
 fi
 if ! command -v gh >/dev/null; then
-  echo "ERROR: No gh: merge checks need it. Install it." >&2
+  echo "ERROR: No gh: merge checks need it. Install it from 'https://cli.github.com/'." >&2
   exit 2
 fi
 
@@ -71,7 +71,7 @@ canonical_path() (
 
 for index in "${!selected_paths[@]}"; do
   if ! selected_paths[index]="$(canonical_path "${selected_paths[index]}")"; then
-    echo "ERROR: Bad worktree '${selected_paths[$index]}': missing. Fix --worktree." >&2
+    echo "ERROR: Bad worktree '${selected_paths[$index]}': missing. Pass a path from 'git worktree list' to --worktree." >&2
     exit 2
   fi
 done
@@ -100,7 +100,7 @@ merged_pr_reaches_ref() {
       gh api "repos/{owner}/{repo}/commits/$sha/pulls" \
         --jq '.[] | [.state, (.merge_commit_sha // "-")] | join("|")'
     )"; then
-      echo "ERROR: PR lookup failed for '$sha': gh failed. Retry." >&2
+      echo "ERROR: PR lookup failed for '$sha': gh failed. Run 'gh auth status', then run this command again." >&2
       return 2
     fi
     while IFS='|' read -r state merge_sha; do

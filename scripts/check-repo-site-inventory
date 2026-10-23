@@ -43,20 +43,28 @@ def load_inventory(path: Path) -> list[Entry]:
     data = json.loads(path.read_text(encoding="utf-8"))
     slides = data.get("slides")
     if not isinstance(slides, list) or not slides:
-        raise ValueError(f"{path} is invalid: 'slides' is empty. Fix it.")
+        raise ValueError(
+            f"{path} is invalid: 'slides' is empty. List the slides."
+        )
     entries: list[Entry] = []
     for slide in slides:
         if not isinstance(slide, dict) or set(slide) - set(FIELDS):
-            raise ValueError(f"{path} is invalid: bad slide {slide!r}. Fix it.")
+            raise ValueError(
+                f"{path} is invalid: bad slide {slide!r}. Make it an object."
+            )
         if not isinstance(slide.get("key"), str) or not slide["key"]:
-            raise ValueError(f"{path} is invalid: no key in {slide!r}. Fix it.")
+            raise ValueError(
+                f"{path} is invalid: no key in {slide!r}. Add a 'key'."
+            )
         entries.append(
             (slide["key"], slide.get("track"), slide.get("audience"))
         )
     keys = [entry[0] for entry in entries]
     duplicates = sorted({key for key in keys if keys.count(key) > 1})
     if duplicates:
-        raise ValueError(f"{path} is invalid: {duplicates} repeat. Fix it.")
+        raise ValueError(
+            f"{path} is invalid: {duplicates} repeat. Remove the repeats."
+        )
     return entries
 
 

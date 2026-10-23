@@ -61,7 +61,7 @@ def load_matrix(path: Path) -> list[JsonObject]:
     if not isinstance(capabilities, list) or not capabilities:
         raise CapabilityDataError(
             f"Invalid matrix {path}: 'capabilities' must be a non-empty "
-            "list. Fix the matrix."
+            f"list. Edit '{path}'."
         )
     seen_ids: set[str] = set()
     for entry in capabilities:
@@ -69,12 +69,12 @@ def load_matrix(path: Path) -> list[JsonObject]:
         if not isinstance(capability_id, str) or not capability_id:
             raise CapabilityDataError(
                 f"Invalid matrix {path}: every capability needs a string "
-                "'id'. Fix the matrix."
+                f"'id'. Edit '{path}'."
             )
         if capability_id in seen_ids:
             raise CapabilityDataError(
                 f"Invalid matrix {path}: duplicate capability id "
-                f"{capability_id!r}. Fix the matrix."
+                f"{capability_id!r}. Edit '{path}'."
             )
         seen_ids.add(capability_id)
         for field in (
@@ -91,7 +91,7 @@ def load_matrix(path: Path) -> list[JsonObject]:
                 raise CapabilityDataError(
                     f"Invalid matrix {path}: capability {capability_id!r} "
                     f"field {field!r} must provide non-empty text for "
-                    f"{LANGUAGES}. Fix the matrix."
+                    f"{LANGUAGES}. Edit '{path}'."
                 )
     return capabilities
 
@@ -102,20 +102,21 @@ def load_facts(raw: str) -> dict[str, JsonObject]:
     if not isinstance(data, dict):
         raise CapabilityDataError(
             "Invalid facts: they must be a JSON object keyed by capability "
-            "id. Fix the facts."
+            "id. Fix the JSON passed to '--facts'."
         )
     facts: dict[str, JsonObject] = {}
     for capability_id, entry in data.items():
         if not isinstance(entry, dict) or "status" not in entry:
             raise CapabilityDataError(
                 f"Invalid facts[{capability_id!r}]: it must be an object "
-                "with a 'status' field. Fix the facts."
+                "with a 'status' field. Fix the JSON passed to '--facts'."
             )
         status = entry["status"]
         if status not in VALID_STATUSES:
             raise CapabilityDataError(
                 f"Invalid facts[{capability_id!r}].status: it must be one of "
-                f"{VALID_STATUSES}, got {status!r}. Fix the facts."
+                f"{VALID_STATUSES}, got {status!r}. "
+                "Fix the JSON passed to '--facts'."
             )
         facts[capability_id] = {
             "status": status,
@@ -144,14 +145,14 @@ def evaluate(
         raise CapabilityDataError(
             "Incomplete facts: no status for "
             + ", ".join(sorted(missing))
-            + ". Add the missing facts."
+            + ". Add them to the JSON passed to '--facts'."
         )
     extra = fact_ids - matrix_ids
     if extra:
         raise CapabilityDataError(
             "Unknown facts: the matrix has no "
             + ", ".join(sorted(extra))
-            + ". Remove them or update the matrix."
+            + ". Remove them from '--facts' or add them to the matrix."
         )
 
     results: list[JsonObject] = []
@@ -268,7 +269,8 @@ def _main(argv: list[str]) -> int:
     except (CapabilityDataError, OSError, json.JSONDecodeError) as error:
         reason = str(error).rstrip(".")
         print(  # noqa: T201
-            f"ERROR: Cannot load capability data: {reason}. Fix the input.",
+            f"ERROR: Cannot load capability data: {reason}. "
+            "Check the '--matrix' and '--facts' files.",
             file=sys.stderr,
         )
         return 2

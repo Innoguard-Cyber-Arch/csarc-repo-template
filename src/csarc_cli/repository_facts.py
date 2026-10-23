@@ -94,7 +94,7 @@ def fact(
     """Return one fact in the closed detector shape."""
     if state not in STATES:
         raise ValueError(
-            f"Unknown fact state {state!r}: not in STATES. Fix it."
+            f"Unknown fact state {state!r}: not in STATES. Use a STATES value."
         )
     result: Fact = {
         "reason": reason,

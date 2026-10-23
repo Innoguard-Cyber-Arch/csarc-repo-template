@@ -96,7 +96,10 @@ def _target(target: str, repo: str | None) -> tuple[str, int]:
     parts = [part for part in urlparse(target).path.split("/") if part]
     if len(parts) >= 4 and parts[2] == "issues" and parts[3].isdigit():
         return f"{parts[0]}/{parts[1]}", int(parts[3])
-    raise ValueError(f"Bad Issue target '{target}': unsupported. Fix it.")
+    raise ValueError(
+        f"Bad Issue target '{target}': unsupported. "
+        "Pass an Issue number or Issue URL."
+    )
 
 
 def _warning_for_target(target: str, repo: str | None) -> str | None:
@@ -124,7 +127,7 @@ def main(arguments: list[str] | None = None) -> int:
             ) as error:
                 sys.stderr.write(
                     f"WARNING: Approval check skipped for {target}: {error}. "
-                    "Recheck later.\n"
+                    f"Run 'gh issue view {target}' to check its approval.\n"
                 )
                 continue
             if warning:
@@ -139,11 +142,13 @@ def main(arguments: list[str] | None = None) -> int:
         else:
             sys.stderr.write(
                 "WARNING: Edit continues: the session is non-interactive. "
-                "Request re-approval.\n"
+                "Ask an approver to comment '/milestone approve' again.\n"
             )
     executable = shutil.which("gh")
     if executable is None:
-        raise RuntimeError("No gh: it is not on PATH. Install it.")
+        raise RuntimeError(
+            "No gh: it is not on PATH. Install it from 'https://cli.github.com/'."
+        )
     result = subprocess.run(  # noqa: S603
         [executable, "issue", "edit", *arguments], check=False
     )

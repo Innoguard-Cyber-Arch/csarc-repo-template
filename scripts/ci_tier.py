@@ -162,7 +162,7 @@ def add_scopes(plan: Plan, extra_scopes: set[str]) -> Plan:
     unknown = extra_scopes - VALID_SCOPES
     if unknown:
         raise ValueError(
-            f"Unknown CI scope: {', '.join(sorted(unknown))}. Fix it."
+            f"Unknown CI scope: {', '.join(sorted(unknown))}. Use VALID_SCOPES."
         )
     scopes = tuple(sorted(set(plan.scopes) | extra_scopes))
     full = plan.tier == "full"

@@ -120,7 +120,10 @@ def control_paths(
     if control_set == CONTROL_SET_RELEASE:
         return release_control_paths(root)
     if control_set != CONTROL_SET_VERIFICATION:
-        raise RuntimeError(f"Control set is unknown: {control_set}. Fix it.")
+        raise RuntimeError(
+            f"Control set is unknown: {control_set}. "
+            "Use 'verification' or 'release'."
+        )
     if scripts_prefix(root) == GENERATED_SCRIPTS:
         return sorted(GENERATED_CONTROL_FILES)
     paths = set(CONTROL_FILES)
@@ -159,14 +162,16 @@ def prepare(
     """
     source = source.resolve()
     if destination.exists():
-        raise RuntimeError(f"Executor exists: {destination}. Remove it.")
+        raise RuntimeError(
+            f"Executor exists: {destination}. Delete that folder."
+        )
     files: dict[str, str] = {}
     for relative in control_paths(source, control_set):
         origin = source / relative
         if origin.is_symlink() or not origin.is_file():
             raise RuntimeError(
                 f"Trusted control file is missing or not a regular file: "
-                f"{relative}. Restore it."
+                f"{relative}. Restore it from the base commit."
             )
         files[relative] = digest(origin)
     for relative in files:
@@ -194,10 +199,14 @@ def verify_manifest(destination: Path) -> None:
     if manifest.get("executor") != EXECUTOR_TRUSTED or not isinstance(
         files, dict
     ):
-        raise RuntimeError("Bad executor manifest: malformed. Rebuild it.")
+        raise RuntimeError(
+            "Bad executor manifest: malformed. Rerun the 'verify' job."
+        )
     for relative, expected in files.items():
         if digest(destination / relative) != expected:
-            raise RuntimeError(f"Control file changed: {relative}. Rebuild it.")
+            raise RuntimeError(
+                f"Control file changed: {relative}. Rerun the 'verify' job."
+            )
 
 
 def load_plan(path: Path) -> dict[str, object] | None:
@@ -330,7 +339,9 @@ def read_router_args(path: Path) -> list[str]:
     """
     raw = path.read_bytes()
     if not raw.endswith(b"\0"):
-        raise ValueError("Router arguments are bad: no NUL end. Fix it.")
+        raise ValueError(
+            "Router arguments are bad: no NUL end. Rerun the 'verify' job."
+        )
     return [item.decode("utf-8") for item in raw[:-1].split(b"\0")]
 
 
@@ -515,7 +526,7 @@ def stronger_suite(first: str, second: str) -> str:
     aliases = {"baseline": "fast", "docs": "fast"}
     first, second = aliases.get(first, first), aliases.get(second, second)
     if first not in SUITE_RANK or second not in SUITE_RANK:
-        raise ValueError("Suite is unknown: no rank. Fix it.")
+        raise ValueError("Suite is unknown: no rank. Use 'fast' or 'full'.")
     return max((first, second), key=SUITE_RANK.__getitem__)
 
 
@@ -544,14 +555,18 @@ def _git(root: Path, *args: str, data: bytes | None = None) -> bytes:
     )
     if result.returncode:
         detail = result.stderr.decode("utf-8", "replace").strip()
-        raise RuntimeError(f"git {args[0]} failed: {detail}. Retry.")
+        raise RuntimeError(
+            f"git {args[0]} failed: {detail}. Rerun the 'verify' job."
+        )
     return result.stdout
 
 
 def ensure_commit(root: Path, sha: str) -> None:
     """Make one exact commit available locally, fetching it if needed."""
     if SHA.fullmatch(sha) is None:
-        raise RuntimeError("Base commit is malformed: not a SHA. Fix it.")
+        raise RuntimeError(
+            "Base commit is malformed: not a SHA. Pass a 40-character SHA."
+        )
     try:
         _git(root, "cat-file", "-e", f"{sha}^{{commit}}")
     except RuntimeError:
@@ -583,7 +598,8 @@ def trusted_base_checkout(root: Path, base_sha: str) -> Generator[Path]:
             actual = _git(checkout, "rev-parse", "HEAD").decode().strip()
             if actual != base_sha:
                 raise RuntimeError(
-                    "Base checkout is wrong: not the lease base. Retry."
+                    "Base checkout is wrong: not the lease base. "
+                    "Rerun the 'verify' job."
                 )
             yield checkout
         finally:

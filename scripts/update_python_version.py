@@ -23,7 +23,9 @@ def parse_version(value: str) -> tuple[int, int]:
     """Parse a Python feature release such as 3.14."""
     match = re.fullmatch(r"(\d+)\.(\d+)", value)
     if match is None:
-        raise ValueError(f"Invalid Python feature release: {value}. Fix it.")
+        raise ValueError(
+            f"Invalid Python feature release: {value}. Use the form '3.14'."
+        )
     return int(match.group(1)), int(match.group(2))
 
 
@@ -38,7 +40,8 @@ def current_version(repo_root: Path) -> tuple[int, int]:
     match = re.search(r'latest_reviewed_stable: "(3\.\d+)"', catalog)
     if match is None:
         raise RuntimeError(
-            "Policy is incomplete: latest_reviewed_stable is missing. Add it."
+            "Policy is incomplete: latest_reviewed_stable is missing. "
+            "Add it to profiles/catalog.yaml."
         )
     return parse_version(match.group(1))
 
@@ -66,7 +69,8 @@ def eligible_version(now: datetime) -> tuple[int, int]:
 
     if not eligible:
         raise RuntimeError(
-            "No Python release is eligible: no reviewed 3.x. Retry later."
+            "No Python release is eligible: no reviewed 3.x. "
+            "Run it after 30 days."
         )
     return max(eligible)
 
@@ -76,7 +80,7 @@ def replace_once(path: Path, old: str, new: str) -> None:
     text = path.read_text(encoding="utf-8")
     if text.count(old) != 1:
         raise RuntimeError(
-            f"Edit is ambiguous: {path} has not one {old!r}. Fix it."
+            f"Edit is ambiguous: {path} has not one {old!r}. Edit it by hand."
         )
     path.write_text(text.replace(old, new), encoding="utf-8")
 
@@ -86,7 +90,7 @@ def replace_all(path: Path, old: str, new: str) -> None:
     text = path.read_text(encoding="utf-8")
     if old not in text:
         raise RuntimeError(
-            f"Edit target is missing: {path} lacks {old!r}. Fix it."
+            f"Edit target is missing: {path} lacks {old!r}. Edit it by hand."
         )
     path.write_text(text.replace(old, new), encoding="utf-8")
 

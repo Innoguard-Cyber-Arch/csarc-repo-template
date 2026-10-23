@@ -28,13 +28,20 @@ def validate_license_file(path: Path, kind: str, holder: str) -> None:
     """Validate the human-readable license file."""
     license_text = path.read_text(encoding="utf-8")
     if holder not in license_text:
-        raise ValueError("Bad LICENSE: it lacks copyright_holder. Fix it.")
+        raise ValueError(
+            "Bad LICENSE: it lacks copyright_holder. Add the holder to LICENSE."
+        )
     if kind == "proprietary":
         if "All rights reserved" not in license_text:
-            raise ValueError("Bad LICENSE: it must reserve all rights. Fix it.")
+            raise ValueError(
+                "Bad LICENSE: it must reserve all rights. "
+                "Add 'All rights reserved'."
+            )
         return
     if not license_text.startswith(f"{kind.split('-')[0]} License"):
-        raise ValueError(f"Bad LICENSE: it lacks {kind}. Fix it.")
+        raise ValueError(
+            f"Bad LICENSE: it lacks {kind}. Run 'csarc update' to rewrite it."
+        )
 
 
 def manifests(root: Path) -> Manifests:
@@ -57,7 +64,10 @@ def require_custom(root: Path, found: Manifests) -> None:
         found_keys = (k for m in found.values() for k in LICENSE_KEYS if k in m)
         custom = bool(found) and next(found_keys, None) is None
     if not custom:
-        raise ValueError("LICENSE is missing: no custom license. Add it.")
+        raise ValueError(
+            "LICENSE is missing: no custom license. "
+            "Run 'csarc update' to add it."
+        )
 
 
 def validate_manifests(found: Manifests, project_license: str) -> None:
@@ -67,20 +77,33 @@ def validate_manifests(found: Manifests, project_license: str) -> None:
     npm = "UNLICENSED" if proprietary else project_license
     python = found.get("pyproject.toml")
     if python is not None and python.get("license") != spdx:
-        raise ValueError("Bad pyproject.toml: does not match LICENSE. Fix it.")
+        raise ValueError(
+            "Bad pyproject.toml: does not match LICENSE. "
+            "Set 'license' to match."
+        )
     if python is not None and "LICENSE" not in python.get("license-files", []):
-        raise ValueError("Bad pyproject.toml: LICENSE unpackaged. Fix it.")
+        raise ValueError(
+            "Bad pyproject.toml: LICENSE unpackaged. Add it to 'license-files'."
+        )
     node = found.get("package.json")
     if node is not None and node.get("license") != npm:
-        raise ValueError("Bad package.json: does not match LICENSE. Fix it.")
+        raise ValueError(
+            "Bad package.json: does not match LICENSE. Set 'license' to match."
+        )
     if node is not None and proprietary and node.get("private") is not True:
-        raise ValueError("Bad package.json: private is not true. Fix it.")
+        raise ValueError(
+            "Bad package.json: private is not true. Set 'private' to true."
+        )
     cargo = found.get("Cargo.toml")
     if cargo is not None and proprietary:
         if cargo.get("license-file") != "LICENSE" or "license" in cargo:
-            raise ValueError("Bad Cargo.toml: proprietary mismatch. Fix it.")
+            raise ValueError(
+                "Bad Cargo.toml: proprietary mismatch. Use only 'license-file'."
+            )
     elif cargo is not None and cargo.get("license") != project_license:
-        raise ValueError("Bad Cargo.toml: does not match LICENSE. Fix it.")
+        raise ValueError(
+            "Bad Cargo.toml: does not match LICENSE. Set 'license' to match."
+        )
 
 
 def validate(root: Path) -> None:
@@ -95,7 +118,9 @@ def validate(root: Path) -> None:
     if project_license == "custom":
         return  # A product-owned license text: CSARC does not interpret it.
     if not isinstance(holder, str) or not holder.strip():
-        raise ValueError("Bad LICENSE: it names no copyright holder. Fix it.")
+        raise ValueError(
+            "Bad LICENSE: it names no copyright holder. Add one to LICENSE."
+        )
     validate_license_file(root / "LICENSE", project_license, holder)
     validate_manifests(manifests(root), project_license)
 

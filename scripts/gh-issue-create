@@ -85,7 +85,7 @@ done
 if (( title_found )); then
   if ! title_error="$("$script_dir/validate-issue-title" "$title" 2>&1)"; then
     printf '%s\n' "$title_error" >&2
-    echo "ERROR: Issue creation blocked: the title is invalid, so 'gh issue create' was not called. Fix the title and retry." >&2
+    echo "ERROR: Issue creation blocked: the title is invalid, so 'gh issue create' was not called. Fix the title as reported above, then run this command again." >&2
     exit 1
   fi
 fi
@@ -184,7 +184,7 @@ if (( ! milestone_given )) &&
   detected="$("$script_dir/detect-open-milestone" "${detect_repo_args[@]:-}" 2>/dev/null)"; then
   detected_number="${detected%%$'\t'*}"
   detected_title="${detected#*$'\t'}"
-  echo "WARNING: Milestone not set: one open Milestone is active, #${detected_number} ${detected_title}. Attach it if this Issue belongs to it." >&2
+  echo "WARNING: Milestone not set: one open Milestone is active, #${detected_number} ${detected_title}. Pass --milestone '${detected_title}' if this Issue belongs to it." >&2
   if [[ -t 0 ]]; then
     milestone_reply=""
     read -r -p "Attach --milestone \"${detected_title}\" to this Issue? [y/N] " milestone_reply || milestone_reply=""

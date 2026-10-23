@@ -42,7 +42,7 @@ if [[ ! -f "$cache_dir/$asset" ]] ||
 fi
 actual_sha256="$(shasum -a 256 "$cache_dir/$asset" | awk '{print $1}')"
 if [[ "$actual_sha256" != "$expected_sha256" ]]; then
-  echo "ERROR: ShellCheck archive is rejected: it does not match the pinned digest. Retry." >&2
+  echo "ERROR: ShellCheck archive is rejected: it does not match the pinned digest. Check the pinned digest." >&2
   exit 1
 fi
 

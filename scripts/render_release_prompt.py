@@ -14,11 +14,13 @@ def render(tag: str, sha: str) -> str:
     """Return one status-first prompt bound to an immutable release."""
     if not tag.startswith("v") or any(character.isspace() for character in tag):
         raise ValueError(
-            "Bad release tag: not a non-space v-prefixed value. Fix it."
+            "Bad release tag: not a non-space v-prefixed value. Pass a tag "
+            "such as 'v1.2.3'."
         )
     if FULL_SHA.fullmatch(sha) is None:
         raise ValueError(
-            "Bad release SHA: not 40 lowercase hex characters. Fix it."
+            "Bad release SHA: not 40 lowercase hex characters. Pass the full "
+            "commit SHA."
         )
 
     source = f"git+https://github.com/{REPOSITORY}.git@{sha}"

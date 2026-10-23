@@ -140,12 +140,16 @@ def _merged_source(
             matches.append(pull)
     if len(matches) != 1:
         raise RuntimeError(
-            f"Bad source: no one merged-{branch} source PR. Check it."
+            f"Bad source: no one merged-{branch} source PR. "
+            "Pass a squash merge."
         )
     head = matches[0].get("head")
     head_sha = head.get("sha") if isinstance(head, dict) else None
     if not isinstance(head_sha, str):
-        raise RuntimeError("Source PR head is unavailable: no SHA. Retry.")
+        raise RuntimeError(
+            "Source PR head is unavailable: no SHA. "
+            "Run 'gh auth status', then run it again."
+        )
     merge_commit = github.get(repo, f"git/commits/{commit}")
     source_commit = github.get(repo, f"git/commits/{head_sha}")
     merge_tree = (
@@ -160,7 +164,8 @@ def _merged_source(
         or merge_tree.get("sha") != source_tree.get("sha")
     ):
         raise RuntimeError(
-            f"Merged {branch} tree does not match: source differs. Check it."
+            f"Merged {branch} tree does not match: source differs. "
+            "Verify the merge."
         )
     return matches[0], head_sha
 
@@ -215,7 +220,7 @@ def resolve_release_source(
     ):
         raise RuntimeError(
             "Dependabot source lacks trusted exact-head eligibility: no "
-            "pass. Verify it."
+            "pass. Wait for its 'verify' check."
         )
     return head_sha
 
@@ -315,7 +320,7 @@ def main() -> None:
     if args.resolve_merge_source and evidence.get("base") != args.merge_branch:
         raise RuntimeError(
             f"Evidence base is wrong: {evidence.get('base')!r} is not "
-            f"{args.merge_branch!r}. Verify again."
+            f"{args.merge_branch!r}. Verify a PR into that branch."
         )
     # message-pattern: allow X1 JSON output
     sys.stdout.write(json.dumps(evidence, sort_keys=True) + "\n")

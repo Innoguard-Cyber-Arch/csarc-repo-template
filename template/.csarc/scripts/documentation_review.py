@@ -40,7 +40,7 @@ def validate_review(body: str, head_sha: str, mode: str) -> str:
     if status not in PASSING | BLOCKING:
         raise ValueError(
             "Documentation review status is invalid: it must be aligned, "
-            "drift, not-applicable, or inconclusive. Fix it."
+            "drift, not-applicable, or inconclusive. Edit the PR body."
         )
     reviewed_head = fields.get("reviewed_head", "").casefold()
     if (
@@ -49,14 +49,15 @@ def validate_review(body: str, head_sha: str, mode: str) -> str:
     ):
         raise ValueError(
             "Documentation review head is wrong: not the exact 40-character "
-            "PR head. Fix it."
+            "PR head. Set 'Reviewed head' to it."
         )
     reason = fields.get("reason", "")
     if status == "not-applicable" and (
         not reason or reason.casefold().startswith(("replace", "todo", "tbd"))
     ):
         raise ValueError(
-            "Documentation review is incomplete: no concrete reason. Add one."
+            "Documentation review is incomplete: no concrete reason. "
+            "Fill 'Reason'."
         )
     if status in BLOCKING:
         raise ValueError(

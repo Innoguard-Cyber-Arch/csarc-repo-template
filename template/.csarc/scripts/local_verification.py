@@ -70,10 +70,14 @@ def normalized_record(evidence: dict[str, Any], trust: str) -> dict[str, Any]:
     validation are identical, and the trust label is kept as given.
     """
     if trust not in {TRUST_LOCAL, TRUST_HOSTED}:
-        raise RuntimeError(f"Bad trust label: '{trust}' is unknown. Fix it.")
+        raise RuntimeError(
+            f"Bad trust label: '{trust}' is unknown. Use 'local' or 'hosted'."
+        )
     declared = evidence.get("trust")
     if declared is not None and declared != trust:
-        raise RuntimeError("Bad trust label: evidence differs. Rerun.")
+        raise RuntimeError(
+            "Bad trust label: evidence differs. Run verify again."
+        )
     base_ref = evidence.get("base_ref", evidence.get("base"))
     base_sha = evidence.get("base_sha")
     scopes = evidence.get("scopes")
@@ -112,15 +116,18 @@ def normalized_record(evidence: dict[str, Any], trust: str) -> dict[str, Any]:
         or not record["command"]
         or not isinstance(record["completed_at"], str)
     ):
-        raise RuntimeError("Bad evidence: a record field is invalid. Rerun.")
+        raise RuntimeError(
+            "Bad evidence: a field is invalid. Run verify again."
+        )
     try:
         completed_at = datetime.fromisoformat(record["completed_at"])
     except ValueError as error:
         raise RuntimeError(
-            "Record completion time is malformed: not ISO 8601. Rerun it."
+            "Record completion time is malformed: not ISO 8601. "
+            "Run verify again."
         ) from error
     if completed_at.tzinfo is None:
-        raise RuntimeError("Bad completion time: it has no zone. Rerun.")
+        raise RuntimeError("Bad completion time: no zone. Run verify again.")
     return record
 
 
@@ -167,7 +174,9 @@ def config_path(root: Path) -> Path:
 def evidence_path(head_sha: str) -> Path:
     """Keep per-commit evidence in Git metadata, outside the worktree."""
     if SHA.fullmatch(head_sha) is None:
-        raise RuntimeError("Bad commit identity: it is not a SHA. Fix it.")
+        raise RuntimeError(
+            "Bad commit identity: not a SHA. Pass a 40-character SHA."
+        )
     common = Path(git("rev-parse", "--git-common-dir"))
     if not common.is_absolute():
         common = repository_root() / common
@@ -262,7 +271,8 @@ def record(
         tier == "fast" and "all" in normalized_scopes
     ):
         raise RuntimeError(
-            "Local tier and scopes disagree: 'full' needs 'all'. Fix them."
+            "Local tier and scopes disagree: 'full' needs 'all'. "
+            "Pass '--scopes all' with '--tier full'."
         )
     if not is_git_repository():
         sys.stdout.write(
@@ -279,11 +289,15 @@ def record(
         return None
     head_sha = git("rev-parse", "HEAD")
     if expected_head_sha and head_sha != expected_head_sha:
-        raise RuntimeError("HEAD changed during verification: stale. Rerun.")
+        raise RuntimeError(
+            "HEAD changed during verification: stale. Run verify again."
+        )
     tree_sha = git("rev-parse", "HEAD^{tree}")
     base_ref, base_sha = resolve_base(base)
     if expected_base_sha and base_sha != expected_base_sha:
-        raise RuntimeError("Base changed during verification: stale. Rerun.")
+        raise RuntimeError(
+            "Base changed during verification: stale. Run verify again."
+        )
     command_root = (
         ".csarc/scripts"
         if (root / ".csarc/scripts/verify").is_file()
@@ -339,20 +353,24 @@ def require(
     # Issue #1075: reject a widened window before reading candidate evidence.
     max_age_hours = evidence_freshness.policy_max_age_hours(max_age_hours)
     if required_tier not in VALID_TIERS:
-        raise RuntimeError("Bad required tier: it is unknown. Fix it.")
+        raise RuntimeError("Bad required tier: unknown. Use 'fast' or 'full'.")
     if any(
         SHA.fullmatch(value) is None for value in (head_sha, tree_sha, base_sha)
     ):
-        raise RuntimeError("Bad commit identity: it is not a SHA. Fix it.")
+        raise RuntimeError(
+            "Bad commit identity: not a SHA. Pass a 40-character SHA."
+        )
     path = evidence_path(head_sha)
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise RuntimeError(
-            "Local evidence is unavailable: unreadable. Rerun verify."
+            "Local evidence is unavailable: unreadable. Run verify again."
         ) from error
     if not isinstance(payload, dict) or set(payload) != RECORD_KEYS:
-        raise RuntimeError("Local evidence is malformed: bad keys. Rerun.")
+        raise RuntimeError(
+            "Local evidence is malformed: bad keys. Run verify again."
+        )
     tier = payload.get("tier")
     scopes = payload.get("scopes")
     command = payload.get("command")
@@ -382,7 +400,7 @@ def require(
         or command not in expected_commands.get(str(tier), set())
     ):
         raise RuntimeError(
-            "Local evidence does not match: wrong candidate. Rerun verify."
+            "Local evidence does not match: wrong candidate. Run verify again."
         )
     evidence_freshness.require_fresh(
         payload["completed_at"],
@@ -394,9 +412,14 @@ def require(
         git("rev-parse", "HEAD") != head_sha
         or git("rev-parse", "HEAD^{tree}") != tree_sha
     ):
-        raise RuntimeError("Bad current worktree: HEAD moved. Rerun.")
+        raise RuntimeError(
+            "Bad current worktree: HEAD moved. Run verify on the new HEAD."
+        )
     if git("status", "--porcelain"):
-        raise RuntimeError("Worktree is dirty: needs a clean worktree. Commit.")
+        raise RuntimeError(
+            "Worktree is dirty: needs a clean worktree. "
+            "Commit or stash the changes."
+        )
     return payload
 
 

@@ -94,12 +94,12 @@ def split_front_matter(text: str) -> tuple[dict[str, Any], list[str]]:
     """Split TOML front matter from the Markdown body lines."""
     if not text.startswith("+++\n"):
         raise HandbookError(
-            f"{SOURCE} is invalid: no +++ front matter. Add it."
+            f"{SOURCE} is invalid: no +++ front matter. Start it with '+++'."
         )
     end = text.find("\n+++\n", 4)
     if end < 0:
         raise HandbookError(
-            f"{SOURCE} is invalid: front matter is open. Close it."
+            f"{SOURCE} is invalid: front matter is open. Add a closing '+++'."
         )
     meta = tomllib.loads(text[4 : end + 1])
     return meta, text[end + 5 :].splitlines()
@@ -138,7 +138,8 @@ def render_table(
     """Render a pipe table with the documented first-column flags."""
     if unknown := flags - _TABLE_FLAGS:
         raise HandbookError(
-            f"Unknown table flags: {sorted(unknown)}. Fix them."
+            f"Unknown table flags: {sorted(unknown)}. "
+            "Use flags in _TABLE_FLAGS."
         )
     stage = ' class="stage"'
     out = [_INDENT + open_tag("table", classes)]
@@ -146,7 +147,7 @@ def render_table(
     if "headless" not in flags:
         if len(rows) < 2 or not re.fullmatch(r"\|(\s*-+\s*\|)+", rows[1]):
             raise HandbookError(
-                f"Table {rows[0]} is invalid: no |---|. Add it."
+                f"Table {rows[0]} is invalid: no |---|. Add a '|---|' row."
             )
         th = [
             f"<th{stage if i == 0 and 'stage' in flags else ''}>"
@@ -182,7 +183,9 @@ def _section_lines(path: Path, heading: str) -> list[str]:
                 len(lines),
             )
             return lines[start + 1 : end]
-    raise HandbookError(f"{path.name}: heading not found: {heading}. Fix it.")
+    raise HandbookError(
+        f"{path.name}: heading not found: {heading}. Fix the directive."
+    )
 
 
 def _fence(path: Path, first: str) -> str:
@@ -192,7 +195,9 @@ def _fence(path: Path, first: str) -> str:
         if line.startswith("```") and lines[index + 1 : index + 2] == [first]:
             end = lines.index(line[:3], index + 1)
             return "\n".join(lines[index + 1 : end])
-    raise HandbookError(f"{path.name}: no fence starts with {first}. Fix it.")
+    raise HandbookError(
+        f"{path.name}: no fence starts with {first}. Fix the directive."
+    )
 
 
 def _issue_form(path: Path) -> str:
@@ -226,7 +231,7 @@ def _record(path: Path, heading: str) -> str:
     ]
     if len(rows) < 3 or rows[0][0] != "欄位":
         raise HandbookError(
-            f"{path.name}: {heading} has no field table. Add it."
+            f"{path.name}: {heading} has no field table. Fix the directive."
         )
     end = next(
         (i for i, row in enumerate(rows[2:], 2) if row[0] == "欄位"), len(rows)
@@ -243,7 +248,9 @@ def _checklist(path: Path, heading: str) -> str:
         if (match := re.match(r"\d+\. \*\*(.+?)\*\*", line))
     ]
     if not steps:
-        raise HandbookError(f"{path.name}: {heading} has no steps. Add them.")
+        raise HandbookError(
+            f"{path.name}: {heading} has no steps. Fix the directive."
+        )
     return "\n".join(f"- [ ] {step}" for step in steps)
 
 
@@ -259,7 +266,8 @@ def _conventions(root: Path) -> str:
     )
     if branch is None or title is None:
         raise HandbookError(
-            "Title rule is missing: no branch or PR rule. Fix it."
+            "Title rule is missing: no branch or PR rule. "
+            "Update _conventions()."
         )
     return "\n".join(
         [
@@ -376,7 +384,7 @@ def _report(root: Path) -> str:
             headings = ast.literal_eval(node.value)
             return "\n\n".join(f"## {name}\n\n<…>" for name in headings)
     raise HandbookError(
-        "Lifecycle report is missing: no SECTION_HEADINGS. Fix it."
+        "Lifecycle report is missing: no SECTION_HEADINGS. Update _report()."
     )
 
 
@@ -403,7 +411,8 @@ def render_format(root: Path, kind: str, argument: str) -> str:
         found = re.search(r"printf '(## Proposal[^']*)'", script)
         if found is None:
             raise HandbookError(
-                "Tracker body is missing: create-milestone lacks it. Fix it."
+                "Tracker body is missing: create-milestone lacks it. "
+                "Update the regex."
             )
         body = found.group(1).replace("\\n", "\n").rstrip()
         return body.replace(
@@ -418,7 +427,9 @@ def render_format(root: Path, kind: str, argument: str) -> str:
         "report": _report,
     }
     if kind not in generators:
-        raise HandbookError(f"Unknown format kind: {kind}. Fix the source.")
+        raise HandbookError(
+            f"Unknown format kind: {kind}. Use a kind render_format() knows."
+        )
     return generators[kind](root)
 
 
@@ -451,7 +462,10 @@ def render_body(  # noqa: C901
         stripped = line.strip()
         index += 1
         if pending is not None and (stripped.startswith(("<", "#", ":::"))):
-            raise HandbookError(f"Block spec has no block: {line}. Fix it.")
+            raise HandbookError(
+                f"Block spec has no block: {line}. "
+                "Put the block after the spec."
+            )
         if not stripped:
             continue
         if stripped.startswith("<!--"):
@@ -515,7 +529,8 @@ def render_body(  # noqa: C901
             for term, definition in zip(pairs[::2], pairs[1::2], strict=True):
                 if not definition.startswith(": "):
                     raise HandbookError(
-                        f"Bad definition {term}: no ': ' prefix. Add it."
+                        f"Bad definition {term}: no ': ' prefix. "
+                        "Start it with ': '."
                     )
                 out.append(
                     f"{_INDENT}  <dt>{_inline(term)}</dt>"
@@ -525,7 +540,7 @@ def render_body(  # noqa: C901
         else:
             if pending is not None:
                 raise HandbookError(
-                    f"Block spec precedes a paragraph: {line}. Fix it."
+                    f"Block spec precedes a paragraph: {line}. Remove the spec."
                 )
             tag, classes = "p", []
             if heading := _HEADING.match(stripped):
@@ -538,7 +553,9 @@ def render_body(  # noqa: C901
                 f"{_INDENT}{open_tag(tag, classes)}{_inline(stripped)}</{tag}>"
             )
     if pending is not None:
-        raise HandbookError("Block spec ends the source: no block. Remove it.")
+        raise HandbookError(
+            "Block spec ends the source: no block. Remove the last spec."
+        )
     return "\n".join(out), total, annexes
 
 

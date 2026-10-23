@@ -15,23 +15,23 @@ EOF
 }
 
 bad() {
-  echo "ERROR: Bad $1: $2. ${3:-Fix it}." >&2
+  echo "ERROR: Bad $1: $2. ${3:-Run with --help}." >&2
   exit 2
 }
 
 require_value() {
   local flag="$1"
   shift
-  (($#)) || bad "$flag" "no value" "Add one"
+  (($#)) || bad "$flag" "no value" "Pass a value after $flag"
 }
 
 validate_issue() {
-  [[ "$1" =~ ^[1-9][0-9]*$ ]] || bad --issue "not a positive integer"
+  [[ "$1" =~ ^[1-9][0-9]*$ ]] || bad --issue "not a positive integer" "Pass an Issue number such as 42"
 }
 
 validate_base() {
   git check-ref-format --branch "$1" >/dev/null 2>&1 ||
-    bad --base "not a branch name"
+    bad --base "not a branch name" "Pass a branch name such as main"
 }
 
 command="${1:-}"
@@ -72,14 +72,14 @@ while (($#)); do
 done
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
-  bad worktree "not in a Git worktree" "Run it in one"
+  bad worktree "not in a Git worktree" "Run it inside a Git worktree"
 common_dir="$(git rev-parse --git-common-dir)"
 if [[ "$common_dir" != /* ]]; then
   common_dir="$repo_root/$common_dir"
 fi
 queue_dir="$common_dir/csarc/finalization-queue"
 now="${CSARC_FINALIZATION_QUEUE_NOW:-$(date -u +%s)}"
-[[ "$now" =~ ^[0-9]+$ ]] || bad time "not an integer epoch"
+[[ "$now" =~ ^[0-9]+$ ]] || bad time "not an integer epoch" "Unset CSARC_FINALIZATION_QUEUE_NOW"
 
 active_records() {
   local filter_base="${1:-}"
@@ -139,16 +139,16 @@ show_status() {
 case "$command" in
   announce)
     [[ -n "$issue" && -n "$base" ]] ||
-      bad announce "--issue or --base is missing" "Add both"
+      bad announce "--issue or --base is missing" "Pass --issue <N> --base <branch>"
     validate_issue "$issue"
     validate_base "$base"
     [[ "$ttl_minutes" =~ ^[1-9][0-9]*$ ]] ||
-      bad --ttl-minutes "not a positive integer"
-    ((ttl_minutes <= 1440)) || bad --ttl-minutes "over 1440" "Lower it"
+      bad --ttl-minutes "not a positive integer" "Pass whole minutes such as 90"
+    ((ttl_minutes <= 1440)) || bad --ttl-minutes "over 1440" "Pass 1440 or fewer minutes"
     branch="$(git symbolic-ref --quiet --short HEAD)" ||
-      bad announce "HEAD is not a branch" "Check one out"
+      bad announce "HEAD is not a branch" "Run 'git switch <branch>'"
     [[ -z "$(git status --porcelain --untracked-files=all)" ]] ||
-      bad announce "it requires a clean worktree" "Commit changes"
+      bad announce "it requires a clean worktree" "Commit or stash changes"
     head="$(git rev-parse HEAD)"
     expires=$((now + ttl_minutes * 60))
     mkdir -p "$queue_dir"
@@ -164,13 +164,13 @@ case "$command" in
   status)
     [[ -z "$issue" ]] || validate_issue "$issue"
     [[ -z "$base" ]] || validate_base "$base"
-    [[ "$ttl_minutes" == 90 ]] || bad --ttl-minutes "only announce takes it" "Drop it"
+    [[ "$ttl_minutes" == 90 ]] || bad --ttl-minutes "only announce takes it" "Remove --ttl-minutes"
     show_status "$issue" "$base"
     ;;
   leave)
-    [[ -n "$issue" ]] || bad leave "--issue is missing" "Add it"
-    [[ -z "$base" ]] || bad --base "leave does not take it" "Drop it"
-    [[ "$ttl_minutes" == 90 ]] || bad --ttl-minutes "only announce takes it" "Drop it"
+    [[ -n "$issue" ]] || bad leave "--issue is missing" "Pass --issue <N>"
+    [[ -z "$base" ]] || bad --base "leave does not take it" "Remove --base"
+    [[ "$ttl_minutes" == 90 ]] || bad --ttl-minutes "only announce takes it" "Remove --ttl-minutes"
     validate_issue "$issue"
     rm -f "$queue_dir/$issue.tsv"
     echo "OK: Removed finalization intent for Issue #$issue."

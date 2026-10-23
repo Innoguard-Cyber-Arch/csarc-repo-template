@@ -70,7 +70,7 @@ for pair in "${paired_files[@]}"; do
   target_file="$repo_root/$target_name"
 
   if [[ ! -f "$source_file" ]]; then
-    echo "ERROR: Paired source is missing: no '$source_name'. Restore it." >&2
+    echo "ERROR: Paired source is missing: no '$source_name'. Run 'git restore $source_name'." >&2
     exit 1
   fi
 

@@ -102,18 +102,21 @@ def route_annotation_match(
     ]
     if len(matches) != 1:
         raise RuntimeError(
-            "Evidence: route annotation is missing or duplicate. Rerun."
+            "Evidence: route annotation is missing or duplicate. Rerun the "
+            "'verify' job."
         )
     annotation = matches[0]
     if annotation.get("annotation_level") != "notice" or not isinstance(
         annotation.get("message"), str
     ):
-        raise RuntimeError("Evidence: route annotation is malformed. Rerun.")
+        raise RuntimeError(
+            "Evidence: route annotation is malformed. Rerun the 'verify' job."
+        )
     try:
         claim = json.loads(annotation["message"])
     except (TypeError, json.JSONDecodeError) as error:
         raise RuntimeError(
-            "Evidence: route annotation is malformed. Rerun."
+            "Evidence: route annotation is malformed. Rerun the 'verify' job."
         ) from error
     fields = {
         "schema_version",
@@ -157,7 +160,9 @@ def route_annotation_match(
             for field in ("source_run", "source_job", "source_check")
         )
     ):
-        raise RuntimeError("Evidence: route annotation is malformed. Rerun.")
+        raise RuntimeError(
+            "Evidence: route annotation is malformed. Rerun the 'verify' job."
+        )
     prefix = (
         "Reuse trusted verification"
         if kind == "reuse"
@@ -175,7 +180,9 @@ def route_annotation_match(
     )
     match = (REUSE_STEP if kind == "reuse" else SYNC_STEP).fullmatch(rendered)
     if match is None:
-        raise RuntimeError("Evidence: route annotation is malformed. Rerun.")
+        raise RuntimeError(
+            "Evidence: route annotation is malformed. Rerun the 'verify' job."
+        )
     return match
 
 
@@ -210,7 +217,8 @@ def evidence_match(
         != 1
     ):
         raise RuntimeError(
-            "Evidence: need one execution, reuse, or sync step. Rerun."
+            "Evidence: need one execution, reuse, or sync step. Rerun the "
+            "'verify' job."
         )
     if fixed_reuse:
         return "reuse", route_annotation_match(annotations, "reuse")
@@ -232,20 +240,28 @@ def evidence_match(
     )
     match = pattern.fullmatch(name)
     if match is None:
-        raise RuntimeError("Evidence: route evidence is malformed. Rerun.")
+        raise RuntimeError(
+            "Evidence: route evidence is malformed. Rerun the 'verify' job."
+        )
     return kind, match
 
 
 def parse_github_time(value: object, field: str) -> datetime:
     """Parse one required GitHub UTC timestamp."""
     if not isinstance(value, str) or not value:
-        raise RuntimeError(f"Evidence: {field} is missing. Rerun.")
+        raise RuntimeError(
+            f"Evidence: {field} is missing. Rerun the 'verify' job."
+        )
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as error:
-        raise RuntimeError(f"Evidence: {field} is malformed. Rerun.") from error
+        raise RuntimeError(
+            f"Evidence: {field} is malformed. Rerun the 'verify' job."
+        ) from error
     if parsed.tzinfo is None:
-        raise RuntimeError(f"Evidence: {field} has no timezone. Rerun.")
+        raise RuntimeError(
+            f"Evidence: {field} has no timezone. Rerun the 'verify' job."
+        )
     return parsed.astimezone(UTC)
 
 
@@ -253,15 +269,20 @@ def successful_steps(job: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Return uniquely named successful steps from one completed job."""
     steps = job.get("steps")
     if not isinstance(steps, list) or not steps:
-        raise RuntimeError("Evidence: job has no step evidence. Rerun.")
+        raise RuntimeError(
+            "Evidence: job has no step evidence. Rerun the 'verify' job."
+        )
     result: dict[str, dict[str, Any]] = {}
     for item in steps:
         if not isinstance(item, dict):
-            raise RuntimeError("Evidence: job has a malformed step. Rerun.")
+            raise RuntimeError(
+                "Evidence: job has a malformed step. Rerun the 'verify' job."
+            )
         name = item.get("name")
         if not isinstance(name, str) or not name or name in result:
             raise RuntimeError(
-                "Evidence: duplicate or malformed step names. Rerun."
+                "Evidence: duplicate or malformed step names. Rerun the "
+                "'verify' job."
             )
         if (
             item.get("status") == "completed"
@@ -322,7 +343,9 @@ def validate_verification_job(  # noqa: C901
         re.fullmatch(r"[0-9a-f]{40}", head_sha) is None
         or re.fullmatch(r"[0-9a-f]{40}", tree_sha) is None
     ):
-        raise RuntimeError("Evidence: commit identity is malformed. Rerun.")
+        raise RuntimeError(
+            "Evidence: commit identity is malformed. Rerun the 'verify' job."
+        )
     repository = workflow_run.get("repository")
     if (
         check_run.get("head_sha") != head_sha
@@ -332,7 +355,8 @@ def validate_verification_job(  # noqa: C901
         or repository.get("full_name") != repo
     ):
         raise RuntimeError(
-            "Evidence: repository or exact head does not match. Rerun."
+            "Evidence: repository or exact head does not match. Rerun the "
+            "'verify' job."
         )
     run_id = workflow_run.get("id")
     check_id = check_run.get("id")
@@ -345,7 +369,9 @@ def validate_verification_job(  # noqa: C901
         or job.get("id") != check_id
         or job.get("run_attempt") != workflow_run.get("run_attempt")
     ):
-        raise RuntimeError("Evidence: run identity does not match. Rerun.")
+        raise RuntimeError(
+            "Evidence: run identity does not match. Rerun the 'verify' job."
+        )
     if (
         check_run.get("status") != "completed"
         or check_run.get("conclusion") != "success"
@@ -355,12 +381,15 @@ def validate_verification_job(  # noqa: C901
         or job.get("conclusion") != "success"
     ):
         raise RuntimeError(
-            "Evidence: run did not complete successfully. Rerun."
+            "Evidence: run did not complete successfully. Rerun the 'verify' "
+            "job."
         )
     if job.get("name") != "verify" or job.get("html_url") != check_run.get(
         "details_url"
     ):
-        raise RuntimeError("Evidence: job identity does not match. Rerun.")
+        raise RuntimeError(
+            "Evidence: job identity does not match. Rerun the 'verify' job."
+        )
     labels = job.get("labels")
     if (
         not isinstance(labels, list)
@@ -369,9 +398,13 @@ def validate_verification_job(  # noqa: C901
         or job["runner_id"] <= 0
         or job.get("runner_group_name") != "GitHub Actions"
     ):
-        raise RuntimeError("Evidence: runner is not ubuntu-latest. Rerun.")
+        raise RuntimeError(
+            "Evidence: runner is not ubuntu-latest. Rerun the 'verify' job."
+        )
     if "self-hosted" in labels:
-        raise RuntimeError("Evidence: untrusted runner. Rerun.")
+        raise RuntimeError(
+            "Evidence: untrusted runner. Rerun the 'verify' job."
+        )
 
     completed_at = parse_github_time(job.get("completed_at"), "completion time")
     evidence_freshness.require_fresh(
@@ -387,7 +420,7 @@ def validate_verification_job(  # noqa: C901
         raise RuntimeError(
             "Evidence: toolchain or routing steps failed: "
             + ", ".join(missing_steps)
-            + ". Rerun."
+            + ". Rerun the 'verify' job."
         )
     kind, match = evidence_match(job, annotations)
     reuse = kind == "reuse"
@@ -397,7 +430,9 @@ def validate_verification_job(  # noqa: C901
     )
     scopes = raw_scopes.split(",")
     if required_tier is not None and required_tier not in VALID_TIERS:
-        raise RuntimeError("Evidence: required tier is invalid. Rerun.")
+        raise RuntimeError(
+            "Evidence: required tier is invalid. Rerun the 'verify' job."
+        )
     if (
         tier not in VALID_TIERS
         or scopes != sorted(set(scopes))
@@ -406,12 +441,17 @@ def validate_verification_job(  # noqa: C901
         != command
     ):
         raise RuntimeError(
-            "Evidence: tier, scopes, or command is invalid. Rerun."
+            "Evidence: tier, scopes, or command is invalid. Rerun the "
+            "'verify' job."
         )
     if required_tier is not None and TIER_RANK[tier] < TIER_RANK[required_tier]:
-        raise RuntimeError("Evidence: tier is insufficient. Rerun.")
+        raise RuntimeError(
+            "Evidence: tier is insufficient. Rerun the 'verify' job."
+        )
     if claimed_tree != tree_sha:
-        raise RuntimeError("Evidence: tree does not match the commit. Rerun.")
+        raise RuntimeError(
+            "Evidence: tree does not match the commit. Rerun the 'verify' job."
+        )
     common: dict[str, object] = {
         "check_run_id": check_run.get("id"),
         "run_id": run_id,
@@ -430,7 +470,8 @@ def validate_verification_job(  # noqa: C901
     if reuse or sync:
         if source_evidence is None:
             raise RuntimeError(
-                "Evidence: reuse has no direct execution source. Rerun."
+                "Evidence: reuse has no direct execution source. Rerun the "
+                "'verify' job."
             )
         offset = 8 if reuse else 9
         source_run_id, source_job_id, source_check_id = map(
@@ -443,14 +484,16 @@ def validate_verification_job(  # noqa: C901
             or source_check.get("id") != source_check_id
         ):
             raise RuntimeError(
-                "Evidence: reuse source identity does not match. Rerun."
+                "Evidence: reuse source identity does not match. Rerun the "
+                "'verify' job."
             )
         if (
             needs_route_annotations(source_job)
             or evidence_source_ids(source_job) is not None
         ):
             raise RuntimeError(
-                "Evidence: reuse has no direct execution source. Rerun."
+                "Evidence: reuse has no direct execution source. Rerun the "
+                "'verify' job."
             )
         source = validate_verification_job(
             source_check,
@@ -481,7 +524,8 @@ def validate_verification_job(  # noqa: C901
             )
         ):
             raise RuntimeError(
-                "Evidence: reuse route does not match its source. Rerun."
+                "Evidence: reuse route does not match its source. Rerun the "
+                "'verify' job."
             )
         if (
             sync
@@ -492,7 +536,8 @@ def validate_verification_job(  # noqa: C901
             )
         ):
             raise RuntimeError(
-                "Evidence: sync main does not match its source. Rerun."
+                "Evidence: sync main does not match its source. Rerun the "
+                "'verify' job."
             )
         return {
             **common,
@@ -519,7 +564,9 @@ def validate_verification_job(  # noqa: C901
             and set(successful_toolchain) != expected_toolchain
         )
     ):
-        raise RuntimeError("Evidence: invalid toolchain evidence. Rerun.")
+        raise RuntimeError(
+            "Evidence: invalid toolchain evidence. Rerun the 'verify' job."
+        )
     return {
         **common,
         "executor": match.group(9) or EXECUTOR_LEGACY,

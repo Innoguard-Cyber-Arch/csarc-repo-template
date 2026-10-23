@@ -105,7 +105,7 @@ def parse_version(text: str) -> ParsedVersion:
     if match is None:
         raise ReleasePhaseError(
             f"invalid release version {text!r}: expected X.Y.Z or "
-            "X.Y.Z-beta.N. Fix it."
+            "X.Y.Z-beta.N. Use one of those forms."
         )
     phase = match.group("phase")
     n = match.group("n")
@@ -134,14 +134,17 @@ def format_version(
     if phase is None:
         if n is not None:
             raise ReleasePhaseError(
-                "stable version has pre-release N: no phase. Drop N."
+                "stable version has pre-release N: no phase. "
+                "Remove the '.N' suffix."
             )
         return f"{major}.{minor}.{patch}"
     if phase not in PRERELEASE_PHASES:
-        raise ReleasePhaseError(f"bad pre-release phase: {phase!r}. Use beta.")
+        raise ReleasePhaseError(
+            f"bad pre-release phase: {phase!r}. Use '-beta.N'."
+        )
     if not isinstance(n, int) or n < 1:
         raise ReleasePhaseError(
-            "pre-release number is invalid: N must be positive. Fix it."
+            "pre-release number is invalid: N must be positive. Use N >= 1."
         )
     return f"{major}.{minor}.{patch}-{phase}.{n}"
 
@@ -193,7 +196,7 @@ def parse_pep440(text: str) -> ParsedVersion:
     if match is None:
         raise ReleasePhaseError(
             f"invalid PEP 440 version {text!r}: expected X.Y.Z or "
-            "X.Y.Zb1. Fix it."
+            "X.Y.Zb1. Use one of those forms."
         )
     letter = match.group("letter")
     n = match.group("n")
@@ -234,34 +237,35 @@ def validate_declared_phase(
         raise ReleasePhaseError(
             f"unknown release phase {declared_phase!r}: expected one of "
             + ", ".join(PHASES)
-            + ". Fix it."
+            + ". Declare one of them."
         )
     parsed = parse_version(version)
     if maturity is not None and maturity not in MATURITIES:
         raise ReleasePhaseError(
             f"unknown project maturity {maturity!r}: expected one of "
             + ", ".join(MATURITIES)
-            + ". Fix it."
+            + ". Declare one of them."
         )
     if declared_phase == "beta":
         if parsed.phase != "beta":
             raise ReleasePhaseError(
-                f"{version} lacks the beta suffix: beta is declared. Add it."
+                f"{version} lacks the beta suffix: beta is declared. "
+                "Add '-beta.N'."
             )
     elif parsed.phase is not None:
         raise ReleasePhaseError(
             f"{version} carries a {parsed.phase} suffix: {declared_phase} "
-            "releases must be unsuffixed. Drop it."
+            "releases must be unsuffixed. Remove the suffix."
         )
     if maturity == "early" and parsed.major != 0:
         raise ReleasePhaseError(
             f"{version} has major version {parsed.major}: an early release "
-            "requires major version 0. Fix it."
+            "requires major version 0. Use '0.Y.Z'."
         )
     if maturity == "formal" and parsed.major == 0:
         raise ReleasePhaseError(
             f"{version} has major version 0: a formal release requires "
-            "major version >= 1. Fix it."
+            "major version >= 1. Use '1.0.0' or later."
         )
     return parsed
 
@@ -316,7 +320,8 @@ def phase_version(
     parsed_core = parse_version(core_version)
     if parsed_core.phase is not None:
         raise ReleasePhaseError(
-            f"{core_version} is not plain X.Y.Z: it has a suffix. Drop it."
+            f"{core_version} is not plain X.Y.Z: it has a suffix. "
+            "Remove the suffix."
         )
     if phase in PRERELEASE_PHASES:
         n = next_prerelease_n(
@@ -352,7 +357,9 @@ def select_latest(
 ) -> str | None:
     """Return the latest readable version, optionally within one channel."""
     if channel not in {None, *PHASES}:
-        raise ReleasePhaseError(f"bad release channel: {channel!r}. Fix it.")
+        raise ReleasePhaseError(
+            f"bad release channel: {channel!r}. Use 'beta' or 'stable'."
+        )
     readable = []
     for raw in versions:
         try:

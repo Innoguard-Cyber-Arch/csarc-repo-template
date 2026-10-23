@@ -6,15 +6,15 @@ author="${PR_AUTHOR:?PR_AUTHOR is required}"
 pr_number="${PR_NUMBER:?PR_NUMBER is required}"
 
 if [[ ! "$pr_number" =~ ^[1-9][0-9]*$ ]]; then
-  echo "ERROR: Bad PR_NUMBER: it must be a positive integer. Fix it." >&2
+  echo "ERROR: Bad PR_NUMBER: it must be a positive integer. Set it to the pull request number." >&2
   exit 2
 fi
 if [[ ! "$author" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}(\[bot\])?$ ]]; then
-  echo "ERROR: Bad PR_AUTHOR: it must be a GitHub login without @. Fix it." >&2
+  echo "ERROR: Bad PR_AUTHOR: it must be a GitHub login without @. Set it to the author login." >&2
   exit 2
 fi
 command -v gh >/dev/null || {
-  echo "ERROR: No gh: GitHub CLI is missing. Install it." >&2
+  echo "ERROR: No gh: GitHub CLI is missing. Install it from 'https://cli.github.com/'." >&2
   exit 1
 }
 skip() {
@@ -34,7 +34,7 @@ eligible_reviewers=()
 while IFS= read -r reviewer; do
   [[ -z "$reviewer" ]] && continue
   if [[ ! "$reviewer" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}$ ]]; then
-    echo "ERROR: Bad login '$reviewer': GitHub returned it. Retry." >&2
+    echo "ERROR: Bad login '$reviewer': GitHub returned it. Rerun the 'request reviewer' job." >&2
     exit 1
   fi
   reviewer_folded="$(printf '%s' "$reviewer" | tr '[:upper:]' '[:lower:]')"

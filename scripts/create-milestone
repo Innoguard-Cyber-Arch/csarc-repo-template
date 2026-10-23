@@ -137,15 +137,15 @@ if [[ "$issue_type" != "Feature" ]]; then
   exit 2
 fi
 if [[ -n "$description_file" && ! -f "$description_file" ]]; then
-  echo "ERROR: Description is missing: --description-file does not exist: '$description_file'. Fix the path." >&2
+  echo "ERROR: Description is missing: --description-file does not exist: '$description_file'. Pass an existing file to --description-file." >&2
   exit 2
 fi
 command -v gh >/dev/null || {
-  echo "ERROR: GitHub CLI is missing: gh is not on PATH. Install it." >&2
+  echo "ERROR: GitHub CLI is missing: gh is not on PATH. Install it from 'https://cli.github.com/'." >&2
   exit 1
 }
 command -v python3 >/dev/null || {
-  echo "ERROR: Python is missing: the preflight check needs python3. Install it." >&2
+  echo "ERROR: Python is missing: the preflight check needs python3. Install Python 3.12 or later." >&2
   exit 1
 }
 
@@ -159,7 +159,7 @@ milestone_number="$(
     --jq '.number'
 )"
 if [[ -z "$milestone_number" ]]; then
-  echo "ERROR: Milestone creation failed: GitHub returned no Milestone number, and nothing else was created. Retry." >&2
+  echo "ERROR: Milestone creation failed: GitHub returned no Milestone number, and nothing else was created. Run 'gh auth status', then run this command again." >&2
   exit 1
 fi
 echo "OK: Created Milestone #$milestone_number."

@@ -14,7 +14,7 @@ case "$check_exit" in
     ;;
   2) ;;
   *)
-    echo "ERROR: Update check failed: copier exited $check_exit. Retry." >&2
+    echo "ERROR: Update check failed: copier exited $check_exit. Run 'copier check-update' to see why." >&2
     exit "$check_exit"
     ;;
 esac

@@ -97,7 +97,7 @@ label=""
 
 if [[ -n "$input_file" ]]; then
   if [[ ! -f "$input_file" ]]; then
-    echo "ERROR: Input is missing: no such file '$input_file'. Fix --input." >&2
+    echo "ERROR: Input is missing: no such file '$input_file'. Pass an existing file to --input." >&2
     exit 2
   fi
   records_json="$(cat "$input_file")"

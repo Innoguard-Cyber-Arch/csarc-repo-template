@@ -98,7 +98,8 @@ def gh_json(
         return json.loads(result.stdout)
     except json.JSONDecodeError as error:
         raise MigrationError(
-            "GitHub response is invalid: it is not JSON. Retry."
+            "GitHub response is invalid: it is not JSON. "
+            "Run 'gh auth status', then run the migration again."
         ) from error
 
 
@@ -208,7 +209,10 @@ def _release_json(
     if payload is None:
         return None
     if not isinstance(payload, dict):
-        raise MigrationError(f"{tag}: Release response is invalid. Retry.")
+        raise MigrationError(
+            f"{tag}: Release response is invalid. "
+            "Run 'gh auth status', then run the migration again."
+        )
     return payload
 
 
@@ -242,7 +246,8 @@ def _verify_assets(
         repository.get("id"), int
     ):
         raise MigrationError(
-            "GitHub repository identity is invalid: bad response. Retry."
+            "GitHub repository identity is invalid: bad response. "
+            "Run 'gh auth status', then run the migration again."
         )
     repository_id = repository["id"]
     verification = gh_json(
@@ -642,10 +647,14 @@ def delete_sources(
         )
         if _release_json(repo, item.source_tag, root, run=run) is not None:
             raise MigrationError(
-                f"{item.source_tag}: Release still exists. Retry."
+                f"{item.source_tag}: Release still exists. "
+                "Delete it, then run the migration again."
             )
         if _tag_commit(repo, item.source_tag, root, run=run) is not None:
-            raise MigrationError(f"{item.source_tag}: tag still exists. Retry.")
+            raise MigrationError(
+                f"{item.source_tag}: tag still exists. "
+                "Delete the tag, then run the migration again."
+            )
 
 
 def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
@@ -673,12 +682,13 @@ def main(arguments: list[str] | None = None) -> int:
             return 0
         if args.plan is None:
             raise MigrationError(
-                "Plan is missing: '--plan' is required. Pass it."
+                "Plan is missing: '--plan' is required. Pass '--plan <file>'."
             )
         payload = json.loads(args.plan.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
             raise MigrationError(
-                "Migration plan is invalid: it is not a JSON object. Fix it."
+                "Migration plan is invalid: it is not a JSON object. "
+                "Pass the JSON file that 'plan' wrote."
             )
         if args.action == "apply":
             apply_plan(args.repo, root, payload)

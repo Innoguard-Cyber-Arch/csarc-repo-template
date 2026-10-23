@@ -246,7 +246,8 @@ def _run_gh_graphql(variables: dict[str, str], retries: int) -> JsonObject:
     executable = shutil.which("gh")
     if executable is None:
         raise AuditTrailError(
-            "GitHub CLI (gh) is required: not found. Install it."
+            "GitHub CLI (gh) is required: not found. "
+            "Install it from cli.github.com."
         )
     arguments = [executable, "api", "graphql", "-f", f"query={GRAPHQL_QUERY}"]
     for name, value in variables.items():
@@ -265,7 +266,8 @@ def _run_gh_graphql(variables: dict[str, str], retries: int) -> JsonObject:
                 return json.loads(completed.stdout)
             except json.JSONDecodeError as error:
                 raise AuditTrailError(
-                    "GraphQL failed: invalid JSON. Retry."
+                    "GraphQL failed: invalid JSON. "
+                    "Run 'gh auth status', then run it again."
                 ) from error
         failure = completed.stderr.strip()
     raise AuditTrailError(failure or "gh api graphql failed")
@@ -293,7 +295,8 @@ def fetch_pull_request_nodes(
         search = payload.get("data", {}).get("search")
         if not isinstance(search, dict):
             raise AuditTrailError(
-                "GraphQL failed: no search connection. Retry."
+                "GraphQL failed: no search connection. "
+                "Run 'gh auth status', then run it again."
             )
         nodes.extend(search.get("nodes", []))
         page_info = search.get("pageInfo", {})
@@ -311,7 +314,7 @@ def load_fixture_nodes(path: Path) -> list[JsonObject]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, list):
         raise AuditTrailError(
-            "Fixture is invalid: not a JSON array of PRs. Fix it."
+            "Fixture is invalid: not a JSON array of PRs. Write a JSON array."
         )
     return data
 
@@ -463,7 +466,8 @@ def _default_repo() -> str:
     executable = shutil.which("gh")
     if executable is None:
         raise AuditTrailError(
-            "GitHub CLI (gh) is required: not found. Install it."
+            "GitHub CLI (gh) is required: not found. "
+            "Install it from cli.github.com."
         )
     completed = subprocess.run(  # noqa: S603
         [

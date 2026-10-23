@@ -144,22 +144,29 @@ def parse_settings_text(text: str, path: Path) -> dict[str, object]:
             continue
         if raw_line.startswith("- "):
             if active_key is None:
-                raise ValueError(f"Bad item in {path}: '{raw_line}'. Fix it.")
+                raise ValueError(
+                    f"Bad item in {path}: '{raw_line}'. Put it under 'key:'."
+                )
             active_list = result[active_key]
             if not isinstance(active_list, list):
-                raise ValueError(f"Bad item in {path}: '{raw_line}'. Fix it.")
+                raise ValueError(
+                    f"Bad item in {path}: '{raw_line}'. Put it under 'key:'."
+                )
             active_list.append(_scalar(raw_line[2:].strip()))
             continue
         if raw_line[0].isspace():
             if active_key is None or not isinstance(result[active_key], str):
                 raise ValueError(
-                    f"Bad indentation in {path}: '{raw_line}'. Fix it."
+                    f"Bad indentation in {path}: '{raw_line}'. "
+                    "Unindent the line."
                 )
             result[active_key] = f"{result[active_key]} {raw_line.strip()}"
             continue
         key, separator, raw_value = raw_line.partition(":")
         if not separator or not key:
-            raise ValueError(f"Bad setting in {path}: '{raw_line}'. Fix it.")
+            raise ValueError(
+                f"Bad setting in {path}: '{raw_line}'. Use 'key: value'."
+            )
         raw_value = raw_value.strip()
         result[key] = _scalar(raw_value) if raw_value else []
         active_key = key
@@ -452,7 +459,9 @@ def _repository_facts() -> ModuleType:
     path = Path(__file__).with_name("repository_facts.py")
     spec = importlib.util.spec_from_file_location("repository_facts", path)
     if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot load {path}: no spec. Restore it.")
+        raise ImportError(
+            f"Cannot load {path}: no spec. Run 'git restore' on it."
+        )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

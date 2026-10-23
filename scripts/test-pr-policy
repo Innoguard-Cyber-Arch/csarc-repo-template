@@ -1460,7 +1460,7 @@ while IFS='|' read -r scenario expected; do
     result=fail
   fi
   if [[ "$result" != "$expected" ]]; then
-    echo "ERROR: Requirement trace regression: scenario $scenario should $expected but did $result. Fix the trace check." >&2
+    echo "ERROR: Requirement trace regression: scenario $scenario should $expected but did $result. Fix the requirement trace in 'risk_controls.py'." >&2
     exit 1
   fi
 done <<'CASES'
@@ -1479,7 +1479,7 @@ CASES
 case_count=$((case_count + 1))
 trace_fixture no-section
 if ! PR_DRAFT=true trace_case; then
-  echo "ERROR: Requirement trace regression: it blocked a Draft pull request. Fix the trace check." >&2
+  echo "ERROR: Requirement trace regression: it blocked a Draft pull request. Fix the requirement trace in 'risk_controls.py'." >&2
   exit 1
 fi
 case_count=$((case_count + 1))
@@ -1493,7 +1493,7 @@ trace_output="$(
     PR_ISSUE_TITLE="Add verified report workflow" "$validator" 2>&1
 )"
 if [[ "$trace_output" != *"requirement-trace: #42 self-accepted: R1(high)"* ]]; then
-  echo "ERROR: Requirement trace regression: it did not list the self-accepted high risk. Fix the trace check." >&2
+  echo "ERROR: Requirement trace regression: it did not list the self-accepted high risk. Fix the requirement trace in 'risk_controls.py'." >&2
   exit 1
 fi
 

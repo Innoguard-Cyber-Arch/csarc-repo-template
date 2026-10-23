@@ -174,7 +174,7 @@ run_check() {
 case_count=$((case_count + 1))
 run_check
 if [[ "$status" != 0 ]]; then
-  echo "ERROR: Self-test failed: check exited $status on a fully matching fixture. See below." >&2
+  echo "ERROR: Self-test failed: check exited $status on a fully matching fixture. Fix apply-repository-settings.sh using the output below." >&2
   printf '%s\n' "$output" >&2
   exit 1
 fi
@@ -233,7 +233,7 @@ case_count=$((case_count + 1))
 LIVE_SECRET_SCANNING="disabled" LIVE_PUSH_PROTECTION="disabled" \
   LIVE_DEPENDABOT_SECURITY="disabled" run_check
 if [[ "$status" != 0 ]]; then
-  echo "ERROR: Self-test failed: check exited $status on an all-disabled DEGRADED security_and_analysis fixture. See below." >&2
+  echo "ERROR: Self-test failed: check exited $status on an all-disabled DEGRADED security_and_analysis fixture. Fix apply-repository-settings.sh using the output below." >&2
   printf '%s\n' "$output" >&2
   exit 1
 fi
@@ -284,7 +284,7 @@ printf '* @outside-user\n' >"$personal_root/.github/CODEOWNERS"
 status=0
 output="$(PATH="$fixture_root/bin:$PATH" GH_REPO="$test_repo" USER_PERMISSION=write "$personal_root/scripts/apply-repository-settings.sh" plan 2>&1)" || status=$?
 if [[ "$status" != 0 ]]; then
-  echo "ERROR: Self-test failed: plan rejected a personal CODEOWNER with write access. See below." >&2
+  echo "ERROR: Self-test failed: plan rejected a personal CODEOWNER with write access. Fix apply-repository-settings.sh using the output below." >&2
   printf '%s\n' "$output" >&2
   exit 1
 fi
@@ -343,7 +343,7 @@ expect_owner() {
   make_owner_root "$root" "$codeowners"
   run_owner_plan "$root" GH_REPO="$repo" STUB_REPO="$repo" STUB_OWNER="$owner" USER_PERMISSION=write
   if [[ "$expected" == accept && "$status" != 0 ]]; then
-    echo "ERROR: Self-test failed: plan rejected the legal owner '${codeowners:-<empty>}' for '$repo'. See below." >&2
+    echo "ERROR: Self-test failed: plan rejected the legal owner '${codeowners:-<empty>}' for '$repo'. Fix apply-repository-settings.sh using the output below." >&2
     printf '%s\n' "$output" >&2
     exit 1
   fi

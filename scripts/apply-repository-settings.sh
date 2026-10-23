@@ -89,7 +89,7 @@ policy_config_value() {
   fi
   value="$(python3 "$config_reader" "$key")" || return 1
   if [[ -z "$value" ]]; then
-    echo "ERROR: Cannot read '$key': it is empty in .csarc/config.yml. Set it." >&2
+    echo "ERROR: Cannot read '$key': it is empty in .csarc/config.yml. Set '$key' there." >&2
     return 1
   fi
   printf '%s' "$value"
@@ -121,7 +121,7 @@ fi
 
 # Report a failed gh call and its output on standard error.
 gh_error() {
-  echo "ERROR: Cannot $1 for '$repo': gh failed. See below." >&2
+  echo "ERROR: Cannot $1 for '$repo': gh failed. Run 'gh auth status', then fix the gh error below." >&2
   echo "$2" >&2
 }
 if ! repo_context="$({
@@ -133,7 +133,7 @@ if ! repo_context="$({
 fi
 IFS=$'\t' read -r owner owner_type repo_visibility repo_admin default_branch <<<"$repo_context"
 if [[ "$mode" != "check" && "$repo_admin" != "true" ]]; then
-  echo "ERROR: Cannot apply settings: administrator permission is missing. Ask an administrator." >&2
+  echo "ERROR: Cannot apply settings: administrator permission is missing. Ask a repository admin to run '$0 $mode'." >&2
   exit 1
 fi
 
@@ -235,7 +235,7 @@ fi
 
 if [[ "$mode" != "check" ]]; then
   if [[ -n "$codeowners_validation" ]]; then
-    echo "ERROR: CODEOWNERS validation failed: $codeowners_validation Fix the owner. Rerun." >&2
+    echo "ERROR: CODEOWNERS validation failed: $codeowners_validation Fix .github/CODEOWNERS. Then run '$0 $mode' again." >&2
     exit 1
   fi
   if [[ "$codeowners_inspection_available" != true ]]; then
@@ -458,12 +458,12 @@ if [[ "$mode" == "check" ]]; then
   repository_state_available=false
 
   if [[ "$policy_branch_ruleset" == "true" && "$legacy_ruleset_id" != "-" ]]; then
-    echo "ERROR: Stale Ruleset '$legacy_ruleset_name' ($legacy_ruleset_id) exists: policy retired it. Run 'apply'." >&2
+    echo "ERROR: Stale Ruleset '$legacy_ruleset_name' ($legacy_ruleset_id) exists: policy retired it. Run '$0 apply'." >&2
     check_errors=$((check_errors + 1))
   fi
 
   if [[ -n "$codeowners_validation" ]]; then
-    echo "ERROR: CODEOWNERS validation failed: $codeowners_validation Fix the owner. Rerun." >&2
+    echo "ERROR: CODEOWNERS validation failed: $codeowners_validation Fix .github/CODEOWNERS. Then run '$0 $mode' again." >&2
     check_errors=$((check_errors + 1))
   elif [[ "$codeowners_inspection_available" != true ]]; then
     if [[ "$repo_admin" == "true" ]]; then
@@ -500,7 +500,7 @@ if drift:
     raise SystemExit("; ".join(drift))
 PY
     )"; then
-      echo "ERROR: Repository settings drift: $repository_drift. Run 'apply'." >&2
+      echo "ERROR: Repository settings drift: $repository_drift. Run '$0 apply'." >&2
       check_errors=$((check_errors + 1))
     fi
   fi
@@ -516,7 +516,7 @@ PY
     )"
     if [[ -n "$repository_missing" ]]; then
       if [[ "$repo_admin" == "true" ]]; then
-        echo "ERROR: Cannot observe fields '$repository_missing': GitHub hid them from an admin. Check the token." >&2
+        echo "ERROR: Cannot observe fields '$repository_missing': GitHub hid them from an admin. Run 'gh auth status' and use a token with the 'repo' scope." >&2
         check_errors=$((check_errors + 1))
       else
         degraded "Settings inspection" "The token cannot read administrator-only repository fields." \
@@ -533,7 +533,7 @@ PY
     gh_error "inspect issue creation policy" "$issue_creation_policy_error"
     check_errors=$((check_errors + 1))
   elif [[ "$issue_creation_policy_live" != "$desired_issue_creation_policy" ]]; then
-    echo "ERROR: Issue creation policy drift: desired $desired_issue_creation_policy, live $issue_creation_policy_live. Run 'apply'." >&2
+    echo "ERROR: Issue creation policy drift: desired $desired_issue_creation_policy, live $issue_creation_policy_live. Run '$0 apply'." >&2
     check_errors=$((check_errors + 1))
   else
     echo "OK: Issue creation policy matches policies/issue-creation.json."
@@ -567,7 +567,7 @@ for field, expected in desired.items():
         print(f"DRIFT|{field}|{observed}")
 PY
   )"; then
-    echo "ERROR: Cannot compare security_and_analysis for '$repo': comparison failed. See below." >&2
+    echo "ERROR: Cannot compare security_and_analysis for '$repo': comparison failed. Fix the Python error below, then run '$0 check' again." >&2
     echo "$security_and_analysis_status" >&2
     check_errors=$((check_errors + 1))
   else
@@ -583,7 +583,7 @@ PY
           check_degraded=$((check_degraded + 1))
           ;;
         DRIFT)
-          echo "ERROR: security_and_analysis drift: $security_field_name desired enabled, live ${security_field_value:-unknown}. Run 'apply'." >&2
+          echo "ERROR: security_and_analysis drift: $security_field_name desired enabled, live ${security_field_value:-unknown}. Run '$0 apply'." >&2
           check_errors=$((check_errors + 1))
           ;;
       esac
@@ -614,7 +614,7 @@ if actual.get("enabled") is not desired["enabled"]:
     )
 PY
   )"; then
-    echo "ERROR: Release settings drift: $release_drift; releases need immutable Releases. Run 'apply'." >&2
+    echo "ERROR: Release settings drift: $release_drift; releases need immutable Releases. Run '$0 apply'." >&2
     check_errors=$((check_errors + 1))
   else
     echo "OK: Immutable Releases match policies/releases.json."
@@ -636,15 +636,15 @@ PY
       check_degraded=$((check_degraded + 1))
       ;;
     enable)
-      echo "ERROR: Pages settings drift: GitHub Pages is not enabled for $repo; policies/pages.json requests enabled=true. Run 'apply'." >&2
+      echo "ERROR: Pages settings drift: GitHub Pages is not enabled for $repo; policies/pages.json requests enabled=true. Run '$0 apply'." >&2
       check_errors=$((check_errors + 1))
       ;;
     update)
-      echo "ERROR: Pages settings drift: $pages_drift. Run 'apply'." >&2
+      echo "ERROR: Pages settings drift: $pages_drift. Run '$0 apply'." >&2
       check_errors=$((check_errors + 1))
       ;;
     disable)
-      echo "ERROR: Pages settings drift: GitHub Pages is published for $repo; policies/pages.json requests enabled=false (explicit opt-out). Run 'apply'." >&2
+      echo "ERROR: Pages settings drift: GitHub Pages is published for $repo; policies/pages.json requests enabled=false (explicit opt-out). Run '$0 apply'." >&2
       check_errors=$((check_errors + 1))
       ;;
     *)
@@ -681,18 +681,18 @@ print(
 )
 PY
   )"; then
-    echo "ERROR: Cannot compare Actions workflow permissions for '$repo': comparison failed. See below." >&2
+    echo "ERROR: Cannot compare Actions workflow permissions for '$repo': comparison failed. Fix the Python error below, then run '$0 check' again." >&2
     echo "$actions_comparison" >&2
     check_errors=$((check_errors + 1))
   else
     IFS='|' read -r actions_default_drift actions_pr_degraded actions_pr_drift \
       <<<"$actions_comparison"
     if [[ "$actions_default_drift" == "true" ]]; then
-      echo "ERROR: Actions settings drift: default_workflow_permissions differs from policies/actions.json. Run 'apply'." >&2
+      echo "ERROR: Actions settings drift: default_workflow_permissions differs from policies/actions.json. Run '$0 apply'." >&2
       check_errors=$((check_errors + 1))
     fi
     if [[ "$actions_pr_drift" == "true" ]]; then
-      echo "ERROR: Actions settings drift: can_approve_pull_request_reviews differs from policies/actions.json. Run 'apply'." >&2
+      echo "ERROR: Actions settings drift: can_approve_pull_request_reviews differs from policies/actions.json. Run '$0 apply'." >&2
       check_errors=$((check_errors + 1))
     elif [[ "$actions_pr_degraded" == "true" ]]; then
       degraded "Actions policy" "Actions cannot approve pull requests against policy." \
@@ -729,7 +729,7 @@ if drift:
     raise SystemExit("; ".join(drift))
 PY
   )"; then
-    echo "ERROR: Label settings drift: $labels_drift. Run 'apply'." >&2
+    echo "ERROR: Label settings drift: $labels_drift. Run '$0 apply'." >&2
     check_errors=$((check_errors + 1))
   else
     echo "OK: Policy labels match policies/labels.json; extra labels are allowed."
@@ -869,14 +869,14 @@ if errors:
     raise SystemExit("; ".join(errors))
 PY
   )"; then
-    echo "ERROR: Ruleset settings drift: $ruleset_drift. Run 'apply'." >&2
+    echo "ERROR: Ruleset settings drift: $ruleset_drift. Run '$0 apply'." >&2
     check_errors=$((check_errors + 1))
   else
     echo "OK: Repository governance ready: $default_branch has the required effective rules."
   fi
 
   if (( check_errors > 0 )); then
-    echo "ERROR: Repository settings check failed with $check_errors actionable difference(s): policy drift. Fix the lines above." >&2
+    echo "ERROR: Repository settings check failed with $check_errors actionable difference(s): policy drift. Fix each difference above or run '$0 apply'." >&2
     exit 1
   fi
   if (( check_degraded > 0 )); then
@@ -982,7 +982,7 @@ if [[ "$mode" == "plan" ]]; then
   exit 0
 fi
 if [[ "$pages_action" == "unknown" ]]; then
-  echo "ERROR: Cannot apply settings: GitHub Pages settings for '$repo' are unreadable. Fix the gh error below." >&2
+  echo "ERROR: Cannot apply settings: GitHub Pages settings for '$repo' are unreadable. Run 'gh auth status', then fix the gh error below." >&2
   echo "$pages_state" >&2
   exit 1
 fi

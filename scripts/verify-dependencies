@@ -7,7 +7,7 @@ if [[ -z "$osv_scanner" ]]; then
   osv_scanner="$("$repo_root/scripts/install-osv-scanner")"
 fi
 if [[ ! -x "$osv_scanner" ]]; then
-  echo "ERROR: OSV-Scanner is unusable: '$osv_scanner' is not executable. Fix it." >&2
+  echo "ERROR: OSV-Scanner is unusable: '$osv_scanner' is not executable. Run 'chmod +x' on it." >&2
   exit 1
 fi
 

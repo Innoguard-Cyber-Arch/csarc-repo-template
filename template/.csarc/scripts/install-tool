@@ -119,12 +119,12 @@ fetch() {
 if [[ -n "$manifest_sha256" ]]; then
   fetch "$manifest" "$cache_dir/checksums.txt" "$manifest_sha256"
   if [[ "$(sha256 "$cache_dir/checksums.txt")" != "$manifest_sha256" ]]; then
-    echo "ERROR: $label checksums are rejected: digest mismatch. Retry." >&2
+    echo "ERROR: $label checksums are rejected: digest mismatch. Check the pinned digest." >&2
     exit 1
   fi
   expected_sha256="$(awk -v name="$asset" '$2 == name {print $1}' "$cache_dir/checksums.txt")"
   if [[ -z "$expected_sha256" ]]; then
-    echo "ERROR: $label asset is missing: not in checksums. Check the pin." >&2
+    echo "ERROR: $label asset is missing: not in checksums. Check the pinned version." >&2
     exit 1
   fi
 fi
@@ -134,7 +134,7 @@ download="$cache_dir/$asset"
 [[ -n "$member" ]] || download="$binary"
 fetch "$asset" "$download" "$expected_sha256"
 if [[ "$(sha256 "$download")" != "$expected_sha256" ]]; then
-  echo "ERROR: $label download is rejected: digest mismatch. Retry." >&2
+  echo "ERROR: $label download is rejected: digest mismatch. Delete the cache and run it again." >&2
   exit 1
 fi
 

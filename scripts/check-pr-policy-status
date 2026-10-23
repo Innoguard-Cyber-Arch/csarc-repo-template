@@ -106,20 +106,20 @@ fi
 
 pr_json=""
 if ! pr_json="$(gh pr view "$pr_number" --repo "$repo" --json number,headRefOid,url,state 2>&1)"; then
-  echo "ERROR: Pull request read failed: gh could not read #$pr_number in $repo. Check the output below." >&2
+  echo "ERROR: Pull request read failed: gh could not read #$pr_number in $repo. Read the gh error below, then run 'gh auth status'." >&2
   printf '%s\n' "$pr_json" >&2
   exit 1
 fi
 
 head_sha="$(jq -r '.headRefOid' <<<"$pr_json")"
 if [[ -z "$head_sha" || "$head_sha" == "null" ]]; then
-  echo "ERROR: Pull request #$pr_number in $repo is incomplete: it has no head commit. Check the pull request." >&2
+  echo "ERROR: Pull request #$pr_number in $repo is incomplete: it has no head commit. Run 'gh pr view $pr_number --repo $repo'." >&2
   exit 1
 fi
 
 check_runs_pages=""
 if ! check_runs_pages="$(gh api "repos/$repo/commits/$head_sha/check-runs" --paginate --slurp 2>&1)"; then
-  echo "ERROR: Check run read failed: gh could not read '$repo@$head_sha'. Check the output below." >&2
+  echo "ERROR: Check run read failed: gh could not read '$repo@$head_sha'. Read the gh error below, then run 'gh auth status'." >&2
   printf '%s\n' "$check_runs_pages" >&2
   exit 1
 fi
@@ -143,7 +143,7 @@ if [[ "$title_run" != "null" ]]; then
   title_job_id="$(jq -r '.id' <<<"$title_run")"
   title_job_json=""
   if ! title_job_json="$(gh api "repos/$repo/actions/jobs/$title_job_id" 2>&1)"; then
-    echo "ERROR: Step read failed: gh could not read title job $title_job_id. Check the output below." >&2
+    echo "ERROR: Step read failed: gh could not read title job $title_job_id. Read the gh error below, then run 'gh auth status'." >&2
     printf '%s\n' "$title_job_json" >&2
     exit 1
   fi

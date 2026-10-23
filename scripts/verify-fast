@@ -126,7 +126,7 @@ case "$suite" in
     exit 0
     ;;
   *)
-    echo "ERROR: Unknown suite: '$suite'. Report it." >&2
+    echo "ERROR: Unknown suite: '$suite'. Use 'fast' or 'full'." >&2
     exit 2
     ;;
 esac

@@ -114,11 +114,11 @@ done
 hours="${hours:-24}"
 
 command -v gh >/dev/null 2>&1 || {
-  echo "ERROR: gh is missing: it is not on PATH. Install it." >&2
+  echo "ERROR: gh is missing: it is not on PATH. Install GitHub CLI." >&2
   exit 1
 }
 command -v python3 >/dev/null 2>&1 || {
-  echo "ERROR: python3 is missing: it is not on PATH. Install it." >&2
+  echo "ERROR: python3 is missing: it is not on PATH. Install Python 3." >&2
   exit 1
 }
 
@@ -154,7 +154,7 @@ printf '[]\n' >"$last_run_steps_file"
 last_run_id="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("id", ""))' "$last_run_json")"
 if [[ -n "$last_run_id" ]] && ! gh api "repos/$repo/actions/runs/$last_run_id/jobs?per_page=100" \
   --jq '[.jobs[] | .steps[]? | {name, conclusion}]' >"$last_run_steps_file"; then
-  echo "WARNING: Release run outcome is unknown: the API failed. Check the run." >&2
+  echo "WARNING: Release run outcome is unknown: the API failed. Open the latest 'release.yml' run in Actions." >&2
   printf '[]\n' >"$last_run_steps_file"
 fi
 
@@ -163,7 +163,7 @@ printf '[]\n' >"$last_run_steps_file"
 last_run_id="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("id", ""))' "$last_run_json")"
 if [[ -n "$last_run_id" ]] && ! gh api "repos/$repo/actions/runs/$last_run_id/jobs?per_page=100" \
   --jq '[.jobs[] | .steps[]? | {name, conclusion}]' >"$last_run_steps_file"; then
-  echo "WARNING: Release run outcome is unknown: the API failed. Check the run." >&2
+  echo "WARNING: Release run outcome is unknown: the API failed. Open the latest 'release.yml' run in Actions." >&2
   printf '[]\n' >"$last_run_steps_file"
 fi
 
@@ -214,7 +214,7 @@ if ! gh pr list \
   --repo "$repo" --state merged --base "$branch" \
   --search 'in:title "chore(main): release"' --limit 20 \
   --json number,title,mergedAt,mergeCommit,comments >"$release_prs_file"; then
-  echo "WARNING: release PR audit evidence is unavailable: gh failed. Retry." >&2
+  echo "WARNING: release PR audit evidence is unavailable: gh failed. Run 'gh auth status'." >&2
   printf '[]\n' >"$release_prs_file"
 fi
 
@@ -246,7 +246,7 @@ commits_file="$work_dir/commits.json"
 if ! gh api "repos/$repo/commits?sha=$branch&since=$since_iso&per_page=100" \
   --jq '[.[] | {sha: .sha, date: .commit.committer.date, message: .commit.message}]' \
   >"$commits_file"; then
-  echo "WARNING: commit audit evidence is unavailable: gh failed. Retry." >&2
+  echo "WARNING: commit audit evidence is unavailable: gh failed. Run 'gh auth status'." >&2
   printf '[]\n' >"$commits_file"
 fi
 
@@ -262,7 +262,7 @@ if [[ -n "$issue_number" ]]; then
   if ! gh api "repos/$repo/issues/$issue_number/comments?per_page=100" \
     --jq '[.[] | {body: .body, date: .created_at, author_association: .author_association}]' \
     >"$comments_file"; then
-    echo "WARNING: tracking Issue audit evidence is unavailable: gh failed. Retry." >&2
+    echo "WARNING: tracking Issue audit evidence is unavailable: gh failed. Run 'gh auth status'." >&2
     printf '[]\n' >"$comments_file"
   fi
 fi
@@ -650,7 +650,7 @@ else
   issue_url="$(gh issue create "${create_args[@]}")"
   issue_number="${issue_url##*/}"
   [[ "$issue_number" =~ ^[0-9]+$ ]] || {
-    echo "ERROR: Issue number is unknown: gh gave no URL. Check the Issues." >&2
+    echo "ERROR: Issue number is unknown: gh gave no URL. Search open Issues for the drift title." >&2
     exit 1
   }
   echo "OK: Opened a release drift tracking Issue."

@@ -26,7 +26,9 @@ def _parse_version(value: str) -> tuple[int, int, int]:
     """Parse one strict `MAJOR.MINOR.PATCH` version string."""
     match = _VERSION.fullmatch(value)
     if not match:
-        raise ValueError(f"Bad version {value!r}: not X.Y.Z. Fix it.")
+        raise ValueError(
+            f"Bad version {value!r}: not X.Y.Z. Write it as X.Y.Z."
+        )
     return (int(match["major"]), int(match["minor"]), int(match["patch"]))
 
 
@@ -38,7 +40,7 @@ def _parse_range(
     if not match:
         raise ValueError(
             f"Bad range {value!r}: not '>=MAJOR.MINOR.PATCH "
-            "<MAJOR.MINOR.PATCH'. Fix it."
+            "<MAJOR.MINOR.PATCH'. Use that form."
         )
     return _parse_version(match["min"]), _parse_version(match["max"])
 
@@ -49,9 +51,13 @@ def check(data: dict[str, object]) -> str:
     template = data["template"]  # type: ignore[assignment]
     compatible_range = data["compatible_template_range"]  # type: ignore[assignment]
     if not isinstance(engine, str) or not isinstance(template, str):
-        raise ValueError("Bad versions: engine and template need text. Fix it.")
+        raise ValueError(
+            "Bad versions: engine and template need text. Set both."
+        )
     if not isinstance(compatible_range, str):
-        raise ValueError("Bad range: it needs text. Fix it.")
+        raise ValueError(
+            "Bad range: it needs text. Set 'compatible_template_range'."
+        )
 
     _parse_version(engine)
     template_version = _parse_version(template)
@@ -72,7 +78,9 @@ def main() -> int:
     try:
         data = json.loads(VERSION_FILE.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
-            raise ValueError(f"Bad {VERSION_FILE}: not a JSON object. Fix it.")
+            raise ValueError(
+                f"Bad {VERSION_FILE}: not a JSON object. Make it one."
+            )
         status = check(data)
     except (OSError, KeyError, ValueError, json.JSONDecodeError) as error:
         sys.stderr.write(f"ERROR: {error}\n")
