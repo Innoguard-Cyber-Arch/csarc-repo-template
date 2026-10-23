@@ -211,7 +211,7 @@ def test_noninteractive_warning_preserves_original_gh_arguments(
     assert calls == [["/usr/bin/gh", "issue", "edit", *arguments]]
     output = capsys.readouterr().err
     assert "@reviewer" in output
-    assert "Non-interactive session: continuing" in output
+    assert "the session is non-interactive" in output
 
 
 class _InteractiveInput(io.StringIO):
@@ -268,4 +268,4 @@ def test_preflight_failure_is_advisory(
     assert calls == [
         ["/usr/bin/gh", "issue", "edit", "42", "--body", "updated"]
     ]
-    assert "could not check approval" in capsys.readouterr().err
+    assert "Approval check skipped" in capsys.readouterr().err

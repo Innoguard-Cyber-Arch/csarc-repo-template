@@ -12,7 +12,7 @@ case "$(uname -s)-$(uname -m)" in
   Linux-aarch64 | Linux-arm64) asset="osv-scanner_linux_arm64" ;;
   Linux-x86_64) asset="osv-scanner_linux_amd64" ;;
   *)
-    printf 'Unsupported platform. Install OSV-Scanner %s and place it on PATH.\n' "$version" >&2
+    printf 'ERROR: Platform is unsupported: no OSV-Scanner %s build. Install it on PATH.\n' "$version" >&2
     exit 1
     ;;
 esac
@@ -31,13 +31,13 @@ if [[ ! -f "$cache_dir/checksums.txt" ]] ||
 fi
 actual_checksums_sha256="$(shasum -a 256 "$cache_dir/checksums.txt" | awk '{print $1}')"
 if [[ "$actual_checksums_sha256" != "$checksums_sha256" ]]; then
-  echo "OSV-Scanner checksum manifest does not match the pinned digest." >&2
+  echo "ERROR: OSV-Scanner checksum file is rejected: it does not match the pinned digest. Check the pinned digest." >&2
   exit 1
 fi
 
 expected_asset_sha256="$(awk -v name="$asset" '$2 == name {print $1}' "$cache_dir/checksums.txt")"
 if [[ -z "$expected_asset_sha256" ]]; then
-  echo "OSV-Scanner release manifest does not contain the selected asset." >&2
+  echo "ERROR: OSV-Scanner asset is missing: the release manifest lacks it. Check the pinned version." >&2
   exit 1
 fi
 if [[ ! -f "$binary" ]] ||
@@ -49,7 +49,7 @@ if [[ ! -f "$binary" ]] ||
 fi
 actual_asset_sha256="$(shasum -a 256 "$binary" | awk '{print $1}')"
 if [[ -z "$expected_asset_sha256" || "$actual_asset_sha256" != "$expected_asset_sha256" ]]; then
-  echo "OSV-Scanner binary does not match the pinned release manifest." >&2
+  echo "ERROR: OSV-Scanner binary is rejected: it does not match the release manifest. Delete the cache and run it again." >&2
   exit 1
 fi
 

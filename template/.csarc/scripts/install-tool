@@ -89,12 +89,12 @@ case "$tool" in
     strip=1
     ;;
   *)
-    echo "Usage: install-tool actionlint|gitleaks|osv-scanner|shellcheck|syft" >&2
+    echo "ERROR: Unknown tool '$tool': no pin. Use actionlint|gitleaks|osv-scanner|shellcheck|syft." >&2
     exit 2
     ;;
 esac
 if [[ -z "$arch" ]]; then
-  printf 'Unsupported platform. Install %s %s and place it on PATH.\n' "$label" "$version" >&2
+  printf 'ERROR: Platform is unsupported: no %s %s build. Install it on PATH.\n' "$label" "$version" >&2
   exit 1
 fi
 
@@ -119,12 +119,12 @@ fetch() {
 if [[ -n "$manifest_sha256" ]]; then
   fetch "$manifest" "$cache_dir/checksums.txt" "$manifest_sha256"
   if [[ "$(sha256 "$cache_dir/checksums.txt")" != "$manifest_sha256" ]]; then
-    echo "$label checksum manifest does not match the pinned digest." >&2
+    echo "ERROR: $label checksums are rejected: digest mismatch. Check the pinned digest." >&2
     exit 1
   fi
   expected_sha256="$(awk -v name="$asset" '$2 == name {print $1}' "$cache_dir/checksums.txt")"
   if [[ -z "$expected_sha256" ]]; then
-    echo "$label release manifest does not contain the selected asset." >&2
+    echo "ERROR: $label asset is missing: not in checksums. Check the pinned version." >&2
     exit 1
   fi
 fi
@@ -134,7 +134,7 @@ download="$cache_dir/$asset"
 [[ -n "$member" ]] || download="$binary"
 fetch "$asset" "$download" "$expected_sha256"
 if [[ "$(sha256 "$download")" != "$expected_sha256" ]]; then
-  echo "$label download does not match the pinned digest." >&2
+  echo "ERROR: $label download is rejected: digest mismatch. Delete the cache and run it again." >&2
   exit 1
 fi
 

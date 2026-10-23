@@ -7,6 +7,14 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.42.0-beta.1] - 2026-10-23
+
+### Features
+
+* feat(scripts): split hosted-only lifecycle paths out of local renders (096987b)
+* feat(payload): budget generated payload beyond total bytes (4999894)
+* feat(scripts): run the message check in generated verify and on the CLI (41258b2)
+
 ## [0.41.0] - 2026-10-23
 
 ### Features

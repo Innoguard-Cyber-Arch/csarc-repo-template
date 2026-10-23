@@ -43,7 +43,7 @@ llms_outputs=(llms.txt docs/llms.txt)
 if (($# == 1)); then
   for output in "${llms_outputs[@]}"; do
     if ! cmp -s "$llms_source" "$repo_root/$output"; then
-      printf '%s is stale; run scripts/build-repo-site\n' "$output" >&2
+      printf "ERROR: '%s' is stale: the sources changed. Run 'scripts/build-repo-site'.\n" "$output" >&2
       exit 1
     fi
   done
@@ -53,7 +53,7 @@ else
   done
 fi
 
-printf 'Repo site: %s, %s\n' \
+printf "OK: Repo site: '%s', '%s'.\n" \
   "$repo_root/${outputs[0]}" "$repo_root/${outputs[1]}"
-printf 'LLM indexes: %s, %s\n' \
+printf "OK: LLM indexes: '%s', '%s'.\n" \
   "$repo_root/${llms_outputs[0]}" "$repo_root/${llms_outputs[1]}"

@@ -104,9 +104,13 @@ def _validate_string(value: str, where: str) -> None:
     try:
         value.encode("utf-8")
     except UnicodeEncodeError as error:
-        raise EvidenceError(f"{where} is not valid Unicode") from error
+        raise EvidenceError(
+            f"{where}: not valid Unicode. Encode the value as UTF-8."
+        ) from error
     if not unicodedata.is_normalized("NFC", value):
-        raise EvidenceError(f"{where} is not NFC-normalized")
+        raise EvidenceError(
+            f"{where}: not NFC-normalized. Normalize the value to NFC."
+        )
 
 
 def _validate(value: object, where: str, key: str = "") -> None:  # noqa: C901
@@ -114,34 +118,49 @@ def _validate(value: object, where: str, key: str = "") -> None:  # noqa: C901
         return
     if isinstance(value, int):
         if not -MAX_SAFE_INTEGER <= value <= MAX_SAFE_INTEGER:
-            raise EvidenceError(f"{where} is outside the safe integer range")
+            raise EvidenceError(
+                f"{where}: outside safe integer range. Store it as a string."
+            )
         return
     if isinstance(value, float):
-        raise EvidenceError(f"{where} is a floating-point number")
+        raise EvidenceError(
+            f"{where}: floating-point number. Use an integer or a string."
+        )
     if isinstance(value, str):
         _validate_string(value, where)
         if key in TIME_FIELDS and TIMESTAMP.fullmatch(value) is None:
-            raise EvidenceError(f"{where} is not a YYYY-MM-DDTHH:MM:SSZ time")
+            raise EvidenceError(
+                f"{where}: bad time format. Write it as 'YYYY-MM-DDTHH:MM:SSZ'."
+            )
         return
     if isinstance(value, list):
         if key in SET_ARRAYS and value != sorted(value):
-            raise EvidenceError(f"{where} is a set-like array but unsorted")
+            raise EvidenceError(
+                f"{where}: set-like array is unsorted. Sort the array."
+            )
         for index, item in enumerate(value):
             _validate(item, f"{where}[{index}]")
         return
     if isinstance(value, dict):
         for item_key, item in value.items():
             if not isinstance(item_key, str) or not item_key.isascii():
-                raise EvidenceError(f"{where} has a non-ASCII key")
+                raise EvidenceError(
+                    f"{where}: non-ASCII key. Use ASCII keys only."
+                )
             _validate(item, f"{where}.{item_key}", item_key)
         return
-    raise EvidenceError(f"{where} has an unsupported JSON type")
+    raise EvidenceError(
+        f"{where}: unsupported JSON type. Use an object, array, string, "
+        "integer, boolean or null."
+    )
 
 
 def canonical_bytes(payload: Mapping[str, object]) -> bytes:
     """Serialize one payload with the documented JCS subset, or refuse."""
     if not isinstance(payload, Mapping):
-        raise EvidenceError("Evidence payload is not a JSON object")
+        raise EvidenceError(
+            "Payload: not a JSON object. Write one JSON object."
+        )
     _validate(dict(payload), "payload")
     return json.dumps(
         dict(payload),
@@ -161,19 +180,23 @@ def _unique_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
-            raise EvidenceError(f"Evidence payload repeats key {key!r}")
+            raise EvidenceError(
+                f"Payload: repeats key {key!r}. Remove the duplicate key."
+            )
         result[key] = value
     return result
 
 
 def _reject_float(text: str) -> object:
-    raise EvidenceError(f"Evidence payload has a non-integer number {text}")
+    raise EvidenceError(f"Payload: non-integer number {text}. Use an integer.")
 
 
 def parse_canonical(data: bytes) -> dict[str, Any]:
     """Parse stored bytes and require that they are already canonical."""
     if data.startswith(b"\xef\xbb\xbf"):
-        raise EvidenceError("Evidence payload starts with a byte-order mark")
+        raise EvidenceError(
+            "Payload: starts with a byte-order mark. Remove the mark."
+        )
     try:
         text = data.decode("utf-8")
         value = json.loads(
@@ -183,11 +206,17 @@ def parse_canonical(data: bytes) -> dict[str, Any]:
             parse_constant=_reject_float,
         )
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise EvidenceError("Evidence payload is not valid JSON") from error
+        raise EvidenceError(
+            "Payload: not valid JSON. Write it with canonical_bytes()."
+        ) from error
     if not isinstance(value, dict):
-        raise EvidenceError("Evidence payload is not a JSON object")
+        raise EvidenceError(
+            "Payload: not a JSON object. Write one JSON object."
+        )
     if canonical_bytes(value) != data:
-        raise EvidenceError("Evidence payload bytes are not canonical")
+        raise EvidenceError(
+            "Payload: bytes are not canonical. Write it with canonical_bytes()."
+        )
     return value
 
 
@@ -199,7 +228,10 @@ def payload_schema(payload: Mapping[str, object]) -> int:
     """
     version = payload.get("schema_version")
     if type(version) is not int or version < 1:
-        raise EvidenceError("Evidence payload has no positive schema_version")
+        raise EvidenceError(
+            "Payload: no positive schema_version. Set 'schema_version' to 1 "
+            "or more."
+        )
     return version
 
 
@@ -208,7 +240,10 @@ def envelope(data: bytes, *, trust: str, route: str) -> dict[str, object]:
     payload = parse_canonical(data)
     payload_schema(payload)
     if trust not in TRUST_VALUES or payload.get("trust") != trust:
-        raise EvidenceError("Evidence trust does not match its payload")
+        raise EvidenceError(
+            "Trust: does not match the payload. Pass the payload's 'trust' "
+            "value."
+        )
     return {
         "digest": payload_digest(data),
         "envelope_version": ENVELOPE_VERSION,
@@ -239,10 +274,15 @@ def summary_comment(
     trailer. Only the status section may change after the merge.
     """
     if status not in SUMMARY_STATUSES:
-        raise EvidenceError(f"Unknown summary status {status!r}")
+        raise EvidenceError(
+            f"Summary status: unknown {status!r}. Use one of "
+            f"{', '.join(SUMMARY_STATUSES)}."
+        )
     status_lines = [line for line in lines if line]
     if any("\n" in line or "\r" in line for line in status_lines):
-        raise EvidenceError("Summary status lines must be single lines")
+        raise EvidenceError(
+            "Status lines: not single lines. Remove the line breaks."
+        )
     return "\n".join(
         (
             SUMMARY_MARKER,
@@ -271,17 +311,24 @@ def parse_summary(body: str) -> Summary:
     """Return the status, envelope, and exact payload bytes of a summary."""
     lines = [line.removesuffix("\r") for line in body.split("\n")]
     if len(lines) < 2 or lines[0] != SUMMARY_MARKER:
-        raise EvidenceError("Comment is not a CSARC merge evidence summary")
+        raise EvidenceError(
+            "Comment: not a merge evidence summary. Read the next comment."
+        )
     status = lines[1].removeprefix(STATUS_PREFIX)
     if not lines[1].startswith(STATUS_PREFIX) or status not in (
         SUMMARY_STATUSES
     ):
-        raise EvidenceError("Merge evidence summary has no valid status")
+        raise EvidenceError(
+            "Summary: no valid status. Restore the comment from its edit "
+            "history."
+        )
     end = lines.index("", 2) if "" in lines[2:] else len(lines)
     records = [line for line in lines if line.startswith(ENVELOPE_PREFIX)]
     payloads = [line for line in lines if line.startswith(PAYLOAD_PREFIX)]
     if len(records) != 1 or len(payloads) != 1:
-        raise EvidenceError("Merge evidence summary is malformed")
+        raise EvidenceError(
+            "Summary: malformed. Restore the comment from its edit history."
+        )
     record = parse_canonical(
         records[0].removeprefix(ENVELOPE_PREFIX).encode("utf-8")
     )
@@ -302,8 +349,8 @@ def load_contract(path: Path | None = None) -> dict[str, Any]:
         contract = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise EvidenceError(
-            f"Merge trailer contract {target} is missing or invalid; "
-            "the lifecycle refuses to merge without it"
+            f"Trailer contract {target} is missing or invalid: "
+            "merge needs it. Restore it with 'csarc update'."
         ) from error
     return validate_contract(contract)
 
@@ -311,32 +358,55 @@ def load_contract(path: Path | None = None) -> dict[str, Any]:
 def validate_contract(contract: object) -> dict[str, Any]:  # noqa: C901
     """Require the exact contract shape this module knows how to apply."""
     if not isinstance(contract, dict):
-        raise EvidenceError("Merge trailer contract is not an object")
+        raise EvidenceError(
+            "Trailer contract: not an object. Restore it with 'csarc update'."
+        )
     if contract.get("schema_version") != CONTRACT_SCHEMA:
-        raise EvidenceError("Merge trailer contract schema is unsupported")
+        raise EvidenceError(
+            "Trailer contract: unsupported schema. Restore it with 'csarc "
+            "update'."
+        )
     keys = contract.get("keys")
     order = contract.get("order")
     if not isinstance(keys, dict) or not isinstance(order, list):
-        raise EvidenceError("Merge trailer contract has no keys or order")
+        raise EvidenceError(
+            "Trailer contract: no keys or order. Restore it with 'csarc "
+            "update'."
+        )
     if sorted(order) != sorted(keys) or len(order) != len(set(order)):
-        raise EvidenceError("Merge trailer contract order is inconsistent")
+        raise EvidenceError(
+            "Trailer contract: inconsistent order. Restore it with 'csarc "
+            "update'."
+        )
     for name, rule in keys.items():
         if (
             not isinstance(name, str)
             or TRAILER_LINE.fullmatch(f"{name}: x") is None
         ):
-            raise EvidenceError(f"Merge trailer key {name!r} is invalid")
+            raise EvidenceError(
+                f"Trailer key {name!r}: invalid. Restore the contract with "
+                "'csarc update'."
+            )
         if not isinstance(rule, dict) or not isinstance(
             rule.get("required"), bool
         ):
-            raise EvidenceError(f"Merge trailer rule {name} is invalid")
+            raise EvidenceError(
+                f"Trailer rule {name}: invalid. Restore the contract with "
+                "'csarc update'."
+            )
         kind = rule.get("value")
         if kind == "enum":
             values = rule.get("values")
             if not isinstance(values, list) or not values:
-                raise EvidenceError(f"Merge trailer {name} has no values")
+                raise EvidenceError(
+                    f"Trailer {name}: no values. Restore the contract with "
+                    "'csarc update'."
+                )
         elif kind not in {"digest", "sha", "url"}:
-            raise EvidenceError(f"Merge trailer {name} has an unknown value")
+            raise EvidenceError(
+                f"Trailer {name}: unknown value. Use a value the contract "
+                "lists."
+            )
     return contract
 
 
@@ -388,7 +458,10 @@ def build_trailers(
     errors = [f"unknown key {name}" for name in unknown]
     errors.extend(trailer_errors(contract, pairs))
     if errors:
-        raise EvidenceError("Merge trailers are invalid: " + "; ".join(errors))
+        raise EvidenceError(
+            f"Bad trailers: {'; '.join(errors)}. Correct them in the squash "
+            "message."
+        )
     return pairs
 
 
@@ -619,11 +692,15 @@ def confirm_baseline(
     if derived.get("result") != "inconclusive" or not isinstance(
         candidates, list
     ):
-        raise EvidenceError("Only an inconclusive baseline can be confirmed")
+        raise EvidenceError(
+            "Cannot confirm: not inconclusive. Run 'audit' without "
+            "'--confirm-baseline'."
+        )
     if sha not in candidates:
         raise EvidenceError(
-            f"{sha} is not a candidate governance baseline; choose one of "
+            f"{sha}: not a candidate governance baseline. Choose one of "
             + ", ".join(str(item) for item in candidates)
+            + "."
         )
     return {
         **derived,
@@ -757,12 +834,15 @@ def read_record(context: AuditContext, locator: str) -> str | None:
     if code != 0:
         if NOT_FOUND.search(text):
             return None
-        raise RecordUnavailableError(f"GitHub could not read {locator}")
+        raise RecordUnavailableError(
+            f"{locator}: GitHub read failed. Run 'gh auth status', then audit "
+            "again."
+        )
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as error:
         raise RecordUnavailableError(
-            f"GitHub returned invalid JSON for {locator}"
+            f"Cannot read {locator}: invalid JSON. Run the audit again."
         ) from error
     body = payload.get("body") if isinstance(payload, dict) else None
     return body if isinstance(body, str) else None
@@ -914,8 +994,9 @@ def main(arguments: list[str] | None = None) -> int:
             strict=args.strict,
         )
     except EvidenceError as error:
-        sys.stderr.write(f"merge_trace: {error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         return 2
+    # message-pattern: allow X1 JSON result
     sys.stdout.write(json.dumps(result, sort_keys=True) + "\n")
     return 1 if result["blocking"] else 0
 

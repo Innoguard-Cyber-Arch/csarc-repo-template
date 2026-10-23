@@ -358,7 +358,7 @@ def test_relaxed_governance_value_needs_the_switch(
     decision = executor["classify_route"]([], base, candidate)
     assert decision.route == "governance-switch"
     assert decision.reasons == (f"relaxes {reason}",)
-    with pytest.raises(RuntimeError, match="governance-switch label"):
+    with pytest.raises(RuntimeError, match="'governance-switch' label"):
         executor["require_route"](decision, {"enhancement"})
     executor["require_route"](decision, {"enhancement", "governance-switch"})
 
@@ -653,7 +653,7 @@ def lifecycle_module_fixture() -> dict[str, Any]:
     ("candidate", "labels", "route", "error"),
     [
         ("normal", set(), "ordinary", None),
-        ("scripts", set(), None, "governance-switch label"),
+        ("scripts", set(), None, "'governance-switch' label"),
         ("scripts", {"governance-switch"}, "governance-switch", None),
         ("relax", set(), None, "relaxes admin_bypass"),
         ("relax", {"governance-switch"}, "governance-switch", None),

@@ -120,7 +120,10 @@ def control_paths(
     if control_set == CONTROL_SET_RELEASE:
         return release_control_paths(root)
     if control_set != CONTROL_SET_VERIFICATION:
-        raise RuntimeError(f"Unknown trusted control set: {control_set}")
+        raise RuntimeError(
+            f"Control set is unknown: {control_set}. "
+            "Use 'verification' or 'release'."
+        )
     if scripts_prefix(root) == GENERATED_SCRIPTS:
         return sorted(GENERATED_CONTROL_FILES)
     paths = set(CONTROL_FILES)
@@ -159,14 +162,16 @@ def prepare(
     """
     source = source.resolve()
     if destination.exists():
-        raise RuntimeError(f"Trusted executor already exists: {destination}")
+        raise RuntimeError(
+            f"Executor exists: {destination}. Delete that folder."
+        )
     files: dict[str, str] = {}
     for relative in control_paths(source, control_set):
         origin = source / relative
         if origin.is_symlink() or not origin.is_file():
             raise RuntimeError(
                 f"Trusted control file is missing or not a regular file: "
-                f"{relative}"
+                f"{relative}. Restore it from the base commit."
             )
         files[relative] = digest(origin)
     for relative in files:
@@ -194,10 +199,14 @@ def verify_manifest(destination: Path) -> None:
     if manifest.get("executor") != EXECUTOR_TRUSTED or not isinstance(
         files, dict
     ):
-        raise RuntimeError("Trusted executor manifest is malformed")
+        raise RuntimeError(
+            "Bad executor manifest: malformed. Rerun the 'verify' job."
+        )
     for relative, expected in files.items():
         if digest(destination / relative) != expected:
-            raise RuntimeError(f"Trusted control file changed: {relative}")
+            raise RuntimeError(
+                f"Control file changed: {relative}. Rerun the 'verify' job."
+            )
 
 
 def load_plan(path: Path) -> dict[str, object] | None:
@@ -330,7 +339,9 @@ def read_router_args(path: Path) -> list[str]:
     """
     raw = path.read_bytes()
     if not raw.endswith(b"\0"):
-        raise ValueError("Router arguments must be NUL-terminated")
+        raise ValueError(
+            "Router arguments are bad: no NUL end. Rerun the 'verify' job."
+        )
     return [item.decode("utf-8") for item in raw[:-1].split(b"\0")]
 
 
@@ -394,8 +405,8 @@ def config_schema(path: Path) -> int:
         return csarc_config.declared_schema(values, path)
     except csarc_config.SettingsError as error:
         raise ValueError(
-            f"{error} This trusted base reads schema {CURRENT_SCHEMA} only; "
-            "merge a base that reads a new schema before changing the writer."
+            f"{error} Schema is too new: base reads schema {CURRENT_SCHEMA} "
+            "only. Merge a reader of the new schema first."
         ) from error
 
 
@@ -503,9 +514,9 @@ def require_route(decision: RouteDecision, labels: set[str]) -> None:
         and GOVERNANCE_SWITCH_LABEL not in labels
     ):
         raise RuntimeError(
-            "This pull request needs the governance-switch route ("
+            "Pull request needs the governance-switch route: "
             + "; ".join(decision.reasons)
-            + f"); add the {GOVERNANCE_SWITCH_LABEL} label. The route keeps "
+            + f". Add the '{GOVERNANCE_SWITCH_LABEL}' label; it keeps "
             "required checks, the exact head, and the remote lease."
         )
 
@@ -515,7 +526,7 @@ def stronger_suite(first: str, second: str) -> str:
     aliases = {"baseline": "fast", "docs": "fast"}
     first, second = aliases.get(first, first), aliases.get(second, second)
     if first not in SUITE_RANK or second not in SUITE_RANK:
-        raise ValueError("unknown verification suite")
+        raise ValueError("Suite is unknown: no rank. Use 'fast' or 'full'.")
     return max((first, second), key=SUITE_RANK.__getitem__)
 
 
@@ -544,14 +555,18 @@ def _git(root: Path, *args: str, data: bytes | None = None) -> bytes:
     )
     if result.returncode:
         detail = result.stderr.decode("utf-8", "replace").strip()
-        raise RuntimeError(f"git {args[0]} failed: {detail}")
+        raise RuntimeError(
+            f"git {args[0]} failed: {detail}. Rerun the 'verify' job."
+        )
     return result.stdout
 
 
 def ensure_commit(root: Path, sha: str) -> None:
     """Make one exact commit available locally, fetching it if needed."""
     if SHA.fullmatch(sha) is None:
-        raise RuntimeError("Trusted base commit identity is malformed")
+        raise RuntimeError(
+            "Base commit is malformed: not a SHA. Pass a 40-character SHA."
+        )
     try:
         _git(root, "cat-file", "-e", f"{sha}^{{commit}}")
     except RuntimeError:
@@ -583,7 +598,8 @@ def trusted_base_checkout(root: Path, base_sha: str) -> Generator[Path]:
             actual = _git(checkout, "rev-parse", "HEAD").decode().strip()
             if actual != base_sha:
                 raise RuntimeError(
-                    "Trusted base checkout is not the lease base"
+                    "Base checkout is wrong: not the lease base. "
+                    "Rerun the 'verify' job."
                 )
             yield checkout
         finally:
@@ -696,9 +712,7 @@ def _route_command(args: argparse.Namespace) -> int:
         base = read_config(args.base_config)
         candidate = read_config(args.candidate_config)
     except (OSError, ValueError) as error:
-        sys.stderr.write(
-            f"Trusted base cannot read the configuration: {error}\n"
-        )
+        sys.stderr.write(f"ERROR: {error}\n")
         return 1
     changed: list[str] | None = []
     if args.pull_files is not None:
@@ -710,9 +724,10 @@ def _route_command(args: argparse.Namespace) -> int:
             changed = None
     decision = classify_route(changed, base, candidate)
     if args.json:
+        # message-pattern: allow X1 JSON route decision
         sys.stdout.write(json.dumps(decision.as_json(), sort_keys=True) + "\n")
     else:
-        sys.stdout.write(f"Merge route: {decision.route}\n")
+        sys.stdout.write(f"NOTICE: Merge route is '{decision.route}'.\n")
         sys.stdout.writelines(f"- {reason}\n" for reason in decision.reasons)
     if args.enforce:
         try:
@@ -720,7 +735,7 @@ def _route_command(args: argparse.Namespace) -> int:
                 decision, {label for label in args.labels.split(",") if label}
             )
         except RuntimeError as error:
-            sys.stderr.write(f"{error}\n")
+            sys.stderr.write(f"ERROR: {error}\n")
             return 1
     return 0
 
@@ -734,15 +749,19 @@ def policy_main(args: argparse.Namespace) -> int:
             values = read_config(args.config)
             value = values if args.key is None else values[args.key]
         except (OSError, KeyError, ValueError) as error:
-            sys.stderr.write(f"{error}\n")
+            sys.stderr.write(f"ERROR: {error}\n")
             return 1
         if isinstance(value, dict):
+            # message-pattern: allow X1 value for shell callers
             sys.stdout.write(json.dumps(value, sort_keys=True) + "\n")
         elif isinstance(value, list):
+            # message-pattern: allow X1 value for shell callers
             sys.stdout.write(",".join(str(item) for item in value) + "\n")
         elif isinstance(value, bool):
+            # message-pattern: allow X1 value for shell callers
             sys.stdout.write(f"{str(value).lower()}\n")
         elif value is not None:
+            # message-pattern: allow X1 value for shell callers
             sys.stdout.write(f"{value}\n")
         return 0
     if args.command == "channel-floor":
@@ -751,8 +770,9 @@ def policy_main(args: argparse.Namespace) -> int:
         try:
             suite = stronger_suite(floor, args.path_tier)
         except ValueError as error:
-            sys.stderr.write(f"{error}\n")
+            sys.stderr.write(f"ERROR: {error}\n")
             return 2
+        # message-pattern: allow X1 key=value plan
         sys.stdout.write(f"level={level} floor={floor} suite={suite}\n")
         return 0
     return 2
@@ -809,18 +829,19 @@ def main(argv: list[str] | None = None) -> int:
         try:
             files = prepare(args.source, args.destination, args.control_set)
         except (OSError, RuntimeError) as error:
-            sys.stderr.write(f"{error}\n")
+            sys.stderr.write(f"ERROR: {error}\n")
             return 1
         count = len(files)
         sys.stdout.write(
-            f"Staged {count} trusted control files in {args.destination}\n"
+            f"OK: Staged {count} trusted control files in "
+            f"'{args.destination}'.\n"
         )
         return 0
     if args.command == "verify":
         try:
             verify_manifest(args.destination)
         except (OSError, RuntimeError, ValueError) as error:
-            sys.stderr.write(f"{error}\n")
+            sys.stderr.write(f"ERROR: {error}\n")
             return 1
         return 0
     if args.command in {"read-config", "route", "channel-floor"}:
@@ -843,6 +864,7 @@ def main(argv: list[str] | None = None) -> int:
         changed_files=read_changed_files(args.changed_files),
     )
     for line in lines:
+        # message-pattern: allow X1 workflow annotation
         sys.stdout.write(f"::notice title=Candidate gate self-test::{line}\n")
     if args.summary is not None:
         with args.summary.open("a", encoding="utf-8") as summary:

@@ -70,6 +70,10 @@ SHA256 = re.compile(r"^[0-9a-f]{64}$")
 GitVersion = Callable[[], str]
 
 
+CHECK_AGAIN = "Run 'csarc update --check' again"
+FINALIZE_AGAIN = "Run 'csarc update --finalize-plan' again"
+
+
 class FinalPlanError(ValueError):
     """Raised when a final plan cannot be created, trusted, or replayed."""
 
@@ -86,7 +90,7 @@ def canonical_bytes(value: object) -> bytes:
         ).encode()
     except (TypeError, ValueError) as error:
         raise FinalPlanError(
-            f"Final plan values must be plain JSON ({error})."
+            f"Final plan value is not plain JSON: {error}. {CHECK_AGAIN}."
         ) from error
 
 
@@ -105,8 +109,8 @@ def exact_json(value: object, label: str) -> object:
     restored = json.loads(canonical_bytes(value))
     if restored != value or canonical_bytes(restored) != canonical_bytes(value):
         raise FinalPlanError(
-            f"{label} does not round-trip through JSON exactly; the final "
-            "plan cannot replay it."
+            f"{label} cannot be replayed: it does not round-trip through "
+            f"JSON exactly. {CHECK_AGAIN}."
         )
     return restored
 
@@ -139,9 +143,8 @@ def require_pinned_toolchain(toolchain: Mapping[str, str]) -> None:
     ]
     if drift:
         raise FinalPlanError(
-            "Unsupported toolchain (" + "; ".join(drift) + "). Install the "
-            "csarc release that pins these exact versions; a version range "
-            "is never accepted for a replayable plan."
+            "Unsupported toolchain: " + "; ".join(drift) + ". Install the "
+            "csarc release that pins these exact versions."
         )
 
 
@@ -154,26 +157,28 @@ def parse_file_decisions(
         path, separator, choice = value.partition("=")
         if not separator or not path or not choice:
             raise FinalPlanError(
-                f"Invalid --decision {value!r}; use PATH=keep-current, "
-                "PATH=take-new, or PATH=custom:FILE."
+                f"Invalid --decision {value!r}: it is not PATH=CHOICE. Use "
+                "'PATH=keep-current', 'PATH=take-new', or 'PATH=custom:FILE'."
             )
         if path in decisions:
-            raise FinalPlanError(f"Duplicate --decision for {path}.")
+            raise FinalPlanError(
+                f"Duplicate --decision for {path}: a path takes one "
+                "decision. Remove the extra '--decision'."
+            )
         custom: Path | None = None
         if choice.startswith(f"{DECISION_CUSTOM}:"):
             custom_name = choice.partition(":")[2]
             if not custom_name:
                 raise FinalPlanError(
-                    f"--decision {path}=custom needs a FILE with the "
-                    "resolved content."
+                    f"--decision {path}=custom has no FILE: custom needs "
+                    f"the resolved content. Pass '{path}=custom:FILE'."
                 )
             custom = Path(custom_name)
             choice = DECISION_CUSTOM
         elif choice not in (DECISION_KEEP, DECISION_TAKE):
             raise FinalPlanError(
-                f"Unknown decision {choice!r} for {path}; use "
-                + ", ".join(FILE_DECISIONS)
-                + "."
+                f"Unknown decision {choice!r} for {path}: no such "
+                "choice. Use " + ", ".join(FILE_DECISIONS) + "."
             )
         decisions[path] = (choice, custom)
     return decisions
@@ -192,9 +197,9 @@ def require_complete_decisions(
         problems.append("not a planned conflict: " + ", ".join(extra))
     if problems:
         raise FinalPlanError(
-            "Every stage-1 conflict needs exactly one --decision ("
+            "Stage-1 conflict decisions are incomplete: "
             + "; ".join(problems)
-            + ")."
+            + ". Pass one '--decision PATH=CHOICE' per planned conflict."
         )
 
 
@@ -225,18 +230,20 @@ def resolution_content(entry: Mapping[str, object]) -> bytes | None:
         return None
     if not isinstance(encoded, str) or not isinstance(expected, str):
         raise FinalPlanError(
-            f"Decision for {entry.get('path')} has malformed content."
+            f"Decision for {entry.get('path')} is malformed: its content is "
+            f"not encoded text. {FINALIZE_AGAIN}."
         )
     try:
         content = base64.b64decode(encoded.encode("ascii"), validate=True)
     except ValueError as error:
         raise FinalPlanError(
-            f"Decision for {entry.get('path')} has malformed content."
+            f"Decision for {entry.get('path')} is malformed: its content is "
+            f"not base64. {FINALIZE_AGAIN}."
         ) from error
     if hashlib.sha256(content).hexdigest() != expected:
         raise FinalPlanError(
-            f"Decision content for {entry.get('path')} does not match its "
-            "recorded digest."
+            f"Decision content for {entry.get('path')} is changed: it "
+            f"does not match its digest. {FINALIZE_AGAIN}."
         )
     return content
 
@@ -267,24 +274,32 @@ def _require_shape(plan: Mapping[str, object]) -> None:
         unexpected = sorted(keys - TOP_LEVEL_KEYS)
         missing = sorted(TOP_LEVEL_KEYS - keys)
         raise FinalPlanError(
-            "Final plan has an invalid shape (missing: "
+            "Final plan has an invalid shape: missing "
             + (", ".join(missing) or "none")
-            + "; unexpected: "
+            + "; unexpected "
             + (", ".join(unexpected) or "none")
-            + ")."
+            + f". {FINALIZE_AGAIN}."
         )
     if plan["kind"] != FINAL_PLAN_KIND:
-        raise FinalPlanError("The file is not a csarc update final plan.")
+        raise FinalPlanError(
+            "The file is not a csarc update final plan: its kind is wrong. "
+            f"Pass the '{FINAL_PLAN_BASENAME}' file."
+        )
     if plan["schema_version"] != SCHEMA_VERSION:
         raise FinalPlanError(
-            f"Unsupported final plan schema_version {plan['schema_version']!r}."
+            "Unsupported final plan: schema_version is "
+            f"{plan['schema_version']!r}. {FINALIZE_AGAIN}."
         )
     if plan["replayable"] is not True:
-        raise FinalPlanError("Only a replayable final plan can be applied.")
+        raise FinalPlanError(
+            "The plan cannot be applied: it is not replayable. Pass the "
+            f"'{FINAL_PLAN_BASENAME}' file, not the stage-1 plan."
+        )
     for name in SECTIONS:
         if not isinstance(plan[name], dict):
             raise FinalPlanError(
-                f"Final plan section {name} must be an object."
+                f"Final plan section {name} is invalid: it is not an "
+                f"object. {FINALIZE_AGAIN}."
             )
 
 
@@ -293,26 +308,32 @@ def verify(plan: Mapping[str, object]) -> dict[str, object]:
     _require_shape(plan)
     digests = plan["digests"]
     if not isinstance(digests, dict) or set(digests) != set(SECTIONS):
-        raise FinalPlanError("Final plan digests are incomplete.")
+        raise FinalPlanError(
+            f"Final plan digests are incomplete: a section has no digest. "
+            f"{FINALIZE_AGAIN}."
+        )
     tampered = sorted(
         name for name in SECTIONS if digests[name] != digest(plan[name])
     )
     if tampered:
         raise FinalPlanError(
-            "Final plan sections do not match their digests ("
+            "Final plan sections do not match their digests: "
             + ", ".join(tampered)
-            + "); the plan was modified after it was created."
+            + f" changed after the plan was created. {FINALIZE_AGAIN}."
         )
     body = {
         key: value for key, value in plan.items() if key != "final_plan_sha256"
     }
     recorded = plan["final_plan_sha256"]
     if not isinstance(recorded, str) or SHA256.fullmatch(recorded) is None:
-        raise FinalPlanError("Final plan digest is missing or malformed.")
+        raise FinalPlanError(
+            f"Final plan digest is invalid: it is missing or malformed. "
+            f"{FINALIZE_AGAIN}."
+        )
     if digest(body) != recorded:
         raise FinalPlanError(
-            "Final plan digest does not match its content; the plan was "
-            "modified after it was created."
+            "Final plan digest does not match its content: the plan "
+            f"changed after it was created. {FINALIZE_AGAIN}."
         )
     return dict(plan)
 
@@ -320,13 +341,21 @@ def verify(plan: Mapping[str, object]) -> dict[str, object]:
 def load(path: Path) -> dict[str, object]:
     """Read and verify one final plan file."""
     if path.is_symlink() or not path.is_file():
-        raise FinalPlanError(f"Final plan {path} must be a regular file.")
+        raise FinalPlanError(
+            f"Final plan {path} is invalid: it is not a regular file. Pass "
+            f"the '{FINAL_PLAN_BASENAME}' file."
+        )
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise FinalPlanError(f"Cannot read final plan {path}.") from error
+        raise FinalPlanError(
+            f"Cannot read final plan {path}: {error}. {FINALIZE_AGAIN}."
+        ) from error
     if not isinstance(payload, dict):
-        raise FinalPlanError(f"Final plan {path} must be a JSON object.")
+        raise FinalPlanError(
+            f"Final plan {path} is invalid: it is not a JSON object. "
+            f"{FINALIZE_AGAIN}."
+        )
     return verify(payload)
 
 
@@ -343,22 +372,29 @@ def load_stage1(path: Path) -> dict[str, object]:
     """Read one stage-1 plan, requiring its digest and non-replayable flag."""
     if path.is_symlink() or not path.is_file():
         raise FinalPlanError(
-            f"Stage-1 plan {path} is missing; run csarc update --check first."
+            f"Stage-1 plan {path} is missing: no check ran. Run 'csarc "
+            "update --check' first."
         )
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise FinalPlanError(f"Cannot read stage-1 plan {path}.") from error
+        raise FinalPlanError(
+            f"Cannot read stage-1 plan {path}: {error}. {CHECK_AGAIN}."
+        ) from error
     if not isinstance(payload, dict) or payload.get("mode") != "update":
-        raise FinalPlanError(f"{path} is not a csarc update stage-1 plan.")
+        raise FinalPlanError(
+            f"{path} is not a stage-1 plan: its mode is not update. "
+            f"{CHECK_AGAIN}."
+        )
     if payload.get("replayable") is not False:
         raise FinalPlanError(
-            f"{path} is not marked as a non-replayable stage-1 plan."
+            f"{path} is not a stage-1 plan: it is not marked "
+            f"non-replayable. {CHECK_AGAIN}."
         )
     if payload.get("plan_sha256") != stage1_digest(payload):
         raise FinalPlanError(
-            f"Stage-1 plan {path} does not match its digest; run csarc "
-            "update --check again."
+            f"Stage-1 plan {path} is changed: it does not match its "
+            f"digest. {CHECK_AGAIN}."
         )
     return payload
 

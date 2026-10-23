@@ -23,7 +23,7 @@ case "$(uname -s)-$(uname -m)" in
     expected_sha256="b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6"
     ;;
   *)
-    printf 'Unsupported platform. Install ShellCheck %s and place it on PATH.\n' "$version" >&2
+    printf 'ERROR: Platform is unsupported: no ShellCheck %s build. Install it on PATH.\n' "$version" >&2
     exit 1
     ;;
 esac
@@ -42,7 +42,7 @@ if [[ ! -f "$cache_dir/$asset" ]] ||
 fi
 actual_sha256="$(shasum -a 256 "$cache_dir/$asset" | awk '{print $1}')"
 if [[ "$actual_sha256" != "$expected_sha256" ]]; then
-  echo "ShellCheck archive does not match the pinned digest." >&2
+  echo "ERROR: ShellCheck archive is rejected: it does not match the pinned digest. Check the pinned digest." >&2
   exit 1
 fi
 

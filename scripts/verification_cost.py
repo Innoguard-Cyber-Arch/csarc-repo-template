@@ -328,7 +328,9 @@ def flatten_files(payload: object) -> list[dict[str, object]]:
     if isinstance(payload, dict):
         return [payload]
     if not isinstance(payload, list):
-        raise ValueError("Pull request files payload must be a JSON array.")
+        raise ValueError(
+            "PR files payload is invalid: not a JSON array. Re-run the job."
+        )
     files: list[dict[str, object]] = []
     for item in payload:
         files.extend(flatten_files(item))

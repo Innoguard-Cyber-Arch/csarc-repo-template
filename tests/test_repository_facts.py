@@ -385,7 +385,7 @@ def test_update_derives_context_without_overriding_a_record(
 
     write_package(root, "other")
     write_pyproject(root, "suite")
-    with pytest.raises(CliError, match="--data package_name=<value> once"):
+    with pytest.raises(CliError, match="'--data package_name=<value>' once"):
         cli.resolve_derived_context(root, answers, {})
     _values, differences = cli.resolve_derived_context(root, recorded, {})
     assert differences["package_name"] == ["other", "product"]

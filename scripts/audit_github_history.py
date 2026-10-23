@@ -43,14 +43,23 @@ class AuditError(RuntimeError):
 def _objects(value: object, label: str) -> list[JsonObject]:
     """Flatten gh --slurp pages into validated JSON objects."""
     if not isinstance(value, list):
-        raise AuditError(f"{label}: expected a JSON page list")
+        raise AuditError(
+            f"{label}: not a JSON page list. "
+            "Run 'gh auth status', then run it again."
+        )
     objects: list[JsonObject] = []
     for page in value:
         if not isinstance(page, list):
-            raise AuditError(f"{label}: expected each page to be a list")
+            raise AuditError(
+                f"{label}: a page is not a list. "
+                "Run 'gh auth status', then run it again."
+            )
         for item in page:
             if not isinstance(item, dict):
-                raise AuditError(f"{label}: expected each item to be an object")
+                raise AuditError(
+                    f"{label}: an item is not an object. "
+                    "Run 'gh auth status', then run it again."
+                )
             objects.append(item)
     return objects
 
@@ -58,13 +67,19 @@ def _objects(value: object, label: str) -> list[JsonObject]:
 def _graphql_objects(value: object) -> list[JsonObject]:
     """Flatten pull-request nodes from paginated GraphQL output."""
     if not isinstance(value, list):
-        raise AuditError("graphql: expected a JSON page list")
+        raise AuditError(
+            "GraphQL failed: not a JSON page list. "
+            "Run 'gh auth status', then run it again."
+        )
     nodes: list[JsonObject] = []
     for page in value:
         try:
             current = page["data"]["repository"]["pullRequests"]["nodes"]
         except (KeyError, TypeError) as error:
-            raise AuditError("graphql: missing pullRequests nodes") from error
+            raise AuditError(
+                "GraphQL failed: no pullRequests nodes. "
+                "Run 'gh auth status', then run it again."
+            ) from error
         nodes.extend(_objects([current], "graphql"))
     return nodes
 
@@ -83,7 +98,10 @@ def _run_gh(arguments: list[str], retries: int) -> object:
             try:
                 return json.loads(completed.stdout)
             except json.JSONDecodeError as error:
-                raise AuditError("gh api returned invalid JSON") from error
+                raise AuditError(
+                    "GitHub API failed: invalid JSON. "
+                    "Run 'gh auth status', then run it again."
+                ) from error
         failure = completed.stderr.strip()
     raise AuditError(failure or "gh api failed")
 
@@ -91,10 +109,16 @@ def _run_gh(arguments: list[str], retries: int) -> object:
 def _count(connection: object) -> int:
     """Read a GraphQL connection totalCount."""
     if not isinstance(connection, dict):
-        raise AuditError("graphql: missing connection")
+        raise AuditError(
+            "GraphQL failed: no connection. "
+            "Run 'gh auth status', then run it again."
+        )
     value = connection.get("totalCount")
     if not isinstance(value, int):
-        raise AuditError("graphql: missing totalCount")
+        raise AuditError(
+            "GraphQL failed: no totalCount. "
+            "Run 'gh auth status', then run it again."
+        )
     return value
 
 
@@ -251,7 +275,10 @@ def main(argv: list[str] | None = None) -> int:
 
         def fetch(endpoint: str) -> list[JsonObject]:
             if endpoint not in rest:
-                raise AuditError("fixture endpoint missing")
+                raise AuditError(
+                    "Fixture is incomplete: an endpoint is missing. "
+                    "Add it to the fixture."
+                )
             return _objects(rest[endpoint], endpoint)
 
         try:

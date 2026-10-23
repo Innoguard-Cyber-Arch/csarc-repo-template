@@ -32,7 +32,7 @@ if [[ -z "$base" ]] && git rev-parse --verify --quiet "main^{commit}" >/dev/null
   base=main
 fi
 if [[ -z "$base" ]]; then
-  echo "Cannot determine the pull request base; set CSARC_CI_BASE explicitly." >&2
+  echo "ERROR: PR base is unknown: none is set. Set CSARC_CI_BASE." >&2
   exit 2
 fi
 base="${base#refs/heads/}"
@@ -47,11 +47,11 @@ for candidate in "refs/remotes/origin/$base" "refs/heads/$base" "$base"; do
   fi
 done
 if [[ -z "$base_ref" ]]; then
-  echo "Cannot resolve verification base '$base'; fetch it or set CSARC_CI_BASE." >&2
+  echo "ERROR: Unknown base: '$base'. Fetch it or set CSARC_CI_BASE." >&2
   exit 2
 fi
 if ! merge_base="$(git merge-base "$base_ref" HEAD)"; then
-  echo "Cannot find a merge base between '$base_ref' and HEAD." >&2
+  echo "ERROR: No merge base: '$base_ref' and HEAD. Fetch more history." >&2
   exit 2
 fi
 
@@ -89,7 +89,7 @@ suite="$plan_tier"
 for requested in "${CSARC_VERIFICATION_SUITE:-fast}" "${CSARC_CI_TIER:-}"; do
   [[ -z "$requested" ]] && continue
   if ! normalized_suite="$(normalize_suite "$requested")"; then
-    echo "Unknown verification suite: $requested" >&2
+    echo "ERROR: Unknown suite: '$requested'. Use fast or full." >&2
     exit 2
   fi
   requested="$normalized_suite"
@@ -111,9 +111,10 @@ if [[ "$channel_floor" == "full" && "$suite" != "full" ]]; then
     "$(python3 "$control_root/scripts/csarc_config.py" verification_mode)" == "local" ]]; then
     suite=full
   else
-    echo "Release channel floor for base $base is full; hosted verify supplies that evidence."
+    echo "NOTICE: Base $base needs full; hosted verify supplies it."
   fi
 fi
+# message-pattern: allow X1 key=value plan
 echo "Local verification plan: base=$base merge-base=$merge_base suite=$suite scopes=${scope_csv:-none}"
 export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
 
@@ -125,7 +126,7 @@ case "$suite" in
     exit 0
     ;;
   *)
-    echo "Unknown verification suite: $suite" >&2
+    echo "ERROR: Unknown suite: '$suite'. Use 'fast' or 'full'." >&2
     exit 2
     ;;
 esac
@@ -261,7 +262,7 @@ fi
 
 if $run_python_suite; then
   if ((${#pytest_paths[@]} == 0)); then
-    echo "Python safety floor has no tests for scopes: $scope_csv" >&2
+    echo "ERROR: Safety floor is empty: no tests for '$scope_csv'. Map tests to them." >&2
     exit 2
   fi
   verification_step "Bounded Python regression suite" \
@@ -271,7 +272,7 @@ if $run_python_suite; then
   if [[ -s "$plan_root/pytest.xml" ]]; then
     python3 scripts/verification_cost.py report --junit "$plan_root/pytest.xml" \
       --label "Bounded Python regression suite (fast)" --suite fast ||
-      echo "Verification cost summary unavailable (non-blocking)." >&2
+      echo "WARNING: Cost summary is unavailable: the report failed. Read the log above." >&2
   fi
 fi
 

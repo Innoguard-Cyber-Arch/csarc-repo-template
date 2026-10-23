@@ -236,11 +236,11 @@ def test_local_freshness_uses_the_shared_boundary(
     payload, _ = _local_payload(repo, completed_at="2026-10-14T12:00:00Z")
 
     assert _require_local(payload, now=completed + timedelta(hours=24))
-    with pytest.raises(RuntimeError, match="stale; re-run verification"):
+    with pytest.raises(RuntimeError, match="is stale: too old"):
         _require_local(payload, now=completed + timedelta(hours=24, seconds=1))
     with pytest.raises(RuntimeError, match="in the future"):
         _require_local(payload, now=completed - timedelta(minutes=5, seconds=1))
-    with pytest.raises(RuntimeError, match="cannot exceed the trusted"):
+    with pytest.raises(RuntimeError, match="freshness window is too wide"):
         _require_local(
             payload, now=completed + timedelta(hours=30), max_age_hours=48
         )

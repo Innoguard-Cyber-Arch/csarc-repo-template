@@ -27,7 +27,7 @@ for title in "${valid_titles[@]}"; do
 done
 for title in "${invalid_titles[@]}"; do
   if "$title_validator" "$title" >/dev/null 2>&1; then
-    echo "Issue title validator accepted: $title"
+    echo "ERROR: Title check failed: the validator accepted '$title'. Fix validate-issue-title." >&2
     exit 1
   fi
 done
@@ -61,7 +61,7 @@ grep -q -- '--add-assignee contributor' "$GH_LOG"
 grep -q -- '--type Feature' "$GH_LOG"
 grep -q -- '--remove-label enhancement' "$GH_LOG"
 if grep -q -- '--add-label enhancement' "$GH_LOG"; then
-  echo "Issue triage kept a redundant enhancement label on a Feature."
+  echo "ERROR: Triage failed: it kept a redundant enhancement label on a Feature. Fix validate-issue-policy." >&2
   exit 1
 fi
 
@@ -78,7 +78,7 @@ grep -q -- '--add-assignee contributor' "$GH_LOG"
 grep -q -- '--type Task' "$GH_LOG"
 grep -q -- '--remove-label enhancement' "$GH_LOG"
 if grep -q -- '--type Feature' "$GH_LOG"; then
-  echo "Issue triage replaced a native Task with Feature."
+  echo "ERROR: Triage failed: it replaced a native Task with Feature. Fix validate-issue-policy." >&2
   exit 1
 fi
 
@@ -133,13 +133,13 @@ ISSUE_AUTHOR="" ISSUE_TYPE="Bug" ISSUE_BODY="" ISSUE_LABELS="bug" "$validator"
 grep -q -- '--type Bug' "$GH_LOG"
 grep -q -- '--remove-label bug' "$GH_LOG"
 if grep -q -- '--add-assignee' "$GH_LOG"; then
-  echo "Issue triage tried to assign an automated Issue without an owner."
+  echo "ERROR: Triage failed: it assigned an automated Issue without an owner. Fix validate-issue-policy." >&2
   exit 1
 fi
 
 if ISSUE_BODY="" ISSUE_LABELS="" "$validator" >/dev/null 2>&1; then
-  echo "Issue triage accepted an Issue without an allowed type."
+  echo "ERROR: Triage failed: it accepted an Issue without an allowed type. Fix validate-issue-policy." >&2
   exit 1
 fi
 
-echo "Issue title cases passed: 10; triage cases passed: 12"
+echo "OK: Issue title cases passed: 10; triage cases passed: 12."

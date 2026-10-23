@@ -96,7 +96,10 @@ def _target(target: str, repo: str | None) -> tuple[str, int]:
     parts = [part for part in urlparse(target).path.split("/") if part]
     if len(parts) >= 4 and parts[2] == "issues" and parts[3].isdigit():
         return f"{parts[0]}/{parts[1]}", int(parts[3])
-    raise ValueError(f"Unsupported Issue target: {target}")
+    raise ValueError(
+        f"Bad Issue target '{target}': unsupported. "
+        "Pass an Issue number or Issue URL."
+    )
 
 
 def _warning_for_target(target: str, repo: str | None) -> str | None:
@@ -123,13 +126,14 @@ def main(arguments: list[str] | None = None) -> int:
                 subprocess.CalledProcessError,
             ) as error:
                 sys.stderr.write(
-                    f"NOTICE: could not check approval for {target}: {error}; "
-                    "continuing.\n"
+                    f"WARNING: Approval check skipped for {target}: {error}. "
+                    f"Run 'gh issue view {target}' to check its approval.\n"
                 )
                 continue
             if warning:
                 warnings.append(warning)
     if warnings:
+        # message-pattern: allow X5 multi-line approval warning report
         sys.stderr.write("\n".join(warnings) + "\n")
         if sys.stdin.isatty():
             reply = input("Continue with the Issue body edit? [y/N] ")
@@ -137,12 +141,14 @@ def main(arguments: list[str] | None = None) -> int:
                 raise SystemExit(1)
         else:
             sys.stderr.write(
-                "Non-interactive session: continuing; re-approval will be "
-                "required.\n"
+                "WARNING: Edit continues: the session is non-interactive. "
+                "Ask an approver to comment '/milestone approve' again.\n"
             )
     executable = shutil.which("gh")
     if executable is None:
-        raise RuntimeError("GitHub CLI (gh) is required")
+        raise RuntimeError(
+            "No gh: it is not on PATH. Install it from 'https://cli.github.com/'."
+        )
     result = subprocess.run(  # noqa: S603
         [executable, "issue", "edit", *arguments], check=False
     )

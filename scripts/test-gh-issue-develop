@@ -183,4 +183,4 @@ expect_failure "--branch-repo is not valid with --repair-from" \
   --branch-repo fork/repo
 [[ ! -e "$rename_state" ]]
 
-echo "gh-issue-develop self-test passed."
+echo "OK: gh-issue-develop self-test passed."

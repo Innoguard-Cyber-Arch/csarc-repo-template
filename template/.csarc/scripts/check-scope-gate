@@ -34,11 +34,12 @@ print(match.group(1) if match else "")
 ')"
 
 if [[ -z "$issue_number" ]]; then
-  echo "No closing Issue reference in the pull request body; the scope-drift gate does not apply."
+  echo "NOTICE: Scope-drift gate does not apply: no closing Issue."
   exit 0
 fi
 
 if ! python3 .csarc/scripts/sync_milestone_state.py --help 2>/dev/null | grep -q check-scope; then
+  # message-pattern: allow X1 workflow annotation
   echo "::notice::Scope-drift gate starts after the rollout PR reaches its base branch."
   exit 0
 fi

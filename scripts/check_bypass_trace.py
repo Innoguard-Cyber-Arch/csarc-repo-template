@@ -130,8 +130,9 @@ def _fetch_pr(repo: str, pr_number: int) -> JsonObject:
     )
     if result.returncode != 0:
         raise RuntimeError(
-            f"Could not read pull request #{pr_number} in {repo}: "
-            f"{result.stderr.strip() or result.stdout.strip()}"
+            f"Cannot read pull request #{pr_number} in {repo}: "
+            f"{result.stderr.strip() or result.stdout.strip()}. "
+            "Run 'gh auth status', then run it again."
         )
     return json.loads(result.stdout)
 
@@ -145,12 +146,12 @@ def _main(argv: list[str]) -> int:
     try:
         pr = _fetch_pr(args.repo, args.pr_number)
     except RuntimeError as error:
-        print(str(error), file=sys.stderr)  # noqa: T201
+        print(f"ERROR: {error}", file=sys.stderr)  # noqa: T201
         return 1
 
     if pr.get("state") != "MERGED":
         print(  # noqa: T201
-            f"PR #{args.pr_number} in {args.repo} is not merged; "
+            f"NOTICE: PR #{args.pr_number} in {args.repo} is not merged; "
             "nothing to audit yet."
         )
         return 0
@@ -158,16 +159,16 @@ def _main(argv: list[str]) -> int:
     trace = find_bypass_trace(pr.get("comments", []), pr.get("mergedAt"))
     if trace is None:
         print(  # noqa: T201
-            f"PR #{args.pr_number} in {args.repo} is merged but has no "
-            "bypass-trace comment before its merge time. Required "
-            "format: 'bypass-trace: release_level=<level> "
+            f"ERROR: PR #{args.pr_number} in {args.repo} has no bypass trace: "
+            "no bypass-trace comment precedes its merge. Add "
+            "'bypass-trace: release_level=<level> "
             "route=<beta|stable|hotfix> actor=<login> reason=<text>'.",
             file=sys.stderr,
         )
         return 1
 
     print(  # noqa: T201
-        f"PR #{args.pr_number} in {args.repo}: bypass-trace found "
+        f"OK: PR #{args.pr_number} in {args.repo}: bypass-trace found "
         f"(release_level={trace['release_level']}, route={trace['route']}, "
         f"actor={trace['actor']}, reason={trace['reason']!r}, "
         f"left by @{trace['commenter']} at {trace['created_at']})."

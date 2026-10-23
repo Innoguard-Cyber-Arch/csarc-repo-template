@@ -210,7 +210,7 @@ if ! PR_DOCUMENTATION_REVIEW_REQUIRED="true" \
   PR_HEAD="release/v1.2.3" \
   PR_BODY="$release_documentation_body" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy rejected an exact-head release documentation review."
+  echo "ERROR: PR policy regression: it rejected an exact-head release documentation review. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -224,7 +224,7 @@ if PR_DOCUMENTATION_REVIEW_REQUIRED="true" \
   PR_HEAD="release/v1.2.3" \
   PR_BODY="${release_documentation_body/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a stale release documentation review."
+  echo "ERROR: PR policy regression: it accepted a stale release documentation review. Fix validate-pr-policy." >&2
   exit 1
 fi
 export GITHUB_REPOSITORY="acme/project"
@@ -283,7 +283,7 @@ while IFS='|' read -r name live_body; do
     PR_ISSUE_STATE="open" \
     PR_ISSUE_MILESTONE_NUMBER="7" \
       "$validator" >/dev/null 2>&1; then
-    echo "PR policy accepted $name live closing keywords."
+    echo "ERROR: PR policy regression: it accepted $name live closing keywords. Fix validate-pr-policy." >&2
     exit 1
   fi
 done <<'CASES'
@@ -326,7 +326,7 @@ if PR_POLICY_FIXTURE=false \
   PR_BODY="Closes #42" \
   PR_ISSUE_STATE="open" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted the event body instead of live metadata."
+  echo "ERROR: PR policy regression: it accepted the event body instead of live metadata. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -381,7 +381,7 @@ for relationship_state in \
     PR_BODY="Closes #42" \
     PR_ISSUE_STATE="open" \
       "$validator" >/dev/null 2>&1; then
-    echo "PR policy accepted $relationship_state closing Issue metadata."
+    echo "ERROR: PR policy regression: it accepted $relationship_state closing Issue metadata. Fix validate-pr-policy." >&2
     exit 1
   fi
 done
@@ -398,7 +398,7 @@ for metadata_state in api-error empty partial malformed; do
     PR_BODY="Closes #42" \
     PR_ISSUE_STATE="open" \
       "$validator" >/dev/null 2>&1; then
-    echo "PR policy accepted $metadata_state live pull request metadata."
+    echo "ERROR: PR policy regression: it accepted $metadata_state live pull request metadata. Fix validate-pr-policy." >&2
     exit 1
   fi
 done
@@ -414,7 +414,7 @@ if PR_POLICY_FIXTURE=1 \
   PR_BODY="Closes #42" \
   PR_ISSUE_STATE="open" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted an implicit fixture-mode value."
+  echo "ERROR: PR policy regression: it accepted an implicit fixture-mode value. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -452,7 +452,7 @@ if PR_POLICY_FIXTURE=false \
   PR_ISSUE_STATE="open" \
   PR_ISSUE_LABELS="enhancement" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted ordinary Issue work without an assignee."
+  echo "ERROR: PR policy regression: it accepted ordinary Issue work without an assignee. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -483,7 +483,7 @@ while IFS='|' read -r expected name strategy title labels base head body issue_s
   fi
 
   if [[ "$actual" != "$expected" ]]; then
-    echo "PR policy case '$name' expected $expected but got $actual."
+    echo "ERROR: PR policy regression: it case '$name' expected $expected but got $actual. Fix validate-pr-policy." >&2
     [[ -n "$output" ]] && echo "$output"
     exit 1
   fi
@@ -539,7 +539,7 @@ if milestone_output="$(
   PR_ISSUE_MILESTONE_NUMBER="8" \
     "$validator" 2>&1
 )"; then
-  echo "PR policy accepted a delivery branch for another Milestone."
+  echo "ERROR: PR policy regression: it accepted a delivery branch for another Milestone. Fix validate-pr-policy." >&2
   exit 1
 fi
 grep -Fq "ERROR: Issue #42 Milestone 8: base 'dev/m7-staged-ci' is wrong. Use 'dev/m8-'." <<<"$milestone_output"
@@ -558,7 +558,7 @@ if base_chain_output="$(
   PATH="$fixture:$PATH" \
     "$validator" 2>&1
 )"; then
-  echo "PR policy accepted an orphan stacked pull request."
+  echo "ERROR: PR policy regression: it accepted an orphan stacked pull request. Fix validate-pr-policy." >&2
   exit 1
 fi
 grep -Fq "ERROR: Base branch feat/41-parent: not exactly one open PR. Chain it to 'main'." <<<"$base_chain_output"
@@ -588,7 +588,7 @@ if PR_BRANCH_STRATEGY="main" \
   PR_ISSUE_TITLE="Add verified report workflow" \
   PR_CLOSING_ISSUES_JSON="" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a missing closing Issue relationship."
+  echo "ERROR: PR policy regression: it accepted a missing closing Issue relationship. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -615,7 +615,7 @@ if PR_BRANCH_STRATEGY="main" \
   PR_ISSUE_STATE="open" \
   PR_ISSUE_LABELS="bug" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a label that differs from the linked Issue."
+  echo "ERROR: PR policy regression: it accepted a label that differs from the linked Issue. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -644,7 +644,7 @@ if PR_BRANCH_STRATEGY="main" \
   PR_ISSUE_LABELS="bug" \
   PR_ISSUE_TYPE="Bug" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a redundant Issue work-kind label."
+  echo "ERROR: PR policy regression: it accepted a redundant Issue work-kind label. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -659,7 +659,7 @@ if PR_BRANCH_STRATEGY="main" \
   PR_ISSUE_MILESTONE_NUMBER="7" \
   PR_MILESTONE_NUMBER="8" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a Milestone that differs from the linked Issue."
+  echo "ERROR: PR policy regression: it accepted a Milestone that differs from the linked Issue. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -756,7 +756,7 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_BODY="" \
   PR_ISSUE_STATE="" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a human commit on the automation PR."
+  echo "ERROR: PR policy regression: it accepted a human commit on the automation PR. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -807,7 +807,7 @@ while IFS= read -r version; do
     PR_BODY="" \
     PR_ISSUE_STATE="" \
       "$validator" >/dev/null 2>&1; then
-    echo "PR policy accepted invalid guided prerelease version '$version'."
+    echo "ERROR: PR policy regression: it accepted invalid guided prerelease version '$version'. Fix validate-pr-policy." >&2
     exit 1
   fi
 done <<'VERSIONS'
@@ -830,7 +830,7 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_BODY="" \
   PR_ISSUE_STATE="" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a guided release title that disagrees with its branch."
+  echo "ERROR: PR policy regression: it accepted a guided release title that disagrees with its branch. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -849,7 +849,7 @@ while IFS='|' read -r name actor head_repo changed_files head; do
     PR_BODY="" \
     PR_ISSUE_STATE="" \
       "$validator" >/dev/null 2>&1; then
-    echo "PR policy accepted invalid release follow-up '$name'."
+    echo "ERROR: PR policy regression: it accepted invalid release follow-up '$name'. Fix validate-pr-policy." >&2
     exit 1
   fi
 done <<'CASES'
@@ -910,7 +910,7 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_ISSUE_MILESTONE_NUMBER="7" \
   PR_ISSUE_LABELS="enhancement,promotion" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a direct CSARC-owned Milestone promotion."
+  echo "ERROR: PR policy regression: it accepted a direct CSARC-owned Milestone promotion. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -927,7 +927,7 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_ISSUE_LABELS="enhancement,promotion" \
   PR_INCLUDED_TITLES_JSON='["feat(api): add report","fix(api): retry"]' \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a promotion title below the batch intent."
+  echo "ERROR: PR policy regression: it accepted a promotion title below the batch intent. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -959,7 +959,7 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_ISSUE_MILESTONE_NUMBER="7" \
   PR_ISSUE_LABELS="enhancement" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy let a CSARC-owned promotion close its tracker before release."
+  echo "ERROR: PR policy regression: it let a CSARC-owned promotion close its tracker before release. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -977,7 +977,7 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_ISSUE_LABELS="enhancement" \
   PR_ISSUE_BODY=$'## Proposal\n\nShip the reviewed batch.\n\n## Completion evidence\n\n<!-- Fill after release. -->\n\n## Early termination\n\n<!-- Fill only when stopped. -->\n\n## Promotion\n\n- [x] All other Milestone Issues are closed.\n- [ ] Review ledger resolved and maintainer-confirmed.' \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a promotion bridge with an unchecked Promotion box."
+  echo "ERROR: PR policy regression: it accepted a promotion bridge with an unchecked Promotion box. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -993,7 +993,7 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_ISSUE_MILESTONE_NUMBER="7" \
   PR_ISSUE_LABELS="enhancement,promotion" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted an unlabeled direct promotion."
+  echo "ERROR: PR policy regression: it accepted an unlabeled direct promotion. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1022,7 +1022,7 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_ISSUE_MILESTONE_NUMBER="7" \
   PR_ISSUE_LABELS="enhancement" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted an unlabeled promotion bridge."
+  echo "ERROR: PR policy regression: it accepted an unlabeled promotion bridge. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1039,7 +1039,7 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_ISSUE_MILESTONE_NUMBER="8" \
   PR_ISSUE_LABELS="enhancement" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a bridge for another Milestone."
+  echo "ERROR: PR policy regression: it accepted a bridge for another Milestone. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1057,7 +1057,7 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_ISSUE_LABELS="enhancement,promotion" \
   PR_ISSUE_BODY="All acceptance tasks are complete." \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a promotion bridge closing a non-tracker Issue."
+  echo "ERROR: PR policy regression: it accepted a promotion bridge closing a non-tracker Issue. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1073,7 +1073,7 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_ISSUE_MILESTONE_NUMBER="8" \
   PR_ISSUE_LABELS="enhancement,promotion" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a promotion Issue from another Milestone."
+  echo "ERROR: PR policy regression: it accepted a promotion Issue from another Milestone. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1087,7 +1087,7 @@ if PR_BRANCH_STRATEGY="delivery" \
   PR_ISSUE_STATE="open" \
   PR_ISSUE_MILESTONE_NUMBER="7" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a Milestone Issue as a direct hotfix."
+  echo "ERROR: PR policy regression: it accepted a Milestone Issue as a direct hotfix. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1102,7 +1102,7 @@ if PR_BRANCH_STRATEGY="main" \
   PR_ISSUE_TITLE="Add verified report workflow" \
   PR_ISSUE_BODY="All acceptance tasks are complete." \
   "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted an unchecked pull request task."
+  echo "ERROR: PR policy regression: it accepted an unchecked pull request task. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1117,7 +1117,7 @@ if PR_BRANCH_STRATEGY="main" \
   PR_ISSUE_TITLE="Add verified report workflow" \
   PR_ISSUE_BODY=$'## Acceptance criteria\n\n- [ ] Verify live behavior' \
   "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted an Issue with unchecked acceptance tasks."
+  echo "ERROR: PR policy regression: it accepted an Issue with unchecked acceptance tasks. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1133,7 +1133,7 @@ if ! PR_DRAFT="true" \
   PR_ISSUE_TITLE="Add verified report workflow" \
   PR_ISSUE_BODY="All acceptance tasks are complete." \
   "$validator" >/dev/null 2>&1; then
-  echo "PR policy blocked an unchecked pull request task while the pull request is a draft."
+  echo "ERROR: PR policy regression: it blocked an unchecked pull request task while the pull request is a draft. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1149,7 +1149,7 @@ if ! PR_DRAFT="true" \
   PR_ISSUE_TITLE="Add verified report workflow" \
   PR_ISSUE_BODY=$'## Acceptance criteria\n\n- [ ] Verify live behavior' \
   "$validator" >/dev/null 2>&1; then
-  echo "PR policy blocked an Issue with unchecked acceptance tasks while the pull request is a draft."
+  echo "ERROR: PR policy regression: it blocked an Issue with unchecked acceptance tasks while the pull request is a draft. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1165,7 +1165,7 @@ if PR_DRAFT="false" \
   PR_ISSUE_TITLE="Add verified report workflow" \
   PR_ISSUE_BODY="All acceptance tasks are complete." \
   "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted an unchecked pull request task on an explicitly non-draft pull request."
+  echo "ERROR: PR policy regression: it accepted an unchecked pull request task on an explicitly non-draft pull request. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1181,7 +1181,7 @@ if PR_DRAFT="true" \
   PR_ISSUE_TITLE="Add verified report workflow" \
   PR_ISSUE_BODY="All acceptance tasks are complete." \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a missing closing keyword just because the pull request is a draft."
+  echo "ERROR: PR policy regression: it accepted a missing closing keyword just because the pull request is a draft. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1195,7 +1195,7 @@ if PR_BRANCH_STRATEGY="main" \
   PR_ISSUE_STATE="open" \
   PR_ISSUE_TITLE="模糊標題" \
   "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a linked Issue with an invalid title."
+  echo "ERROR: PR policy regression: it accepted a linked Issue with an invalid title. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1216,7 +1216,7 @@ if ! (
   PR_ISSUE_TITLE="模糊標題" \
     "$validator" >/dev/null 2>&1
 ); then
-  echo "PR policy failed when the base branch predates scripts/validate-issue-title."
+  echo "ERROR: PR policy regression: it failed when the base branch predates scripts/validate-issue-title. Fix validate-pr-policy." >&2
   restore_title_validator
   exit 1
 fi
@@ -1249,7 +1249,7 @@ if ! PR_DOCUMENTATION_REVIEW_REQUIRED="true" \
   PR_ISSUE_STATE="open" \
   PR_ISSUE_TITLE="Add verified report workflow" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy rejected an aligned exact-head documentation review."
+  echo "ERROR: PR policy regression: it rejected an aligned exact-head documentation review. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1265,7 +1265,7 @@ if PR_DOCUMENTATION_REVIEW_REQUIRED="true" \
   PR_ISSUE_STATE="open" \
   PR_ISSUE_TITLE="Add verified report workflow" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a documentation review for a stale head."
+  echo "ERROR: PR policy regression: it accepted a documentation review for a stale head. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1281,7 +1281,7 @@ if PR_CHANGED_FILES_JSON="$large_files_json" \
   PR_ISSUE_STATE="open" \
   PR_ISSUE_TITLE="Add verified report workflow" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a new large test without a justification."
+  echo "ERROR: PR policy regression: it accepted a new large test without a justification. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1296,7 +1296,7 @@ if ! PR_CHANGED_FILES_JSON="$large_files_json" \
   PR_ISSUE_STATE="open" \
   PR_ISSUE_TITLE="Add verified report workflow" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy rejected a justified new large test."
+  echo "ERROR: PR policy regression: it rejected a justified new large test. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1316,32 +1316,32 @@ governance_case() {
 case_count=$((case_count + 1))
 if ! PR_CANDIDATE_CONFIG="$base_config_text" PR_LABELS="enhancement" \
   governance_case; then
-  echo "PR policy rejected an ordinary change with an unchanged configuration."
+  echo "ERROR: PR policy regression: it rejected an ordinary change with an unchanged configuration. Fix validate-pr-policy." >&2
   exit 1
 fi
 case_count=$((case_count + 1))
 if PR_CANDIDATE_CONFIG="$base_config_text"$'\ngovernance_mode: observe' \
   PR_LABELS="enhancement" governance_case; then
-  echo "PR policy accepted a relaxed governance value without governance-switch."
+  echo "ERROR: PR policy regression: it accepted a relaxed governance value without governance-switch. Fix validate-pr-policy." >&2
   exit 1
 fi
 case_count=$((case_count + 1))
 if ! PR_CANDIDATE_CONFIG="$base_config_text"$'\ngovernance_mode: observe' \
   PR_LABELS="enhancement,governance-switch" governance_case; then
-  echo "PR policy rejected a declared governance switch."
+  echo "ERROR: PR policy regression: it rejected a declared governance switch. Fix validate-pr-policy." >&2
   exit 1
 fi
 case_count=$((case_count + 1))
 if PR_CANDIDATE_CONFIG="$base_config_text" \
   PR_CHANGED_FILES_JSON='[[{"filename":".csarc/scripts/verify-fast","status":"modified"}]]' \
   PR_LABELS="enhancement" governance_case; then
-  echo "PR policy accepted a .csarc/scripts change without governance-switch."
+  echo "ERROR: PR policy regression: it accepted a .csarc/scripts change without governance-switch. Fix validate-pr-policy." >&2
   exit 1
 fi
 case_count=$((case_count + 1))
 if PR_CANDIDATE_CONFIG="$base_config_text"$'\nschema_version: 9' \
   PR_LABELS="enhancement,governance-switch" governance_case; then
-  echo "PR policy accepted a configuration schema the trusted base cannot read."
+  echo "ERROR: PR policy regression: it accepted a configuration schema the trusted base cannot read. Fix validate-pr-policy." >&2
   exit 1
 fi
 case_count=$((case_count + 1))
@@ -1351,7 +1351,7 @@ if ! PR_POLICY_FIXTURE=false \
   PR_LIVE_BODY="Closes #42" \
   PR_HEAD_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
   PR_LABELS="enhancement" governance_case; then
-  echo "PR policy rejected a live candidate configuration equal to its base."
+  echo "ERROR: PR policy regression: it rejected a live candidate configuration equal to its base. Fix validate-pr-policy." >&2
   exit 1
 fi
 case_count=$((case_count + 1))
@@ -1362,7 +1362,7 @@ if PR_POLICY_FIXTURE=false \
   PR_CANDIDATE_CONFIG_STATE="api-error" \
   PR_HEAD_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
   PR_LABELS="enhancement" governance_case; then
-  echo "PR policy accepted an unreadable candidate configuration."
+  echo "ERROR: PR policy regression: it accepted an unreadable candidate configuration. Fix validate-pr-policy." >&2
   exit 1
 fi
 
@@ -1460,7 +1460,7 @@ while IFS='|' read -r scenario expected; do
     result=fail
   fi
   if [[ "$result" != "$expected" ]]; then
-    echo "Requirement trace scenario $scenario should $expected but did $result."
+    echo "ERROR: Requirement trace regression: scenario $scenario should $expected but did $result. Fix the requirement trace in 'risk_controls.py'." >&2
     exit 1
   fi
 done <<'CASES'
@@ -1479,7 +1479,7 @@ CASES
 case_count=$((case_count + 1))
 trace_fixture no-section
 if ! PR_DRAFT=true trace_case; then
-  echo "Requirement trace blocked a Draft pull request."
+  echo "ERROR: Requirement trace regression: it blocked a Draft pull request. Fix the requirement trace in 'risk_controls.py'." >&2
   exit 1
 fi
 case_count=$((case_count + 1))
@@ -1493,8 +1493,8 @@ trace_output="$(
     PR_ISSUE_TITLE="Add verified report workflow" "$validator" 2>&1
 )"
 if [[ "$trace_output" != *"requirement-trace: #42 self-accepted: R1(high)"* ]]; then
-  echo "Requirement trace did not list the self-accepted high risk."
+  echo "ERROR: Requirement trace regression: it did not list the self-accepted high risk. Fix the requirement trace in 'risk_controls.py'." >&2
   exit 1
 fi
 
-echo "PR policy regression cases passed: $case_count"
+echo "OK: PR policy regression cases passed: $case_count."

@@ -142,4 +142,4 @@ set -e
 [[ "$missing_status" -ne 0 ]]
 [[ "$conflict_status" -ne 0 ]]
 
-echo "audit-fleet-adoption: all threshold-computation cases passed."
+echo "OK: audit-fleet-adoption threshold cases passed."

@@ -38,7 +38,9 @@ def _run_gh(arguments: list[str], stdin: str | None = None) -> JsonValue:
     """Run GitHub CLI and return one JSON object or array."""
     gh_binary = shutil.which("gh")
     if gh_binary is None:
-        raise MetadataError("GitHub CLI (gh) is required")
+        raise MetadataError(
+            "Missing GitHub CLI: no 'gh' on PATH. Install GitHub CLI."
+        )
     completed = subprocess.run(  # noqa: S603
         [gh_binary, *arguments],
         check=False,
@@ -51,30 +53,40 @@ def _run_gh(arguments: list[str], stdin: str | None = None) -> JsonValue:
     try:
         value = json.loads(completed.stdout or "{}")
     except json.JSONDecodeError as error:
-        raise MetadataError("gh api returned invalid JSON") from error
+        raise MetadataError(
+            "gh api failed: invalid JSON. Rerun the failed job."
+        ) from error
     if not isinstance(value, (dict, list)):
-        raise MetadataError("gh api returned an unexpected response")
+        raise MetadataError(
+            "gh api failed: unexpected response. Rerun the failed job."
+        )
     return value
 
 
 def _object(value: JsonValue, description: str) -> JsonObject:
     """Require one object-shaped API response."""
     if not isinstance(value, dict):
-        raise MetadataError(f"GitHub returned invalid {description}")
+        raise MetadataError(
+            f"Bad {description}: GitHub sent bad data. Rerun the failed job."
+        )
     return value
 
 
 def _objects(value: JsonValue, description: str) -> list[JsonObject]:
     """Flatten one paginated GitHub response into validated objects."""
     if not isinstance(value, list):
-        raise MetadataError(f"GitHub returned invalid {description}")
+        raise MetadataError(
+            f"Bad {description}: GitHub sent bad data. Rerun the failed job."
+        )
     if all(isinstance(item, dict) for item in value):
         return value
     if all(isinstance(page, list) for page in value):
         items = [item for page in value for item in page]
         if all(isinstance(item, dict) for item in items):
             return items
-    raise MetadataError(f"GitHub returned invalid {description}")
+    raise MetadataError(
+        f"Bad {description}: GitHub sent bad data. Rerun the failed job."
+    )
 
 
 def _detect_open_milestone(repo: str) -> tuple[int, str] | None:
@@ -93,7 +105,7 @@ def _detect_open_milestone(repo: str) -> tuple[int, str] | None:
         return int(number_text), title
     except (TypeError, ValueError) as error:
         raise MetadataError(
-            "detect-open-milestone returned invalid output"
+            "detect-open-milestone failed: bad output. Rerun the failed job."
         ) from error
 
 
@@ -150,8 +162,8 @@ def resolve_workflow_run_pr(
     ]
     if len(matches) != 1:
         raise MetadataError(
-            "policy run must resolve to exactly one open pull request; "
-            f"found {len(matches)}"
+            "policy run must resolve to exactly one open pull request: "
+            f"found {len(matches)}. Close the duplicate PR, then rerun the job."
         )
     return int(matches[0]["number"])
 
@@ -166,7 +178,8 @@ def issue_classification(issue: JsonObject) -> str:
     selected = labels & CLASSIFICATION_LABELS
     if len(selected) > 1:
         raise MetadataError(
-            "linked Issue has conflicting classification labels"
+            "linked Issue labels conflict: two classifications. "
+            "Remove one label from the Issue."
         )
 
     issue_type = issue.get("type")
@@ -176,7 +189,8 @@ def issue_classification(issue: JsonObject) -> str:
         return "documentation"
     if type_name in {"Bug", "Feature", "Task"} and selected_label is not None:
         raise MetadataError(
-            "linked Issue has a redundant or conflicting work-kind label"
+            "linked Issue has a redundant kind label: Type is set. "
+            "Remove that label from the Issue."
         )
     if type_name == "Bug":
         return "bug"
@@ -184,7 +198,9 @@ def issue_classification(issue: JsonObject) -> str:
         return "enhancement"
     if selected_label is not None:
         return selected_label
-    raise MetadataError("linked Issue has no usable classification")
+    raise MetadataError(
+        "linked Issue is unclassified: no Type. Set the Issue Type."
+    )
 
 
 def desired_pull_request_metadata(
@@ -237,7 +253,8 @@ def sync_pull_request(repo: str, number: int, run: Runner = _run_gh) -> str:
     if len(issue_numbers) != 1:
         joined = ", ".join(f"#{value}" for value in issue_numbers)
         raise MetadataError(
-            f"PR #{number} references multiple work Issues: {joined}"
+            f"PR #{number} references multiple work Issues: {joined}. "
+            "Keep one closing reference."
         )
     issue_number = issue_numbers[0]
 
@@ -246,7 +263,9 @@ def sync_pull_request(repo: str, number: int, run: Runner = _run_gh) -> str:
         "Issue metadata",
     )
     if "pull_request" in issue:
-        raise MetadataError(f"#{issue_number} is not an Issue")
+        raise MetadataError(
+            f"#{issue_number} is a PR: not an Issue. Reference a work Issue."
+        )
     current = _object(
         run(["api", f"repos/{repo}/issues/{number}"], None),
         "pull-request Issue metadata",
@@ -368,11 +387,15 @@ def remind_missing_milestone(
         None,
     )
     if not isinstance(pages, list):
-        raise MetadataError("GitHub returned invalid pull-request comments")
+        raise MetadataError(
+            "Bad comments: GitHub sent bad data. Rerun the failed job."
+        )
     comments = pages if all(isinstance(item, dict) for item in pages) else []
     if not comments and pages:
         if not all(isinstance(page, list) for page in pages):
-            raise MetadataError("GitHub returned invalid pull-request comments")
+            raise MetadataError(
+                "Bad comments: GitHub sent bad data. Rerun the failed job."
+            )
         comments = [item for page in pages for item in page]
     if any(
         isinstance(comment, dict)
@@ -433,6 +456,7 @@ def main() -> int:
             args.head_repository,
             args.head_branch,
         )
+        # message-pattern: allow X1 pull request number
         sys.stdout.write(f"{number}\n")
         return 0
 

@@ -605,7 +605,10 @@ def finalize_update_report(
     """
     current = validate_report(report)
     if current["operation"] != "update":
-        raise LifecycleReportError("Only an update has a final plan.")
+        raise LifecycleReportError(
+            "Final plan is not available: only an update has one. Run "
+            "'csarc update --finalize-plan' for an update report."
+        )
     files = [dict(row) for row in _rows(current["files"], "$.files")]
     conflicts = {
         str(row["path"])
@@ -622,8 +625,9 @@ def finalize_update_report(
         decisions[path] != "take-new" for path in retired
     ):
         raise LifecycleReportError(
-            "Final plan decisions must name every update conflict exactly; "
-            "a retire-modified file only takes take-new."
+            "Final plan decisions do not match the conflicts: each update "
+            "conflict needs one decision, and a retire-modified file takes "
+            "only take-new. Fix the '--decision' arguments."
         )
     for row in files:
         if row["path"] in decisions and row["reason"] in {
@@ -694,8 +698,8 @@ def mark_applied(
     plan = _mapping(current["plan"], "$.plan")
     if plan["sha256"] != plan_sha256:
         raise LifecycleReportError(
-            "Report is bound to a different plan digest; refusing to mark "
-            "it applied."
+            "Report is bound to a different plan digest: it belongs to "
+            "another plan. Apply the plan that wrote this report."
         )
     if final_plan_sha256 is not None:
         final = current["final_plan"]
@@ -703,12 +707,15 @@ def mark_applied(
             final.get("sha256") != final_plan_sha256
         ):
             raise LifecycleReportError(
-                "Report is bound to a different final plan digest; refusing "
-                "to mark it applied."
+                "Report is bound to a different final plan digest: it "
+                "belongs to another final plan. Apply the final plan that "
+                "wrote this report."
             )
     if current["status"] in {"applied", "blocked"}:
         raise LifecycleReportError(
-            f"A {current['status']} report cannot be marked applied."
+            f"A {current['status']} report cannot be marked applied: "
+            "only a planned report can. Run 'csarc update --check' or 'csarc "
+            "adopt' again for a new report."
         )
     operation = str(current["operation"])
     result = dict(current)

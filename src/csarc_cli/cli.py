@@ -595,7 +595,8 @@ def git_filter_config(repository: Path) -> tuple[tuple[str, str], ...]:
                 candidate.relative_to(root)
             except ValueError as error:
                 raise CliError(
-                    "Git submodule path escapes the repository."
+                    "Git submodule path is unsafe: it escapes the repository. "
+                    "Fix the submodule path in '.gitmodules'."
                 ) from error
             if candidate.is_dir():
                 pending.append(candidate)
@@ -649,7 +650,10 @@ def run_git(
 ) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
     """Run Git without repository-local or ambient executable helpers."""
     if not command or command[0] != "git":
-        raise ValueError("run_git requires a Git command")
+        raise ValueError(
+            "Git call is invalid: run_git needs a Git command. "
+            "Report this csarc bug with the command you ran."
+        )
     filter_config = (
         git_filter_config(repository)
         if repository is not None and neutralize_filters
@@ -687,7 +691,11 @@ def git_commit(source: Path, reference: str) -> str:
     )
     sha = result.stdout.strip()
     if result.returncode != 0 or FULL_SHA.fullmatch(sha) is None:
-        raise CliError(f"Cannot resolve template revision {reference!r}.")
+        raise CliError(
+            f"Template revision {reference!r} is unknown: Git cannot resolve "
+            "it. "
+            "Pass a published release tag with '--to'."
+        )
     return sha.lower()
 
 
@@ -701,45 +709,57 @@ def gh_json(endpoint: str) -> dict[str, object]:
         )
     except FileNotFoundError as error:
         raise CliError(
-            "GitHub CLI is required to resolve template releases."
+            "Template release lookup failed: GitHub CLI is missing. "
+            "Install 'gh' from https://cli.github.com/."
         ) from error
     if result.returncode != 0:
         detail = result.stderr.strip() or "GitHub API request failed"
-        raise CliError(f"Cannot resolve an approved GitHub Release: {detail}")
+        raise CliError(
+            f"Cannot resolve an approved GitHub Release: {detail}. "
+            "Run 'gh auth status', then run the csarc command again."
+        )
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as error:
         raise CliError(
-            "GitHub returned invalid JSON for the release."
+            "Release lookup failed: GitHub returned invalid JSON for the "
+            "release. "
+            "Run the csarc command again."
         ) from error
     if not isinstance(payload, dict):
-        raise CliError("GitHub returned an unexpected release response.")
+        raise CliError(
+            "Release lookup failed: GitHub returned an unexpected release "
+            "response. "
+            "Run the csarc command again."
+        )
     return payload
 
 
 def require_supported_gh() -> None:
     """Fail closed unless GitHub CLI supports safe release verification."""
-    requirement = (
-        f"Release verification requires gh {MINIMUM_GH_VERSION} or newer. "
-        f"Install or upgrade it using {GH_INSTALL_URL}."
-    )
     try:
         result = run(["gh", "--version"], capture=True, check=False)
     except FileNotFoundError as error:
-        raise CliError(f"GitHub CLI was not found. {requirement}") from error
+        raise CliError(
+            "GitHub CLI was not found: release verification requires gh "
+            f"{MINIMUM_GH_VERSION} or newer. Install it from {GH_INSTALL_URL}."
+        ) from error
 
     match = re.match(r"^gh version (\d+)\.(\d+)\.(\d+)(?:\s|$)", result.stdout)
     if result.returncode != 0 or match is None:
         output = result.stdout.strip() or result.stderr.strip() or "no output"
         raise CliError(
-            f"Cannot determine the GitHub CLI version from {output!r}. "
-            f"{requirement}"
+            f"Cannot determine the GitHub CLI version from {output!r}: "
+            f"release verification requires gh {MINIMUM_GH_VERSION} or newer. "
+            f"Install or upgrade it from {GH_INSTALL_URL}."
         )
     current = tuple(int(part) for part in match.groups())
     minimum = tuple(int(part) for part in MINIMUM_GH_VERSION.split("."))
     if current < minimum:
         raise CliError(
-            f"GitHub CLI {'.'.join(match.groups())} is too old. {requirement}"
+            f"GitHub CLI {'.'.join(match.groups())} is too old: release "
+            f"verification requires gh {MINIMUM_GH_VERSION} or newer. "
+            f"Upgrade it from {GH_INSTALL_URL}."
         )
 
 
@@ -774,21 +794,31 @@ def gh_json_or_missing(endpoint: str) -> dict[str, object] | None:
         )
     except FileNotFoundError as error:
         raise CliError(
-            "GitHub CLI is required to resolve template releases."
+            "Template release lookup failed: GitHub CLI is missing. "
+            "Install 'gh' from https://cli.github.com/."
         ) from error
     if result.returncode != 0:
         detail = result.stderr.strip() or "GitHub API request failed"
         if _NOT_FOUND_SUFFIX.search(detail):
             return None
-        raise CliError(f"Cannot resolve an approved GitHub Release: {detail}")
+        raise CliError(
+            f"Cannot resolve an approved GitHub Release: {detail}. "
+            "Run 'gh auth status', then run the csarc command again."
+        )
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as error:
         raise CliError(
-            "GitHub returned invalid JSON for the release."
+            "Release lookup failed: GitHub returned invalid JSON for the "
+            "release. "
+            "Run the csarc command again."
         ) from error
     if not isinstance(payload, dict):
-        raise CliError("GitHub returned an unexpected release response.")
+        raise CliError(
+            "Release lookup failed: GitHub returned an unexpected release "
+            "response. "
+            "Run the csarc command again."
+        )
     return payload
 
 
@@ -802,19 +832,29 @@ def gh_json_list(endpoint: str) -> list[object]:
         )
     except FileNotFoundError as error:
         raise CliError(
-            "GitHub CLI is required to resolve template releases."
+            "Template release lookup failed: GitHub CLI is missing. "
+            "Install 'gh' from https://cli.github.com/."
         ) from error
     if result.returncode != 0:
         detail = result.stderr.strip() or "GitHub API request failed"
-        raise CliError(f"Cannot resolve an approved GitHub Release: {detail}")
+        raise CliError(
+            f"Cannot resolve an approved GitHub Release: {detail}. "
+            "Run 'gh auth status', then run the csarc command again."
+        )
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as error:
         raise CliError(
-            "GitHub returned invalid JSON for the release."
+            "Release lookup failed: GitHub returned invalid JSON for the "
+            "release. "
+            "Run the csarc command again."
         ) from error
     if not isinstance(payload, list):
-        raise CliError("GitHub returned an unexpected release response.")
+        raise CliError(
+            "Release lookup failed: GitHub returned an unexpected release "
+            "response. "
+            "Run the csarc command again."
+        )
     return payload
 
 
@@ -851,7 +891,7 @@ class GhReleaseClient:
         if release is None:
             raise ReleaseNotFoundError(
                 f"GitHub Release {tag!r} was not found on the canonical "
-                "repository."
+                "repository: no such tag. Pass a published tag with '--to'."
             )
         return release
 
@@ -900,9 +940,11 @@ class GhReleaseClient:
         latest_tag = release_phase.select_latest(eligible)
         if latest_tag is None:
             raise CliError(
-                "No published, well-formed, self-consistent GitHub Release "
-                f"was found for the {channel} channel on the canonical "
-                "repository."
+                "Release lookup failed: no published, well-formed, "
+                "self-consistent "
+                f"GitHub Release was found for the {channel} channel on the "
+                "canonical "
+                "repository. Pass a published tag with '--to'."
             )
         return eligible[latest_tag]
 
@@ -913,21 +955,30 @@ class GhReleaseClient:
         )
         target = payload.get("object")
         if not isinstance(target, dict):
-            raise CliError(f"GitHub tag {tag!r} has no target object.")
+            raise CliError(
+                f"GitHub tag {tag!r} is invalid: it has no target object. "
+                "Pass another published tag with '--to'."
+            )
         object_sha = target.get("sha")
         target_type = target.get("type")
         target_sha = object_sha
         visited: set[str] = set()
         while target_type == "tag" and isinstance(target_sha, str):
             if target_sha in visited:
-                raise CliError(f"GitHub tag {tag!r} contains a cycle.")
+                raise CliError(
+                    f"GitHub tag {tag!r} is invalid: it contains a cycle. "
+                    "Pass another published tag with '--to'."
+                )
             visited.add(target_sha)
             tag_payload = gh_json(
                 f"repos/{CANONICAL_REPOSITORY}/git/tags/{target_sha}"
             )
             target = tag_payload.get("object")
             if not isinstance(target, dict):
-                raise CliError(f"GitHub tag {tag!r} has an invalid object.")
+                raise CliError(
+                    f"GitHub tag {tag!r} is invalid: it has an invalid object. "
+                    "Pass another published tag with '--to'."
+                )
             target_type = target.get("type")
             target_sha = target.get("sha")
         if (
@@ -937,7 +988,11 @@ class GhReleaseClient:
             or not isinstance(object_sha, str)
             or FULL_SHA.fullmatch(object_sha) is None
         ):
-            raise CliError(f"GitHub tag {tag!r} does not resolve to a commit.")
+            raise CliError(
+                f"GitHub tag {tag!r} is invalid: it does not resolve to a "
+                "commit. "
+                "Pass another published tag with '--to'."
+            )
         return TagResolution(object_sha.lower(), target_sha.lower())
 
     def verify_release(self, tag: str) -> None:
@@ -958,15 +1013,24 @@ class GhReleaseClient:
         )
         if result.returncode != 0:
             detail = result.stderr.strip() or "attestation is unavailable"
-            raise CliError(f"Release attestation verification failed: {detail}")
+            raise CliError(
+                f"Release attestation verification failed: {detail}. "
+                "Run 'gh attestation verify' on the release to see the cause."
+            )
         try:
             attestation = json.loads(result.stdout)
         except json.JSONDecodeError as error:
             raise CliError(
-                "Release attestation returned invalid JSON."
+                "Release attestation verification failed: GitHub returned "
+                "invalid "
+                "JSON. Run the csarc command again."
             ) from error
         if not attestation:
-            raise CliError("Release attestation response is empty.")
+            raise CliError(
+                "Release attestation verification failed: the response is "
+                "empty. "
+                "Run the csarc command again."
+            )
 
     def verify_commit(self, sha: str) -> None:
         """Require GitHub to report a valid commit signature."""
@@ -984,7 +1048,10 @@ class GhReleaseClient:
                 if isinstance(verification, dict)
                 else "missing"
             )
-            raise CliError(f"Commit signature verification failed ({reason}).")
+            raise CliError(
+                f"Commit signature verification failed: {reason}. "
+                "Pass a published release tag with '--to'."
+            )
 
 
 def resolve_unreleased_revision(source: str, requested: str | None) -> Revision:
@@ -992,8 +1059,8 @@ def resolve_unreleased_revision(source: str, requested: str | None) -> Revision:
     source_path = Path(source).expanduser().resolve()
     if not source_path.is_dir():
         raise CliError(
-            "--allow-unreleased template source is unavailable; use a local "
-            "Git repository."
+            "--allow-unreleased template source is unavailable: use a local "
+            "Git repository. Pass its path with '--source'."
         )
     if requested is not None and FULL_SHA.fullmatch(requested):
         return Revision(
@@ -1010,7 +1077,11 @@ def resolve_unreleased_revision(source: str, requested: str | None) -> Revision:
             capture=True,
         ).stdout.splitlines()
         if not tags:
-            raise CliError("Local template repository has no release tags.")
+            raise CliError(
+                "Local template repository is incomplete: it has no release "
+                "tags. "
+                "Run 'git fetch --tags' in the template clone."
+            )
         reference = tags[0]
     return Revision(label, git_commit(source_path, reference), str(source_path))
 
@@ -1028,25 +1099,38 @@ def release_identity(release: dict[str, object]) -> tuple[str, int]:
     tag = release.get("tag_name")
     release_id = release.get("id")
     if not isinstance(tag, str) or not tag or not isinstance(release_id, int):
-        raise CliError("GitHub returned incomplete release metadata.")
+        raise CliError(
+            "Release identity is unknown: GitHub returned incomplete release "
+            "metadata. Run the csarc command again."
+        )
     if release.get("draft") is not False:
-        raise CliError("Only published GitHub Releases are approved.")
+        raise CliError(
+            "Only published GitHub Releases are approved: this release is not "
+            "published. Pass a published tag with '--to'."
+        )
     try:
         parsed = release_phase.parse_version(tag)
     except release_phase.ReleasePhaseError as error:
         raise UnsupportedReleaseVersionError(
             f"GitHub Release tag {tag!r} is not a supported beta/stable "
-            "version; reinstall from the latest stable release is required."
+            "version: reinstall from the latest stable release is required. "
+            "Pass the latest stable tag with '--to'."
         ) from error
     if release.get("prerelease") is not parsed.is_prerelease:
         raise CliError(
-            f"GitHub Release {tag!r} prerelease flag does not match its "
-            "version format."
+            f"GitHub Release {tag!r} is invalid: its prerelease flag does not "
+            "match its version format. Pass another published tag with '--to'."
         )
     if not isinstance(release.get("published_at"), str):
-        raise CliError("The selected GitHub Release is not published.")
+        raise CliError(
+            "The selected GitHub Release is not published: it is a draft. "
+            "Pass a published tag with '--to'."
+        )
     if release.get("immutable") is not True:
-        raise CliError("The selected GitHub Release is not immutable.")
+        raise CliError(
+            "The selected GitHub Release is not immutable: its assets can "
+            "change. Pass an immutable release tag with '--to'."
+        )
     return tag, release_id
 
 
@@ -1067,7 +1151,9 @@ def resolve_revision(
             or revision.sha != expected_sha.lower()
         ):
             raise CliError(
-                "Expected commit SHA does not match the unreleased revision."
+                "Expected commit SHA does not match the unreleased revision: "
+                "the "
+                "source moved. Pass the current SHA with '--expected-sha'."
             )
         return revision
     canonical_sources = {
@@ -1076,21 +1162,31 @@ def resolve_revision(
     }
     if source.rstrip("/") not in canonical_sources:
         raise CliError(
-            f"Production source must be {CANONICAL_SOURCE}; use "
-            "--allow-unreleased only for local development."
+            "Production source is not approved: it must be "
+            f"{CANONICAL_SOURCE}. Use '--allow-unreleased' only for local "
+            "development."
         )
     if expected_sha is not None and FULL_SHA.fullmatch(expected_sha) is None:
-        raise CliError("--expected-sha must be a full 40-character commit SHA.")
+        raise CliError(
+            "--expected-sha is invalid: it must be a full 40-character commit "
+            "SHA. Pass the full SHA from 'git rev-parse HEAD'."
+        )
 
     if channel not in release_phase.PHASES:
-        raise CliError("--channel must be stable or beta.")
+        raise CliError(
+            "--channel is invalid: it must be stable or beta. "
+            "Pass '--channel stable' or '--channel beta'."
+        )
     github = client or GhReleaseClient()
     repository = github.repository()
     if (
         repository.get("id") != CANONICAL_REPOSITORY_ID
         or repository.get("full_name") != CANONICAL_REPOSITORY
     ):
-        raise CliError("Canonical GitHub repository identity mismatch.")
+        raise CliError(
+            "Release verification failed: canonical GitHub repository identity "
+            "mismatch. Pass the canonical repository with '--source'."
+        )
     release = github.release(requested, channel=channel)
     tag, release_id = release_identity(release)
 
@@ -1098,10 +1194,14 @@ def resolve_revision(
     github.verify_release(tag)
     after = github.resolve_tag(tag)
     if before != after:
-        raise CliError("Release tag moved during verification.")
+        raise CliError(
+            "Release verification failed: release tag moved during "
+            "verification. Run the csarc command again."
+        )
     if expected_sha is not None and after.commit_sha != expected_sha.lower():
         raise CliError(
-            "Expected commit SHA does not match the verified release."
+            "Expected commit SHA does not match the verified release: the tag "
+            "points elsewhere. Pass the release SHA with '--expected-sha'."
         )
     github.verify_commit(after.commit_sha)
     return Revision(
@@ -1124,7 +1224,10 @@ def parse_data(values: list[str]) -> dict[str, str]:
     for value in values:
         key, separator, item = value.partition("=")
         if not separator or not key:
-            raise CliError(f"Invalid --data value {value!r}; use KEY=VALUE.")
+            raise CliError(
+                f"Invalid --data value {value!r}: it has no '='. "
+                "Use '--data KEY=VALUE'."
+            )
         result[key] = item
     return result
 
@@ -1349,6 +1452,7 @@ def copier_copy(
                 or result.stdout.strip()
                 or "unknown Copier error"
             )
+            + ". Fix the cause above, then run the csarc command again."
         )
     if not persist_answers:
         return {}
@@ -1357,7 +1461,10 @@ def copier_copy(
         pin_answer_commit(stage, revision.sha)
         persist_release_answers(stage, data, decisions)
     except CliError as error:
-        raise CliError(f"Copier {phase} failed: {error}") from error
+        raise CliError(
+            f"Copier {phase} failed: {str(error).rstrip('.')}. "
+            "Fix the cause, then run the csarc command again."
+        ) from error
     return context
 
 
@@ -1372,13 +1479,19 @@ def take_render_context(stage: Path) -> dict[str, object]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise CliError("The template render context is unreadable.") from error
+        raise CliError(
+            "Template render failed: the render context is unreadable. "
+            "Pass a published release tag with '--to'."
+        ) from error
     finally:
         path.unlink(missing_ok=True)
     if not isinstance(payload, dict) or set(payload) - set(
         settings_schema.CONTEXT_KEYS
     ):
-        raise CliError("The template render context has an unknown shape.")
+        raise CliError(
+            "Template render failed: the render context has an unknown shape. "
+            "Pass a published release tag with '--to'."
+        )
     return {str(key): value for key, value in payload.items()}
 
 
@@ -1388,7 +1501,10 @@ def pin_answer_commit(target: Path, commit: str) -> None:
     lines = answers.read_text(encoding="utf-8").splitlines()
     matches = sum(line.startswith("_commit:") for line in lines)
     if matches != 1:
-        raise CliError("Copier answers must contain exactly one _commit value.")
+        raise CliError(
+            "Copier answers are invalid: they must contain exactly one _commit "
+            "value. Fix '_commit' in '.copier-answers.yml'."
+        )
     pinned = [
         f"_commit: {commit}" if line.startswith("_commit:") else line
         for line in lines
@@ -1417,9 +1533,15 @@ def safe_copier_config_path(target: Path) -> Path:
     try:
         mode = path.lstat().st_mode
     except FileNotFoundError as error:
-        raise CliError(f"Template did not create {CONFIG_FILE}.") from error
+        raise CliError(
+            f"Template render failed: it did not create {CONFIG_FILE}. "
+            "Pass a published release tag with '--to'."
+        ) from error
     if not stat.S_ISREG(mode):
-        raise CliError("Copier configuration must be a regular file.")
+        raise CliError(
+            "Copier configuration is unsafe: it must be a regular file. "
+            f"Replace {CONFIG_FILE} with a regular file."
+        )
     return path
 
 
@@ -1434,9 +1556,15 @@ def read_copier_answers(path: Path) -> dict[str, object]:
     try:
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
-        raise CliError(f"Cannot read Copier answers from {path}.") from error
+        raise CliError(
+            f"Cannot read Copier answers from {path}: the file is unreadable. "
+            "Restore it from Git with 'git checkout'."
+        ) from error
     if not isinstance(payload, dict):
-        raise CliError(f"Copier answers in {path} must be a mapping.")
+        raise CliError(
+            f"Copier answers in {path} must be a mapping: the file has another "
+            "shape. Restore it from Git with 'git checkout'."
+        )
     return {
         str(key): value
         for key, value in payload.items()
@@ -1502,9 +1630,15 @@ def persist_release_answers(
     try:
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
-        raise CliError(f"Cannot read Copier answers from {path}.") from error
+        raise CliError(
+            f"Cannot read Copier answers from {path}: the file is unreadable. "
+            "Restore it from Git with 'git checkout'."
+        ) from error
     if not isinstance(payload, dict):
-        raise CliError(f"Copier answers in {path} must be a mapping.")
+        raise CliError(
+            f"Copier answers in {path} must be a mapping: the file has another "
+            "shape. Restore it from Git with 'git checkout'."
+        )
     if settings_schema.SCHEMA_KEY in payload:
         values = {str(key): value for key, value in payload.items()}
         values["release_ownership"] = release_ownership(answers)
@@ -1601,7 +1735,10 @@ def project_verification_evidence(
 ) -> dict[str, object]:
     """Return stable, precise evidence for one configured project hook."""
     if result not in {"passed", "failed", "not-run"}:
-        raise ValueError(f"Unsupported project verification result: {result}")
+        raise ValueError(
+            f"Unsupported project verification result: {result}. "
+            "Report this csarc bug with the command you ran."
+        )
     return {**configuration, "reason": reason, "result": result}
 
 
@@ -1617,11 +1754,14 @@ def reject_canonical_verification_hook(
             if canonical.exists() and os.path.samefile(hook, canonical):
                 raise CliError(
                     "Project verification hook must not resolve to the "
-                    f"canonical verifier: {raw_path}"
+                    f"canonical verifier: {raw_path}. "
+                    "Set 'project_verification_hook' to a product script."
                 )
         except OSError as error:
             raise CliError(
-                f"Cannot compare project verification hook identity: {raw_path}"
+                "Cannot compare project verification hook identity: "
+                f"{raw_path}. "
+                "Set 'project_verification_hook' to a readable product script."
             ) from error
 
 
@@ -1633,7 +1773,10 @@ def validated_project_verification_hook(
     if raw_path is None:
         return None
     if not isinstance(raw_path, str):
-        raise CliError("Project verification hook must be a path string.")
+        raise CliError(
+            "Project verification hook must be a path string: another type was "
+            "given. Set 'project_verification_hook' to a relative path."
+        )
     relative = Path(raw_path)
     if (
         not raw_path
@@ -1644,26 +1787,32 @@ def validated_project_verification_hook(
     ):
         raise CliError(
             "Project verification hook must be a safe repository-relative "
-            "executable path without shell syntax or parent traversal."
+            "executable path: it has shell syntax or parent traversal. "
+            "Set 'project_verification_hook' to a path such as "
+            "'scripts/verify-product'."
         )
     try:
         root = target.resolve(strict=True)
         hook = (target / relative).resolve(strict=True)
     except (OSError, RuntimeError) as error:
         raise CliError(
-            f"Project verification hook does not exist: {raw_path}"
+            f"Project verification hook does not exist: {raw_path}. "
+            "Create the script or fix 'project_verification_hook'."
         ) from error
     if hook != root and root not in hook.parents:
         raise CliError(
-            f"Project verification hook escapes the repository: {raw_path}"
+            f"Project verification hook escapes the repository: {raw_path}. "
+            "Set 'project_verification_hook' to a path inside the repository."
         )
     if not hook.is_file():
         raise CliError(
-            f"Project verification hook is not a regular file: {raw_path}"
+            f"Project verification hook is not a regular file: {raw_path}. "
+            "Set 'project_verification_hook' to a regular file."
         )
     if not os.access(hook, os.X_OK):
         raise CliError(
-            f"Project verification hook is not executable: {raw_path}"
+            f"Project verification hook is not executable: {raw_path}. "
+            f"Run 'chmod +x {raw_path}'."
         )
     reject_canonical_verification_hook(target, hook, raw_path)
     return hook
@@ -1675,7 +1824,10 @@ def file_fingerprint(path: Path) -> str:
     try:
         mode = path.lstat().st_mode
     except FileNotFoundError as error:
-        raise CliError(f"Managed adoption file is missing: {path}") from error
+        raise CliError(
+            f"Managed adoption file is missing: {path}. "
+            "Restore it, then run 'csarc adopt --finalize'."
+        ) from error
     if stat.S_ISLNK(mode):
         digest.update(b"symlink\0")
         digest.update(os.readlink(path).encode())
@@ -1685,7 +1837,10 @@ def file_fingerprint(path: Path) -> str:
         digest.update(b"\0")
         digest.update(path.read_bytes())
     else:
-        raise CliError(f"Managed adoption file is missing: {path}")
+        raise CliError(
+            f"Managed adoption file is missing: {path}. "
+            "Restore it, then run 'csarc adopt --finalize'."
+        )
     return digest.hexdigest()
 
 
@@ -1711,7 +1866,7 @@ def git_blob_oid(target: Path, revision: str, relative_name: str) -> str:
         detail = result.stderr.strip()
         raise CliError(
             f"Cannot recover the original manual file {relative_name} from "
-            f"Git history. {detail}"
+            f"Git history: {detail}. Restart adoption from a clean commit."
         )
     kind = run_git(
         ["git", "-C", str(target), "cat-file", "-t", oid],
@@ -1721,7 +1876,10 @@ def git_blob_oid(target: Path, revision: str, relative_name: str) -> str:
         neutralize_filters=True,
     )
     if kind.returncode != 0 or kind.stdout.strip() != "blob":
-        raise CliError(f"Original manual path is not a file: {relative_name}.")
+        raise CliError(
+            f"Original manual path is not a file: {relative_name}. "
+            "Restart adoption from a clean commit."
+        )
     return oid.lower()
 
 
@@ -1733,9 +1891,15 @@ def git_worktree_file_oid(
     try:
         mode = path.lstat().st_mode
     except FileNotFoundError as error:
-        raise CliError(f"Manual adoption file is missing: {path}") from error
+        raise CliError(
+            f"Manual adoption file is missing: {path}. "
+            "Restore it, then run 'csarc adopt --finalize'."
+        ) from error
     if not stat.S_ISREG(mode):
-        raise CliError(f"Manual adoption file is not a regular file: {path}")
+        raise CliError(
+            f"Manual adoption file is not a regular file: {path}. "
+            "Replace it with a regular file, then run 'csarc adopt --finalize'."
+        )
     result = run_git(
         [
             "git",
@@ -1755,7 +1919,8 @@ def git_worktree_file_oid(
         detail = result.stderr.strip()
         raise CliError(
             f"Cannot hash manual adoption file {relative_name} with Git path "
-            f"attributes. {detail}"
+            f"attributes: {detail}. Fix '.gitattributes', then run "
+            "'csarc adopt --finalize'."
         )
     return oid.lower()
 
@@ -1826,20 +1991,22 @@ def read_pending_adoption(target: Path) -> dict[str, object]:
         mode = path.lstat().st_mode
     except (FileNotFoundError, NotADirectoryError) as error:
         raise CliError(
-            "No pending adoption exists; run csarc adopt first or use "
-            "csarc update for a completed adoption."
+            "No pending adoption exists: nothing waits for finalize. "
+            "Run 'csarc adopt' first, or use 'csarc update' for a completed "
+            "adoption."
         ) from error
     if not stat.S_ISREG(mode):
         raise CliError(
-            "Pending adoption state is not a regular file; restore the "
-            "checkpoint or restart adoption from a clean commit."
+            "Pending adoption state is not a regular file: it was replaced. "
+            "Restore the checkpoint or restart adoption from a clean commit."
         )
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise CliError(
-            "Pending adoption state is unreadable; restore it from the "
-            "original adoption or restart from a clean commit."
+            "Pending adoption state is unreadable: the file is damaged. "
+            "Restore it from the original adoption or restart from a clean "
+            "commit."
         ) from error
     template = payload.get("template") if isinstance(payload, dict) else None
     repository = (
@@ -1870,8 +2037,10 @@ def read_pending_adoption(target: Path) -> dict[str, object]:
         )
     ):
         raise CliError(
-            "Pending adoption state has an unsupported shape; restore it "
-            "from the original adoption or restart from a clean commit."
+            "Pending adoption state has an unsupported shape: the file is "
+            "damaged. Restore it from the original adoption or restart from a "
+            "clean "
+            "commit."
         )
     return payload
 
@@ -1887,9 +2056,9 @@ def validate_pending_manual_merges(
     """Verify pending merge identities and require changed manual bytes."""
     if pending.get("schema_version") != 2:
         raise CliError(
-            "Pending adoption state predates manual-file fingerprints, so "
-            "CSARC cannot determine whether its manual merges were completed; "
-            "restore the original files and restart adoption from a clean "
+            "Pending adoption state predates manual-file fingerprints: "
+            "CSARC cannot determine whether its manual merges were completed. "
+            "Restore the original files and restart adoption from a clean "
             "commit."
         )
     raw_files = pending.get("manual_files")
@@ -1912,8 +2081,9 @@ def validate_pending_manual_merges(
         or set(raw_merges) != set(raw_fingerprints)
     ):
         raise CliError(
-            "Pending manual-file fingerprints are invalid; restore the "
-            "checkpoint or restart adoption from a clean commit."
+            "Pending manual-file fingerprints are invalid: the state is "
+            "damaged. "
+            "Restore the checkpoint or restart adoption from a clean commit."
         )
     fingerprints = cast(dict[str, str], raw_fingerprints)
     forged = [
@@ -1948,17 +2118,16 @@ def validate_pending_manual_merges(
             package = json.loads(package_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
             raise CliError(
-                "Manual package.json is invalid JSON; fix it, then rerun "
-                "csarc adopt --finalize."
+                "Manual package.json is invalid JSON: it does not parse. "
+                "Fix it, then rerun 'csarc adopt --finalize'."
             ) from error
         expected_name = answers.get("project_slug")
         actual_name = package.get("name") if isinstance(package, dict) else None
         if not isinstance(expected_name, str) or actual_name != expected_name:
             raise CliError(
                 "Manual package.json name must match project_slug "
-                f"({expected_name!r}); found {actual_name!r}. Fix "
-                "package.json, "
-                "then rerun csarc adopt --finalize."
+                f"({expected_name!r}): found {actual_name!r}. Fix the name in "
+                "package.json, then rerun 'csarc adopt --finalize'."
             )
     return tuple(cast(list[str], raw_files))
 
@@ -1969,9 +2138,9 @@ def pending_adoption_target_head(
     """Recover and authenticate the pre-adoption commit from Git history."""
     if pending.get("schema_version") != 2:
         raise CliError(
-            "Pending adoption state predates manual-file fingerprints, so "
-            "CSARC cannot determine whether its manual merges were completed; "
-            "restore the original files and restart adoption from a clean "
+            "Pending adoption state predates manual-file fingerprints: "
+            "CSARC cannot determine whether its manual merges were completed. "
+            "Restore the original files and restart adoption from a clean "
             "commit."
         )
     saved_head = pending.get("target_head")
@@ -1980,8 +2149,9 @@ def pending_adoption_target_head(
         or FULL_SHA.fullmatch(saved_head) is None
     ):
         raise CliError(
-            "Pending adoption has no valid original Git revision; restore the "
-            "checkpoint or restart adoption from a clean commit."
+            "Pending adoption has no valid original Git revision: the state is "
+            "damaged. Restore the checkpoint or restart adoption from a clean "
+            "commit."
         )
     committed = run_git(
         [
@@ -2002,7 +2172,11 @@ def pending_adoption_target_head(
     )
     if committed.returncode != 0:
         detail = committed.stderr.strip()
-        raise CliError("Cannot inspect pending adoption Git history. " + detail)
+        raise CliError(
+            f"Cannot inspect pending adoption Git history: {detail}. "
+            "Run 'git log' to check the repository, then retry 'csarc adopt "
+            "--finalize'."
+        )
     if committed.stdout.rstrip("\0") == PENDING_ADOPTION_FILE.as_posix():
         introduced = run_git(
             [
@@ -2028,7 +2202,9 @@ def pending_adoption_target_head(
         ):
             raise CliError(
                 "Cannot locate the pending adoption checkpoint in Git "
-                "history; restore it or restart adoption from a clean commit."
+                "history: the commit is gone. Restore it or restart adoption "
+                "from a "
+                "clean commit."
             )
         parent = run_git(
             [
@@ -2047,19 +2223,22 @@ def pending_adoption_target_head(
         if parent.returncode != 0 or FULL_SHA.fullmatch(observed_head) is None:
             raise CliError(
                 "Cannot recover the repository revision before pending "
-                "adoption; restart adoption from a clean commit."
+                "adoption: Git history changed. Restart adoption from a clean "
+                "commit."
             )
     elif not committed.stdout:
         observed_head, _ = git_target_state(target)
     else:
         raise CliError(
-            "Pending adoption path has an unexpected Git tree entry; restore "
-            "the checkpoint or restart adoption from a clean commit."
+            "Pending adoption path has an unexpected Git tree entry: it is not "
+            "a file. Restore the checkpoint or restart adoption from a clean "
+            "commit."
         )
     if observed_head.lower() != saved_head.lower():
         raise CliError(
-            "Pending adoption does not match its original Git revision; "
-            "restore the checkpoint or restart adoption from a clean commit."
+            "Pending adoption does not match its original Git revision: files "
+            "changed. Restore the checkpoint or restart adoption from a clean "
+            "commit."
         )
     return saved_head
 
@@ -2077,7 +2256,10 @@ def validate_pending_adoption_identity(  # noqa: C901
         or not isinstance(raw_repository, dict)
         or not isinstance(raw_managed, list)
     ):
-        raise CliError("Pending adoption state is invalid.")
+        raise CliError(
+            "Pending adoption state is invalid: required fields are missing. "
+            "Restore the checkpoint or restart adoption from a clean commit."
+        )
     source = raw_template.get("source")
     release = raw_template.get("release")
     sha = raw_template.get("sha")
@@ -2092,8 +2274,8 @@ def validate_pending_adoption_identity(  # noqa: C901
         or verification not in {"verified", "development-unreleased"}
     ):
         raise CliError(
-            "Pending template identity is invalid; restore the checkpoint or "
-            "restart adoption from a clean commit."
+            "Pending template identity is invalid: the state is damaged. "
+            "Restore the checkpoint or restart adoption from a clean commit."
         )
 
     answers_path = checked_destination(
@@ -2101,24 +2283,33 @@ def validate_pending_adoption_identity(  # noqa: C901
     )
     if answers_path.is_symlink() or not answers_path.is_file():
         raise CliError(
-            "Pending adoption is missing the CSARC configuration; restore the "
-            "managed file, then rerun csarc adopt --finalize."
+            "Pending adoption is missing the CSARC configuration: "
+            f"{CONFIG_FILE} is gone. Restore the managed file, then rerun "
+            "'csarc adopt --finalize'."
         )
     actual_answers_hash = hashlib.sha256(answers_path.read_bytes()).hexdigest()
     if actual_answers_hash != pending["answers_sha256"]:
         raise CliError(
-            "Copier answers changed after adoption started; restore "
-            "configuration or restart adoption from a clean commit."
+            "Copier answers changed after adoption started: they no longer "
+            "match the saved state. Restore the configuration or restart "
+            "adoption "
+            "from a clean commit."
         )
     if read_answer(answers_path, "_src_path") != source:
         raise CliError(
-            "Copier source drifted after adoption started; restore the saved "
-            "answers or restart adoption from a clean commit."
+            "Copier source drifted after adoption started: it no longer "
+            "matches "
+            "the saved state. Restore the saved answers or restart adoption "
+            "from a "
+            "clean commit."
         )
     if read_answer(answers_path, "_commit").lower() != sha.lower():
         raise CliError(
-            "Copier commit drifted after adoption started; restore the saved "
-            "answers or restart adoption from a clean commit."
+            "Copier commit drifted after adoption started: it no longer "
+            "matches "
+            "the saved state. Restore the saved answers or restart adoption "
+            "from a "
+            "clean commit."
         )
     saved_repository = raw_repository.get("repository")
     saved_visibility = raw_repository.get("visibility")
@@ -2136,25 +2327,39 @@ def validate_pending_adoption_identity(  # noqa: C901
         or read_answer(answers_path, "project_visibility") != saved_visibility
     ):
         raise CliError(
-            "Repository origin or visibility changed after adoption started; "
-            "restore it or restart adoption from a clean commit."
+            "Repository origin or visibility changed after adoption started: "
+            "GitHub no longer matches the saved state. Restore it or restart "
+            "adoption from a clean commit."
         )
 
     for item in raw_managed:
         if not isinstance(item, dict):
-            raise CliError("Pending managed-file state is invalid.")
+            raise CliError(
+                "Pending managed-file state is invalid: the state is damaged. "
+                "Restore the checkpoint or restart adoption from a clean "
+                "commit."
+            )
         name = item.get("path")
         expected = item.get("fingerprint")
         if not isinstance(name, str) or not isinstance(expected, str):
-            raise CliError("Pending managed-file state is invalid.")
+            raise CliError(
+                "Pending managed-file state is invalid: the state is damaged. "
+                "Restore the checkpoint or restart adoption from a clean "
+                "commit."
+            )
         relative_path = Path(name)
         if relative_path.is_absolute() or ".." in relative_path.parts:
-            raise CliError("Pending managed-file path is invalid.")
+            raise CliError(
+                "Pending managed-file path is invalid: it is unsafe. "
+                "Restore the checkpoint or restart adoption from a clean "
+                "commit."
+            )
         path = checked_destination(target, name)
         if file_fingerprint(path) != expected:
             raise CliError(
                 f"Managed adoption file drifted: {name}. Restore it from the "
-                "pending template revision, then rerun csarc adopt --finalize."
+                "pending template revision, then rerun 'csarc adopt "
+                "--finalize'."
             )
 
     return pending, answers_path, pending_adoption_target_head(target, pending)
@@ -2225,7 +2430,10 @@ def write_provenance(
         try:
             raw = yaml.safe_load(config_bytes.decode("utf-8"))
         except (UnicodeDecodeError, yaml.YAMLError) as error:
-            raise CliError(f"Cannot read {CONFIG_FILE}.") from error
+            raise CliError(
+                f"Cannot read {CONFIG_FILE}: the file is unreadable. "
+                "Restore it from Git with 'git checkout'."
+            ) from error
         if isinstance(raw, dict) and settings_schema.SCHEMA_KEY in raw:
             payload["settings"] = settings_schema.settings_record(
                 settings_schema.context_from(answers), config_bytes
@@ -2262,9 +2470,15 @@ def read_provenance(target: Path) -> dict[str, object] | None:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
-        raise CliError("Saved provenance is invalid JSON.") from error
+        raise CliError(
+            "Saved provenance is invalid JSON: it does not parse. "
+            f"Restore {PROVENANCE_FILE} from Git with 'git checkout'."
+        ) from error
     if not isinstance(payload, dict):
-        raise CliError("Saved provenance must be a JSON object.")
+        raise CliError(
+            "Saved provenance must be a JSON object: it has another shape. "
+            f"Restore {PROVENANCE_FILE} from Git with 'git checkout'."
+        )
     return payload
 
 
@@ -2274,7 +2488,10 @@ def managed_agents_block(content: str) -> str:
         content.count(AGENTS_BLOCK_START) != 1
         or content.count(AGENTS_BLOCK_END) != 1
     ):
-        raise CliError("Generated AGENTS.md must contain one managed block.")
+        raise CliError(
+            "Generated AGENTS.md must contain one managed block: the template "
+            "is damaged. Pass a published release tag with '--to'."
+        )
     start = content.index(AGENTS_BLOCK_START)
     end = content.index(AGENTS_BLOCK_END, start) + len(AGENTS_BLOCK_END)
     return content[start:end]
@@ -2290,7 +2507,11 @@ def merge_agents_file(existing: str, generated: str) -> str:
     if starts == 0 and ends == 0:
         return existing.rstrip("\r\n") + newline * 2 + block + newline
     if starts != 1 or ends != 1:
-        raise CliError("Existing AGENTS.md has invalid CSARC block markers.")
+        raise CliError(
+            "Existing AGENTS.md has invalid CSARC block markers: a begin or "
+            "end "
+            "marker is missing or repeated. Fix the CSARC markers in AGENTS.md."
+        )
     start = existing.index(AGENTS_BLOCK_START)
     end = existing.index(AGENTS_BLOCK_END, start) + len(AGENTS_BLOCK_END)
     return existing[:start] + block + existing[end:]
@@ -2523,7 +2744,9 @@ def apply_layout_moves(
             if file_fingerprint(source) != file_fingerprint(destination):
                 raise CliError(
                     "Generated layout migration collision: "
-                    f"{source_name} -> {destination_name}."
+                    f"{source_name} -> {destination_name}: both files differ. "
+                    f"Merge {source_name} into {destination_name}, then delete "
+                    f"{source_name}."
                 )
             source.unlink()
         else:
@@ -3384,9 +3607,11 @@ def reviewers_answer(explicit_data: dict[str, str]) -> str | None:
         governance_migration.REVIEWERS_ANSWERS
     ):
         raise CliError(
-            "--data reviewers must be accept (the owner confirmed the "
-            "reviewer assignment change) or pending (the owner is not "
-            "available)."
+            "--data reviewers is invalid: it must be accept (the owner "
+            "confirmed "
+            "the reviewer assignment change) or pending (the owner is not "
+            "available). Pass '--data reviewers=accept' or '--data "
+            "reviewers=pending'."
         )
     return answer
 
@@ -3406,8 +3631,8 @@ def check_reviewers_answer(
     changes = reviewer_assignment_changes(files, settings)
     if answer is not None and not changes:
         raise CliError(
-            "--data reviewers answers a reviewer assignment change, and "
-            "this update does not retire the reviewer list; leave it out."
+            "--data reviewers is not needed: this update does not retire the "
+            "reviewer list. Remove '--data reviewers' from the command."
         )
     if finalize and changes and answer is None:
         raise CliError(
@@ -3636,8 +3861,9 @@ def lifecycle_report_model(  # noqa: C901
         if violations:
             raise CliError(
                 "Governance settings changed outside the approved migration "
-                "mapping (" + ", ".join(violations) + "); pass an explicit "
-                "--data value for each key and create a new plan."
+                "mapping: " + ", ".join(violations) + ". Pass an explicit "
+                "'--data KEY=VALUE' for each key, then run 'csarc update "
+                "--check' again."
             )
     file_rows = report_file_rows(
         files,
@@ -3822,7 +4048,10 @@ def lifecycle_report_model(  # noqa: C901
     try:
         lifecycle_report.validate_report(redacted)
     except lifecycle_report.LifecycleReportError as error:
-        raise CliError(f"Lifecycle report is invalid: {error}") from error
+        raise CliError(
+            f"Lifecycle report is invalid: {str(error).rstrip('.')}. "
+            "Report this csarc bug with the command you ran."
+        ) from error
     return redacted
 
 
@@ -3839,7 +4068,9 @@ def lifecycle_report_directory(
     if directory == target or target in directory.parents:
         raise CliError(
             f"{label.capitalize()} reports must be written outside the "
-            "target repo."
+            "target repo: the directory is inside it. Pass '--report-dir' with "
+            "a path "
+            "outside the repository."
         )
     return directory
 
@@ -3863,8 +4094,10 @@ def applied_report_directory(
         and adoption_report_directory(target, requested).resolve() != directory
     ):
         raise CliError(
-            "--report-dir must match the directory of the applied plan; the "
-            "applied report is written beside that plan."
+            "--report-dir must match the directory of the applied plan: the "
+            "applied report is written beside that plan. Remove '--report-dir' "
+            "or "
+            "pass the plan's directory."
         )
     return directory
 
@@ -3885,8 +4118,11 @@ def remove_legacy_adoption_report(root: Path, relative_directory: Path) -> None:
             return
         if not stat.S_ISREG(mode.st_mode):
             print(
-                "Warning: kept non-regular legacy report "
-                f"{root / relative_name}.",
+                (
+                    "WARNING: Legacy report was kept: "
+                    f"{root / relative_name} is not a regular file. Remove it "
+                    "by hand."
+                ),
                 file=sys.stderr,
             )
             return
@@ -3916,7 +4152,10 @@ def write_lifecycle_reports(
         report_text = lifecycle_report.report_json(report)
         markdown = lifecycle_report.render_markdown(json.loads(report_text))
     except lifecycle_report.LifecycleReportError as error:
-        raise CliError(f"Lifecycle report is invalid: {error}") from error
+        raise CliError(
+            f"Lifecycle report is invalid: {str(error).rstrip('.')}. "
+            "Report this csarc bug with the command you ran."
+        ) from error
     filesystem_root = Path(directory.anchor)
     relative_directory = directory.relative_to(filesystem_root)
     plan_path = directory / plan_name
@@ -3941,8 +4180,11 @@ def write_lifecycle_reports(
     if operation == "adopt":
         remove_legacy_adoption_report(filesystem_root, relative_directory)
     if emit:
+        # message-pattern: allow X1 report path lines read by tests and users
         print(f"Markdown report: {markdown_path}")
+        # message-pattern: allow X1 report path lines read by tests and users
         print(f"Report JSON: {json_path}")
+        # message-pattern: allow X1 report path lines read by tests and users
         print(f"Machine plan: {plan_path}")
     return markdown_path, json_path, plan_path
 
@@ -3964,7 +4206,10 @@ def applied_lifecycle_report(
             final_plan_sha256=final_plan_sha256,
         )
     except lifecycle_report.LifecycleReportError as error:
-        raise CliError(f"Cannot mark the report applied: {error}") from error
+        raise CliError(
+            f"Cannot mark the report applied: {str(error).rstrip('.')}. "
+            "Check that the report folder is writable."
+        ) from error
 
 
 def adoption_plan_payload(plan: ResolvedPlan) -> dict[str, object]:
@@ -3991,7 +4236,10 @@ def atomic_parent_directory(
     no_follow = getattr(os, "O_NOFOLLOW", None)
     directory_only = getattr(os, "O_DIRECTORY", None)
     if no_follow is None or directory_only is None:
-        raise CliError("Atomic writes require no-follow directory support.")
+        raise CliError(
+            "Atomic writes are unavailable: this system has no no-follow "
+            "directory support. Run csarc on Linux, macOS, or WSL2."
+        )
     directory_flags = os.O_RDONLY | directory_only | no_follow
     descriptors: list[int] = []
     try:
@@ -4006,7 +4254,8 @@ def atomic_parent_directory(
         yield directory_fd, relative.name
     except OSError as error:
         raise CliError(
-            f"Cannot safely access {relative_name}: {error}"
+            f"Cannot safely access {relative_name}: {str(error).rstrip('.')}. "
+            "Check the path and its permissions."
         ) from error
     finally:
         for descriptor in reversed(descriptors):
@@ -4027,8 +4276,9 @@ def check_atomic_destination(
         return
     if not stat.S_ISREG(destination_mode):
         raise CliError(
-            "Atomic destination is a symlink or non-regular file: "
-            f"{relative_name}"
+            "Atomic destination is unsafe: "
+            f"{relative_name} is a symlink or non-regular file. "
+            "Replace it with a regular file."
         )
 
 
@@ -4052,7 +4302,10 @@ def create_atomic_temporary(
         except FileExistsError:
             continue
         return descriptor, temporary_name
-    raise CliError("Cannot allocate a unique atomic temporary file.")
+    raise CliError(
+        "Atomic write failed: cannot allocate a unique temporary file. "
+        "Remove stale '.csarc-tmp-*' files and run the command again."
+    )
 
 
 def atomic_replace_text(
@@ -4093,7 +4346,9 @@ def atomic_replace_text(
             os.fsync(directory_fd)
         except OSError as error:
             raise CliError(
-                f"Cannot safely replace {relative_name}: {error}"
+                f"Cannot safely replace {relative_name}: "
+                f"{str(error).rstrip('.')}. "
+                "Check the path and its permissions."
             ) from error
         finally:
             if temporary_name is not None:
@@ -4106,16 +4361,25 @@ def read_adoption_plan(path: Path) -> dict[str, object]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise CliError(f"Cannot read adoption plan from {path}.") from error
+        raise CliError(
+            f"Cannot read adoption plan from {path}: the file is unreadable. "
+            "Pass the plan path that 'csarc adopt --dry-run' printed."
+        ) from error
     if not isinstance(payload, dict):
-        raise CliError("Adoption plan must be a JSON object.")
+        raise CliError(
+            "Adoption plan must be a JSON object: the file has another shape. "
+            "Run 'csarc adopt --dry-run' again to create a new plan."
+        )
     expected = payload.pop("plan_sha256", None)
     encoded = json.dumps(
         payload, sort_keys=True, separators=(",", ":")
     ).encode()
     actual = hashlib.sha256(encoded).hexdigest()
     if not isinstance(expected, str) or expected != actual:
-        raise CliError("Adoption plan digest does not match its contents.")
+        raise CliError(
+            "Adoption plan digest does not match its contents: the plan was "
+            "edited. Run 'csarc adopt --dry-run' again to create a new plan."
+        )
     payload["plan_sha256"] = expected
     return payload
 
@@ -4133,23 +4397,33 @@ def require_replay_authorization(
     if not unreleased:
         if supplied:
             raise CliError(
-                "Verified replay uses its saved immutable Release; do not "
-                "pass --source, --expected-sha, or --allow-unreleased."
+                "Verified replay uses its saved immutable Release: extra "
+                "source "
+                "flags conflict with it. Do not pass --source, --expected-sha, "
+                "or "
+                "--allow-unreleased."
             )
         return False
     if not all((args.source, args.expected_sha, args.allow_unreleased)):
         raise CliError(
             "Unreleased replay requires this invocation to pass the saved "
-            "--source, full --expected-sha, and --allow-unreleased."
+            "--source, full --expected-sha, and --allow-unreleased: one is "
+            "missing. "
+            "Pass all three values from the plan."
         )
     if FULL_SHA.fullmatch(args.expected_sha) is None:
-        raise CliError("--expected-sha must be a full 40-character commit SHA.")
+        raise CliError(
+            "--expected-sha is invalid: it must be a full 40-character commit "
+            "SHA. Pass the full SHA saved in the plan."
+        )
     try:
         supplied_source = Path(args.source).expanduser().resolve()
         saved_source = Path(source).expanduser().resolve()
     except OSError as error:
         raise CliError(
-            "Cannot resolve the unreleased template source."
+            "Cannot resolve the unreleased template source: Git cannot read "
+            "it. "
+            "Pass the saved local clone with '--source'."
         ) from error
     if (
         supplied_source != saved_source
@@ -4157,14 +4431,14 @@ def require_replay_authorization(
     ):
         raise CliError(
             "Unreleased replay source or expected SHA does not match the "
-            "saved plan."
+            "saved plan: the template moved. Run 'csarc adopt --dry-run' again."
         )
     return True
 
 
 def print_saved_adoption_plan(payload: dict[str, object]) -> None:
     """Display every saved field before repository-controlled code runs."""
-    print("Saved adoption plan:")
+    print("NOTICE: Saved adoption plan follows.")
     print(json.dumps(payload, indent=2, sort_keys=True))
 
 
@@ -4172,7 +4446,10 @@ def adoption_binding(payload: dict[str, object]) -> dict[str, object]:
     """Return only fields that must remain identical before apply."""
     adoption = payload.get("adoption")
     if not isinstance(adoption, dict):
-        raise CliError("Adoption plan has no target state.")
+        raise CliError(
+            "Adoption plan has no target state: the plan is incomplete. "
+            "Run 'csarc adopt --dry-run' again to create a new plan."
+        )
     return {
         "answers": payload.get("answers"),
         "adoption": adoption,
@@ -4191,7 +4468,10 @@ def pre_verification_binding(payload: dict[str, object]) -> dict[str, object]:
     binding = adoption_binding(payload)
     adoption = binding["adoption"]
     if not isinstance(adoption, dict):
-        raise CliError("Adoption plan has no target state.")
+        raise CliError(
+            "Adoption plan has no target state: the plan is incomplete. "
+            "Run 'csarc adopt --dry-run' again to create a new plan."
+        )
     static_adoption = dict(adoption)
     static_adoption.pop("verification", None)
     hook = static_adoption.get("project_verification_hook")
@@ -4390,7 +4670,10 @@ def mark_adoption_applied(plan: ResolvedPlan, applied_at: str) -> ResolvedPlan:
     bound to the approved plan digest (#1062).
     """
     if plan.adoption is None:
-        raise CliError("Adoption report requires target state.")
+        raise CliError(
+            "Adoption report requires target state: the plan is incomplete. "
+            "Run 'csarc adopt --dry-run' again to create a new plan."
+        )
     adoption = dict(plan.adoption)
     adoption["applied"] = True
     adoption["applied_at"] = applied_at
@@ -4412,7 +4695,11 @@ def write_adoption_reports(
     marking the report applied and binding it to the approved plan digest.
     """
     if plan.files is None or plan.adoption is None:
-        raise CliError("Adoption report requires file and target state.")
+        raise CliError(
+            "Adoption report requires file and target state: the plan is "
+            "incomplete. Run 'csarc adopt --dry-run' again to create a new "
+            "plan."
+        )
     payload = adoption_plan_payload(plan)
     plan_sha256 = approved_sha256 or str(payload["plan_sha256"])
     report = lifecycle_report_model(
@@ -4437,12 +4724,14 @@ def write_adoption_reports(
 
 def print_group(title: str, paths: tuple[str, ...]) -> None:
     """Print one stable plan group."""
+    # message-pattern: allow-begin X5 plan group listing
     print(f"{title} ({len(paths)}):")
     if paths:
         for path in paths:
             print(f"  {path}")
     else:
         print("  (none)")
+    # message-pattern: allow-end
 
 
 def print_capabilities(payload: dict[str, object]) -> None:
@@ -4454,6 +4743,7 @@ def print_capabilities(payload: dict[str, object]) -> None:
             if isinstance(value, dict)
             else "unknown"
         )
+        # message-pattern: allow-begin X5 capability report
         print(f"GitHub release planning {name}={state}")
     raw_states = payload.get("token_permissions", payload.get("capabilities"))
     states = raw_states if isinstance(raw_states, dict) else {}
@@ -4470,7 +4760,10 @@ def print_capabilities(payload: dict[str, object]) -> None:
         else payload.get("mode", "blocked")
     )
     print(f"GitHub release planning effective={mode}")
-    print("Planning only: this check neither enables nor publishes a release.")
+    print(
+        "NOTICE: Planning only: this check neither enables nor publishes "
+        "a release."
+    )
     raw_integrations = payload.get("integrations")
     integrations = (
         raw_integrations if isinstance(raw_integrations, dict) else {}
@@ -4482,6 +4775,7 @@ def print_capabilities(payload: dict[str, object]) -> None:
         next_step = value.get("next_step", "No automatic action.")
         print(f"Optional integration {name}: {state}")
         print(f"Next: {next_step}")
+        # message-pattern: allow-end
 
 
 def print_update_recommendation(update: dict[str, object] | None) -> None:
@@ -4490,11 +4784,13 @@ def print_update_recommendation(update: dict[str, object] | None) -> None:
         return
     recommendation = update.get("governance_drift_recommendation")
     if isinstance(recommendation, str):
+        # message-pattern: allow X5 recommendation line of the plan report
         print(f"Recommendation: {recommendation}")
 
 
 def print_plan(plan: ResolvedPlan) -> None:
     """Print the human-readable form of the shared plan model."""
+    # message-pattern: allow-begin X5 lifecycle plan report
     print(f"Mode: {plan.mode}")
     print(f"Target: {plan.target}")
     if plan.update is not None:
@@ -4582,6 +4878,7 @@ def print_plan(plan: ResolvedPlan) -> None:
             "Conflict risk: Copier smart diff; conflicts fail closed and "
             "remain in place."
         )
+    # message-pattern: allow-end
     print_update_recommendation(plan.update)
 
 
@@ -4591,6 +4888,7 @@ def print_setup(setup: Mapping[str, object] | None) -> None:
         return
     questions = setup.get("questions")
     asked = questions if isinstance(questions, list) else []
+    # message-pattern: allow-begin X5 setup section of the plan report
     print(
         f"Work mode: {setup.get('work_mode')} (expanded into the settings "
         "above; the name is not saved)"
@@ -4615,6 +4913,7 @@ def print_setup(setup: Mapping[str, object] | None) -> None:
                 f"{row.get('message')}"
                 + (f" Fix: {command}" if command else "")
             )
+    # message-pattern: allow-end
 
 
 def setup_interactive(args: argparse.Namespace) -> bool:
@@ -4866,7 +5165,11 @@ def finish_setup(
     """Reject invalid combinations, run the approval preflight, and warn."""
     errors = setup_plan.invalid_combinations(data, explicit, mode=mode)
     if errors:
-        raise CliError(" ".join(errors) + " Nothing was rendered or written.")
+        raise CliError(
+            "Setup is invalid: " + " ".join(errors) + " Nothing was rendered "
+            "or written. Change the listed '--data' values and run the command "
+            "again."
+        )
     approval: dict[str, object] | None = None
     try:
         if setup_plan.preflight_applies(data):
@@ -4931,14 +5234,15 @@ def confirm(args: argparse.Namespace) -> bool:
         return True
     if args.non_interactive:
         raise CliError(
-            "--non-interactive requires --yes before files may change."
+            "--non-interactive requires --yes: files may change without a "
+            "prompt. Pass '--yes' to apply."
         )
     try:
         answer = input("Apply this plan? [y/N] ")
     except EOFError as error:
         raise CliError(
-            "No confirmation could be read; pass --yes to apply without a "
-            "prompt. Nothing was changed."
+            "No confirmation could be read: stdin is closed. Pass '--yes' to "
+            "apply without a prompt. Nothing was changed."
         ) from error
     return answer.strip().lower() in {"y", "yes"}
 
@@ -4947,13 +5251,23 @@ def checked_destination(root: Path, relative_name: str) -> Path:
     """Reject paths whose existing ancestors could escape the destination."""
     relative = Path(relative_name)
     if relative.is_absolute() or not relative.parts or ".." in relative.parts:
-        raise CliError(f"Unsafe adoption path: {relative_name}")
+        raise CliError(
+            f"Unsafe adoption path: {relative_name}: it leaves the target. "
+            "Remove the path from the plan by running 'csarc adopt --dry-run' "
+            "again."
+        )
     try:
         root_mode = root.lstat().st_mode
     except FileNotFoundError as error:
-        raise CliError(f"Adoption destination is missing: {root}") from error
+        raise CliError(
+            f"Adoption destination is missing: {root}: the directory is gone. "
+            "Restore it, then run the command again."
+        ) from error
     if stat.S_ISLNK(root_mode) or not stat.S_ISDIR(root_mode):
-        raise CliError(f"Adoption destination is not a real directory: {root}")
+        raise CliError(
+            f"Adoption destination is not a real directory: {root}: it is a "
+            "symlink or file. Pass a real directory."
+        )
     current = root
     for part in relative.parts[:-1]:
         current /= part
@@ -4963,8 +5277,10 @@ def checked_destination(root: Path, relative_name: str) -> Path:
             continue
         if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
             raise CliError(
-                f"Adoption path has a symlink or non-directory ancestor: "
-                f"{relative_name}"
+                "Adoption path has a symlink or non-directory ancestor: "
+                f"{relative_name}: the path is unsafe. Replace the ancestor "
+                "with a "
+                "directory."
             )
     return root / relative
 
@@ -5077,8 +5393,10 @@ def validate_target_snapshot(
         or target_file_snapshot(target) != expected_files
     ):
         raise CliError(
-            "Repository changed after the plan was created or confirmed; "
-            "create a new plan."
+            "Repository changed after the plan was created or confirmed: "
+            "files or Git state differ. Create a new plan with the same "
+            "command and "
+            "'--dry-run'."
         )
 
 
@@ -5127,8 +5445,8 @@ def validate_pending_file_sets(
         managed != expected_managed or manual != expected_manual
     ):
         raise CliError(
-            "Pending file classifications do not match the verified template; "
-            "restart adoption from a clean commit."
+            "Pending file classifications do not match the verified template: "
+            "the state is stale. Restart adoption from a clean commit."
         )
     if task_outputs_available:
         rendered = project_files(stage)
@@ -5157,6 +5475,7 @@ def validate_pending_file_sets(
         raise CliError(
             "Pending adoption contains unexpected working-tree changes: "
             + ", ".join(unexpected)
+            + ". Commit or revert them, then run 'csarc adopt --finalize'."
         )
 
 
@@ -5212,7 +5531,9 @@ def candidate_patch_effects(
     missing = sorted(set(include_paths) - set(candidate_files))
     if missing:
         raise CliError(
-            "Candidate includes missing explicit paths: " + ", ".join(missing)
+            "Candidate includes missing explicit paths: "
+            + ", ".join(missing)
+            + ". Run 'csarc adopt --dry-run' again to create a new plan."
         )
     changed = git_changed_paths(candidate) | set(include_paths)
     artifacts = {
@@ -5464,7 +5785,10 @@ def write_candidate_patch(
         if isinstance(name, str) and isinstance(value, str)
     }
     if len(expected_artifacts) != len(artifacts):
-        raise CliError("Adoption plan contains invalid artifact fingerprints.")
+        raise CliError(
+            "Adoption plan contains invalid artifact fingerprints: the plan is "
+            "damaged. Run 'csarc adopt --dry-run' again to create a new plan."
+        )
     actual_artifacts, actual_deletions = candidate_patch_effects(
         candidate, include_paths=include_paths
     )
@@ -5475,8 +5799,8 @@ def write_candidate_patch(
         or actual_deletions != canonical_deletions
     ):
         raise CliError(
-            "Candidate effects differ from the verified plan; create a new "
-            "plan."
+            "Candidate effects differ from the verified plan: the render "
+            "changed. Run 'csarc adopt --dry-run' again to create a new plan."
         )
     changed = tuple(sorted(expected_artifacts))
     for relative_name in (*changed, *canonical_deletions):
@@ -5605,7 +5929,8 @@ def validate_authorized_candidate_effects(
         if observed != expected:
             raise CliError(
                 "Authorized dependency tooling changed files outside the "
-                "approved lockfile forecast; create a new adoption plan."
+                "approved lockfile forecast: the tool wrote extra files. Run "
+                "'csarc adopt --dry-run' again to create a new adoption plan."
             )
     for name in lockfiles:
         expected = next(
@@ -5621,7 +5946,8 @@ def validate_authorized_candidate_effects(
         ):
             raise CliError(
                 "Authorized dependency tooling did not match the approved "
-                f"lockfile forecast for {name}; create a new adoption plan."
+                f"lockfile forecast for {name}: the lockfile differs. Run "
+                "'csarc adopt --dry-run' again to create a new adoption plan."
             )
 
 
@@ -5638,9 +5964,9 @@ def create_adoption_lockfiles(  # noqa: C901
             python_version = target / ".python-version"
             if not python_version.is_file():
                 raise CliError(
-                    "Cannot create uv.lock because .python-version is "
-                    "missing; restore the managed file, then rerun csarc "
-                    "adopt --finalize."
+                    "Cannot create uv.lock: .python-version is "
+                    "missing. Restore the managed file, then rerun "
+                    "'csarc adopt --finalize'."
                 )
             base_command = [
                 "uv",
@@ -5669,15 +5995,15 @@ def create_adoption_lockfiles(  # noqa: C901
                     )
             except FileNotFoundError as error:
                 raise CliError(
-                    "uv is required to create uv.lock; install uv, then "
-                    "rerun csarc adopt --finalize."
+                    "uv is required to create uv.lock: it is not installed. "
+                    "Install uv, then rerun 'csarc adopt --finalize'."
                 ) from error
             if result.returncode != 0:
                 detail = result.stderr.strip() or result.stdout.strip()
                 raise CliError(
-                    "Cannot create uv.lock after the manifest merge; fix "
-                    "pyproject.toml, then rerun csarc adopt --finalize. "
-                    f"{detail}"
+                    "Cannot create uv.lock after the manifest merge: "
+                    f"{detail}. Fix pyproject.toml, then rerun 'csarc adopt "
+                    "--finalize'."
                 )
         if "typescript" in languages:
             base_command = [
@@ -5706,15 +6032,16 @@ def create_adoption_lockfiles(  # noqa: C901
                     )
             except FileNotFoundError as error:
                 raise CliError(
-                    "pnpm is required to create pnpm-lock.yaml; install "
-                    "pnpm, then rerun csarc adopt --finalize."
+                    "pnpm is required to create pnpm-lock.yaml: it is not "
+                    "installed. "
+                    "Install pnpm, then rerun 'csarc adopt --finalize'."
                 ) from error
             if result.returncode != 0:
                 detail = result.stderr.strip() or result.stdout.strip()
                 raise CliError(
-                    "Cannot create pnpm-lock.yaml after the manifest merge; "
-                    "fix package.json, then rerun csarc adopt --finalize. "
-                    f"{detail}"
+                    "Cannot create pnpm-lock.yaml after the manifest merge: "
+                    f"{detail}. Fix package.json, then rerun 'csarc adopt "
+                    "--finalize'."
                 )
         if "rust" in languages:
             base_command = ["cargo", "generate-lockfile"]
@@ -5738,15 +6065,17 @@ def create_adoption_lockfiles(  # noqa: C901
                     )
             except FileNotFoundError as error:
                 raise CliError(
-                    "Cargo is required to create Cargo.lock; install the Rust "
-                    "toolchain, then rerun csarc adopt --finalize."
+                    "Cargo is required to create Cargo.lock: it is not "
+                    "installed. "
+                    "Install the Rust toolchain, then rerun 'csarc adopt "
+                    "--finalize'."
                 ) from error
             if result.returncode != 0:
                 detail = result.stderr.strip() or result.stdout.strip()
                 raise CliError(
-                    "Cannot create Cargo.lock after the manifest merge; fix "
-                    "Cargo.toml, then rerun csarc adopt --finalize. "
-                    f"{detail}"
+                    "Cannot create Cargo.lock after the manifest merge: "
+                    f"{detail}. Fix Cargo.toml, then rerun 'csarc adopt "
+                    "--finalize'."
                 )
 
 
@@ -5757,7 +6086,10 @@ def authorize_adoption_candidate(
     adoption = plan.adoption
     planned = plan.files
     if adoption is None or planned is None:
-        raise CliError("Adoption candidate is incomplete.")
+        raise CliError(
+            "Adoption candidate is incomplete: it has no file plan. "
+            "Run 'csarc adopt --dry-run' again to create a new plan."
+        )
     if adoption.get("phase") != "complete":
         return plan
     create_adoption_lockfiles(candidate, plan.answers)
@@ -5886,8 +6218,11 @@ def verify_project(target: Path) -> dict[str, object]:
             "Canonical project verification is unavailable.",
         )
         raise ProjectVerificationError(
-            "Generated project is missing ./.csarc/scripts/verify "
-            "(or legacy ./scripts/verify).",
+            (
+                "Generated project is missing ./.csarc/scripts/verify "
+                "(or legacy ./scripts/verify): the render is incomplete. "
+                "Run 'csarc update --check' to restore managed files."
+            ),
             hook,
         )
     try:
@@ -5925,7 +6260,13 @@ def verify_project(target: Path) -> dict[str, object]:
             "Canonical verification returned an invalid hook status.",
         )
         raise ProjectVerificationError(
-            "Project verification hook status is invalid.", hook
+            (
+                "Project verification hook status is invalid: the verifier "
+                "returned "
+                "an unknown status. Run './.csarc/scripts/verify' to see the "
+                "output."
+            ),
+            hook,
         )
     if returncode != 0:
         if hook_statuses == ("not-run", "started", "failed"):
@@ -5936,7 +6277,12 @@ def verify_project(target: Path) -> dict[str, object]:
                 f"{configuration['path']}",
             )
             raise ProjectVerificationError(
-                f"Project verification hook failed: {configuration['path']}",
+                (
+                    "Project verification hook failed: "
+                    f"{configuration['path']}: it "
+                    f"exited non-zero. Run '{configuration['path']}' and fix "
+                    "the failure."
+                ),
                 hook,
             )
         hook = project_verification_evidence(
@@ -5968,7 +6314,14 @@ def settings_plan(target: Path) -> None:
     """Run only the read-only repository settings plan."""
     settings = managed_script(target, "apply-repository-settings.sh")
     if not settings.is_file():
-        print("Repository settings plan unavailable: script is missing.")
+        print(
+            (
+                "WARNING: Repository settings plan unavailable: script is "
+                "missing. "
+                "Run 'csarc update --check' to restore managed scripts."
+            ),
+            file=sys.stderr,
+        )
         return
     result = run([str(settings), "plan"], cwd=target, capture=True, check=False)
     if result.stdout:
@@ -5981,8 +6334,12 @@ def settings_plan(target: Path) -> None:
     # names its own reason (Issue #1146 AC6).
     if target_repository(target) is None:
         print(
-            "Repository settings plan needs a GitHub origin remote; "
-            "no settings were applied."
+            (
+                "WARNING: Repository settings plan needs a GitHub origin "
+                "remote: "
+                "no settings were applied. Run 'git remote add origin <URL>'."
+            ),
+            file=sys.stderr,
         )
         return
     lines = [
@@ -5992,8 +6349,12 @@ def settings_plan(target: Path) -> None:
     ]
     reason = lines[-1].rstrip(".") if lines else "no output"
     print(
-        f"Repository settings plan failed (exit {result.returncode}): "
-        f"{reason}; no settings were applied."
+        (
+            "WARNING: Repository settings plan failed (exit "
+            f"{result.returncode}): "
+            f"{reason}; no settings were applied. Fix the cause above."
+        ),
+        file=sys.stderr,
     )
 
 
@@ -6059,14 +6420,18 @@ def repository_context(
         and explicit_visibility not in REPOSITORY_VISIBILITIES
     ):
         raise CliError(
-            "project_visibility must be public, private, or internal."
+            "project_visibility is invalid: it must be public, private, or "
+            "internal. Pass '--data project_visibility=private' or another "
+            "value."
         )
     repository = target_repository(target)
     if repository is None:
         visibility = explicit_visibility or saved_visibility or "private"
         if visibility not in REPOSITORY_VISIBILITIES:
             raise CliError(
-                "Saved project_visibility must be public, private, or internal."
+                "Saved project_visibility is invalid: it must be public, "
+                "private, or "
+                "internal. Fix 'project_visibility' in '.copier-answers.yml'."
             )
         facts = {
             "origin": target_origin(target),
@@ -6118,8 +6483,10 @@ def repository_context(
             and explicit_visibility != actual_visibility
         ):
             raise CliError(
-                "Explicit project_visibility does not match GitHub "
-                f"({explicit_visibility} != {actual_visibility})."
+                "Explicit project_visibility does not match GitHub: "
+                f"'{explicit_visibility}' was given, GitHub reports "
+                f"'{actual_visibility}'. "
+                f"Pass '--data project_visibility={actual_visibility}'."
             )
         return RepositoryContext(
             repository=str(value["repository"]),
@@ -6160,8 +6527,9 @@ def inspect_work_item_mapping(  # noqa: C901
     """Suggest a conservative mapping from existing GitHub metadata."""
     if review not in {"accept-safe", "pending", "review-individually"}:
         raise CliError(
-            "work_item_mapping_review must be accept-safe, pending, or "
-            "review-individually."
+            "work_item_mapping_review is invalid: it must be accept-safe, "
+            "pending, or review-individually. Pass "
+            "'--data work_item_mapping_review=accept-safe' or another value."
         )
     result: dict[str, object] = {
         "defaults": [dict(item) for item in WORK_ITEM_DEFAULTS],
@@ -6437,7 +6805,8 @@ def validate_repository_context(
     if current.as_dict() != expected.as_dict():
         raise CliError(
             "Repository context changed after the plan was created or "
-            "confirmed; create a new plan."
+            "confirmed: GitHub state differs. Create a new plan with "
+            "'--dry-run'."
         )
 
 
@@ -6447,15 +6816,22 @@ def gh_milestone_payload(arguments: list[str]) -> object:
         result = run(["gh", "api", *arguments], capture=True, check=False)
     except FileNotFoundError as error:
         raise CliError(
-            "GitHub CLI is required to inspect Milestone descriptions."
+            "Milestone inspection failed: GitHub CLI is required to inspect "
+            "Milestone descriptions. Install 'gh' from https://cli.github.com/."
         ) from error
     if result.returncode != 0:
         detail = result.stderr.strip() or "GitHub API request failed"
-        raise CliError(f"Cannot inspect Milestone descriptions: {detail}")
+        raise CliError(
+            f"Cannot inspect Milestone descriptions: {detail}. "
+            "Run 'gh auth status', then run the csarc command again."
+        )
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as error:
-        raise CliError("GitHub returned invalid Milestone JSON.") from error
+        raise CliError(
+            "Milestone inspection failed: GitHub returned invalid Milestone "
+            "JSON. Run the csarc command again."
+        ) from error
     return payload
 
 
@@ -6463,14 +6839,24 @@ def gh_pages(endpoint: str) -> list[dict[str, object]]:
     """Read all pages from one GitHub REST collection."""
     payload = gh_milestone_payload(["--paginate", "--slurp", endpoint])
     if not isinstance(payload, list):
-        raise CliError("GitHub returned an unexpected Milestone response.")
+        raise CliError(
+            "Milestone inspection failed: GitHub returned an unexpected "
+            "Milestone response. Run the csarc command again."
+        )
     items: list[dict[str, object]] = []
     for page in payload:
         if not isinstance(page, list):
-            raise CliError("GitHub returned an unexpected Milestone page.")
+            raise CliError(
+                "Milestone inspection failed: GitHub returned an unexpected "
+                "Milestone page. Run the csarc command again."
+            )
         for item in page:
             if not isinstance(item, dict):
-                raise CliError("GitHub returned invalid Milestone metadata.")
+                raise CliError(
+                    "Milestone inspection failed: GitHub returned invalid "
+                    "Milestone "
+                    "metadata. Run the csarc command again."
+                )
             items.append(item)
     return items
 
@@ -6530,8 +6916,12 @@ def milestone_description_plan(  # noqa: C901
     if repository is None:
         if emit:
             print(
-                "Milestone descriptions: unavailable (no GitHub origin; "
-                "review them manually)."
+                (
+                    "WARNING: Milestone descriptions are unavailable: no "
+                    "GitHub origin. "
+                    "Review them by hand."
+                ),
+                file=sys.stderr,
             )
         return None
     changes: list[MilestoneDescriptionChange] = []
@@ -6546,7 +6936,11 @@ def milestone_description_plan(  # noqa: C901
             title = milestone.get("title")
             description = milestone.get("description")
             if not isinstance(number, int) or not isinstance(title, str):
-                raise CliError("GitHub returned invalid Milestone metadata.")
+                raise CliError(
+                    "Milestone inspection failed: GitHub returned invalid "
+                    "Milestone "
+                    "metadata. Run the csarc command again."
+                )
             if not isinstance(description, str):
                 review.append((number, title))
                 continue
@@ -6576,8 +6970,11 @@ def milestone_description_plan(  # noqa: C901
     except CliError as error:
         if emit:
             print(
-                f"Milestone descriptions: unavailable ({error}; "
-                "review them manually)."
+                (
+                    f"WARNING: Milestone descriptions are unavailable: "
+                    f"{str(error).rstrip('.')}. Review them by hand."
+                ),
+                file=sys.stderr,
             )
         return None
     plan = MilestoneDescriptionPlan(
@@ -6587,7 +6984,9 @@ def milestone_description_plan(  # noqa: C901
         review=tuple(review),
     )
     if emit:
+        # message-pattern: allow-begin X5 Milestone migration report heading
         print("Milestone description migration:")
+        # message-pattern: allow-end
         print_group(
             "  Upgrade",
             tuple(f"#{item.number} {item.title}" for item in plan.changes),
@@ -6614,11 +7013,14 @@ def apply_milestone_description_plan(
             [f"repos/{plan.repository}/milestones/{change.number}"]
         )
         if not isinstance(payload, dict):
-            raise CliError("GitHub returned invalid Milestone metadata.")
+            raise CliError(
+                "Milestone update failed: GitHub returned invalid Milestone "
+                "metadata. Run the csarc command again."
+            )
         if payload.get("description") != change.before:
             raise CliError(
-                f"Milestone #{change.number} changed after the dry-run plan; "
-                "run the command again."
+                f"Milestone #{change.number} changed after the dry-run plan: "
+                "its description differs. Run the command again."
             )
     for change in plan.changes:
         result = run(
@@ -6637,9 +7039,10 @@ def apply_milestone_description_plan(
         if result.returncode != 0:
             detail = result.stderr.strip() or "GitHub API request failed"
             raise CliError(
-                f"Cannot upgrade Milestone #{change.number}: {detail}"
+                f"Cannot upgrade Milestone #{change.number}: {detail}. "
+                "Run 'gh auth status', then run the csarc command again."
             )
-    print(f"Milestone descriptions upgraded: {len(plan.changes)}")
+    print(f"OK: Milestone descriptions upgraded: {len(plan.changes)}.")
 
 
 def unavailable_capabilities(reason: str) -> dict[str, object]:
@@ -6748,9 +7151,10 @@ def parse_multi_setting(key: str, value: object) -> list[str]:
         not isinstance(item, str) or item not in allowed for item in parsed
     ):
         raise CliError(
-            f"{key} must list only "
+            f"{key} is invalid: it must list only "
             + ", ".join(allowed)
-            + " (comma-separated)."
+            + " (comma-separated). "
+            + f"Pass '--data {key}=<values>'."
         )
     return list(dict.fromkeys(parsed))
 
@@ -6764,10 +7168,17 @@ def parse_languages(value: str) -> list[str]:
     if not isinstance(parsed, list) or not all(
         isinstance(item, str) for item in parsed
     ):
-        raise CliError("languages must be a JSON list or comma-separated list.")
+        raise CliError(
+            "languages is invalid: it must be a JSON list or comma-separated "
+            "list. Pass '--data languages=python,typescript' or similar."
+        )
     unknown = sorted(set(parsed) - {"go", "python", "typescript", "rust"})
     if unknown:
-        raise CliError(f"Unsupported language modules: {', '.join(unknown)}")
+        raise CliError(
+            f"Unsupported language modules: {', '.join(unknown)}: CSARC has no "
+            "profile for them. Pass only go, python, rust, or typescript in "
+            "'--data languages'."
+        )
     return list(dict.fromkeys(parsed))
 
 
@@ -6778,7 +7189,8 @@ def required_release_inputs(value: object) -> list[str]:
             value = json.loads(value)
         except json.JSONDecodeError as error:
             raise CliError(
-                "release_required_inputs must be a JSON list."
+                "release_required_inputs is invalid: it must be a JSON list. "
+                "Fix 'release_required_inputs' in '.copier-answers.yml'."
             ) from error
     if value is None:
         return []
@@ -6786,7 +7198,9 @@ def required_release_inputs(value: object) -> list[str]:
         isinstance(item, str) and item for item in value
     ):
         raise CliError(
-            "release_required_inputs must be a list of non-empty strings."
+            "release_required_inputs is invalid: it must be a list of "
+            "non-empty strings. Fix 'release_required_inputs' in "
+            "'.copier-answers.yml'."
         )
     return sorted(set(value))
 
@@ -6802,23 +7216,28 @@ def release_workflow_metadata(
         or relative.suffix not in {".yml", ".yaml"}
     ):
         raise CliError(
-            "release_workflow must be a YAML file under .github/workflows."
+            "release_workflow is invalid: it must be a YAML file under "
+            ".github/workflows. Fix 'release_workflow' in "
+            "'.copier-answers.yml'."
         )
     path = checked_destination(target, relative_name)
     if path.is_symlink() or not path.is_file():
         raise CliError(
-            f"Selected release workflow does not exist: {relative_name}"
+            f"Selected release workflow does not exist: {relative_name}. "
+            "Fix 'release_workflow' in '.copier-answers.yml'."
         )
     source = path.read_text(encoding="utf-8")
     try:
         workflow = yaml.safe_load(source)
     except yaml.YAMLError as error:
         raise CliError(
-            f"Selected release workflow is invalid YAML: {relative_name}"
+            f"Selected release workflow is invalid YAML: {relative_name}. "
+            "Fix the YAML syntax."
         ) from error
     if not isinstance(workflow, dict):
         raise CliError(
-            f"Selected release workflow is not a mapping: {relative_name}"
+            f"Selected release workflow is not a mapping: {relative_name}. "
+            "Fix the YAML so the top level is a mapping."
         )
     events = workflow.get("on", workflow.get(True))
     dispatch = (
@@ -6827,18 +7246,23 @@ def release_workflow_metadata(
     inputs = dispatch.get("inputs", {}) if isinstance(dispatch, dict) else {}
     if not isinstance(inputs, dict):
         raise CliError(
-            f"Selected release workflow has invalid inputs: {relative_name}"
+            f"Selected release workflow has invalid inputs: {relative_name}. "
+            "Fix 'on.workflow_dispatch.inputs' in the workflow."
         )
     required = []
     for name, settings in inputs.items():
         if not isinstance(name, str) or not isinstance(settings, dict):
             raise CliError(
-                f"Selected release workflow has invalid inputs: {relative_name}"
+                "Selected release workflow has invalid inputs: "
+                f"{relative_name}. "
+                "Fix 'on.workflow_dispatch.inputs' in the workflow."
             )
         is_required = settings.get("required", False)
         if not isinstance(is_required, bool):
             raise CliError(
-                f"Selected release workflow has invalid inputs: {relative_name}"
+                "Selected release workflow has invalid inputs: "
+                f"{relative_name}. "
+                "Fix 'on.workflow_dispatch.inputs' in the workflow."
             )
         if is_required:
             required.append(name)
@@ -6875,11 +7299,16 @@ def release_ownership(answers: Mapping[str, object]) -> str:
             return "csarc-owned"
         if project_mode == "existing":
             return "product-owned"
-        raise CliError("project_mode must be new or existing.")
+        raise CliError(
+            "project_mode is invalid: it must be new or existing. "
+            "Use 'csarc init' for a new project or 'csarc adopt' for an "
+            "existing one."
+        )
     if ownership not in RELEASE_OWNERSHIPS:
         raise CliError(
-            "release_ownership must be csarc-owned, product-owned, or "
-            "verification-only."
+            "release_ownership is invalid: it must be csarc-owned, "
+            "product-owned, or verification-only. Pass '--data "
+            "release_ownership=csarc-owned' or another value."
         )
     return str(ownership)
 
@@ -6897,7 +7326,7 @@ def release_contract(answers: Mapping[str, object]) -> dict[str, object]:
         # The reason is recomputed from release_ownership (SPEC-009), so the
         # hint names only the current setting, never the retired reason key.
         raise CliError(
-            "Release workflow ownership is incomplete. This is a "
+            "Release workflow ownership is incomplete: this is a "
             "release_ownership gap, not a provenance problem; "
             "--accept-legacy does not resolve it. Pass "
             "--data release_ownership=csarc-owned|product-owned|"
@@ -6906,10 +7335,15 @@ def release_contract(answers: Mapping[str, object]) -> dict[str, object]:
     inputs = required_release_inputs(answers.get("release_required_inputs"))
     if ownership == "verification-only" and (workflow or inputs):
         raise CliError(
-            "verification-only release ownership cannot select a workflow."
+            "verification-only release ownership cannot select a workflow: "
+            "it publishes nothing. Pass "
+            "'--data release_ownership=product-owned' to select one."
         )
     if ownership != "verification-only" and not workflow:
-        raise CliError(f"{ownership} release ownership requires a workflow.")
+        raise CliError(
+            f"{ownership} release ownership requires a workflow: none is "
+            "selected. Add a release workflow under '.github/workflows'."
+        )
     expected_settings = {
         "csarc-owned": ("csarc-admin", "required"),
         "product-owned": ("product-admin", "product-defined"),
@@ -6918,7 +7352,10 @@ def release_contract(answers: Mapping[str, object]) -> dict[str, object]:
     settings_owner = answers.get("release_settings_owner", expected_settings[0])
     immutable = answers.get("release_immutable_releases", expected_settings[1])
     if (settings_owner, immutable) != expected_settings:
-        raise CliError("Release repository settings do not match ownership.")
+        raise CliError(
+            "Release repository settings do not match ownership: the saved "
+            "settings conflict. Pass '--data release_ownership=<owner>' again."
+        )
     return {
         "immutable_releases": immutable,
         "ownership": ownership,
@@ -7015,7 +7452,11 @@ def resolve_release_answers(  # noqa: C901
     result = dict(answers)
     project_mode = result.get("project_mode")
     if project_mode not in {"new", "existing"}:
-        raise CliError("project_mode must be new or existing.")
+        raise CliError(
+            "project_mode is invalid: it must be new or existing. "
+            "Use 'csarc init' for a new project or 'csarc adopt' for an "
+            "existing one."
+        )
     explicit_owner = result.get("release_ownership")
     writers = release_writer_workflows(target)
     if explicit_owner is None:
@@ -7036,7 +7477,9 @@ def resolve_release_answers(  # noqa: C901
         )
         if selected or configured_inputs:
             raise CliError(
-                "verification-only release ownership cannot select a workflow."
+                "verification-only release ownership cannot select a workflow: "
+                "it publishes nothing. Pass "
+                "'--data release_ownership=product-owned' to select one."
             )
         reason = result.get("release_ownership_reason")
         if not isinstance(reason, str) or not reason:
@@ -7059,7 +7502,10 @@ def resolve_release_answers(  # noqa: C901
     if ownership == "csarc-owned":
         selected = result.get("release_workflow", "")
         if not isinstance(selected, str):
-            raise CliError("release_workflow must be a string.")
+            raise CliError(
+                "release_workflow is invalid: it must be a string. "
+                "Fix 'release_workflow' in '.copier-answers.yml'."
+            )
         expected = (
             ".github/workflows/release.yml"
             if project_mode == "new"
@@ -7068,17 +7514,23 @@ def resolve_release_answers(  # noqa: C901
         )
         if not expected:
             raise CliError(
-                "Existing CSARC-owned release requires an explicit workflow."
+                "Existing CSARC-owned release requires an explicit workflow: "
+                "none is selected. Keep exactly one release workflow under "
+                "'.github/workflows'."
             )
         if writers and (
             len(writers) != 1 or str(writers[0]["path"]) != expected
         ):
             raise CliError(
-                "CSARC-owned release would duplicate a product release writer."
+                "CSARC-owned release would duplicate a product release writer: "
+                "the product already publishes releases. Pass "
+                "'--data release_ownership=product-owned'."
             )
         if project_mode == "existing" and not writers:
             raise CliError(
-                "Existing CSARC-owned release workflow does not exist."
+                "Existing CSARC-owned release workflow does not exist: the "
+                "file is missing. Fix 'release_workflow' in "
+                "'.copier-answers.yml'."
             )
         observed_inputs = (
             cast(list[str], writers[0]["required_inputs"]) if writers else []
@@ -7088,7 +7540,10 @@ def resolve_release_answers(  # noqa: C901
             saved_inputs is not None
             and required_release_inputs(saved_inputs) != observed_inputs
         ):
-            raise CliError("Selected release workflow input contract drifted.")
+            raise CliError(
+                "Selected release workflow input contract drifted: its inputs "
+                "changed. Run 'csarc update --check' again to record them."
+            )
         result.update(
             release_immutable_releases="required",
             release_ownership=ownership,
@@ -7103,18 +7558,23 @@ def resolve_release_answers(  # noqa: C901
         return result
 
     if project_mode != "existing":
-        raise CliError("product-owned release requires an existing repository.")
+        raise CliError(
+            "product-owned release requires an existing repository: this is a "
+            "new project. Pass '--data release_ownership=csarc-owned'."
+        )
     if len(writers) != 1:
         raise CliError(
             "Product-owned release requires exactly one release-writing "
-            "workflow."
+            "workflow: none or several were found. Keep exactly one "
+            "release workflow under '.github/workflows'."
         )
     workflow = writers[0]
     selected = result.get("release_workflow", "")
     if selected and selected != workflow["path"]:
         raise CliError(
             f"Selected release workflow {selected} is not the sole release "
-            "writer."
+            "writer: other workflows publish too. Keep exactly one release "
+            "workflow under '.github/workflows'."
         )
     observed_inputs = cast(list[str], workflow["required_inputs"])
     saved_inputs = result.get("release_required_inputs")
@@ -7122,7 +7582,10 @@ def resolve_release_answers(  # noqa: C901
         saved_inputs is not None
         and required_release_inputs(saved_inputs) != observed_inputs
     ):
-        raise CliError("Selected release workflow input contract drifted.")
+        raise CliError(
+            "Selected release workflow input contract drifted: its inputs "
+            "changed. Run 'csarc update --check' again to record them."
+        )
     result.update(
         release_immutable_releases="product-defined",
         release_ownership=ownership,
@@ -7167,7 +7630,8 @@ def base_data(
     ):
         raise CliError(
             "code_owner must use an @user or @organization/team value, "
-            "or be empty."
+            "or be empty: another value was given. Pass '--data "
+            "code_owner=@owner'."
         )
     if "languages" in values:
         data["languages"] = parse_languages(str(values["languages"]))
@@ -7253,7 +7717,10 @@ def require_clean_repository(target: Path) -> None:
         check=False,
     )
     if inside.returncode != 0:
-        raise CliError(f"{target} must be an existing Git repository.")
+        raise CliError(
+            f"{target} must be an existing Git repository: no repository was "
+            "found. Run 'git init' there first."
+        )
     status = run_git(
         [
             "git",
@@ -7269,7 +7736,10 @@ def require_clean_repository(target: Path) -> None:
         neutralize_filters=True,
     )
     if status.stdout.strip():
-        raise CliError("Git working tree must be clean before adopt or update.")
+        raise CliError(
+            "Git working tree must be clean before adopt or update: it has "
+            "changes. Commit or stash them, then run the command again."
+        )
 
 
 def resolve_repository_target(path: Path) -> Path:
@@ -7283,7 +7753,8 @@ def resolve_repository_target(path: Path) -> Path:
     )
     if result.returncode != 0:
         raise CliError(
-            f"{candidate} must be inside an existing Git repository."
+            f"{candidate} must be inside an existing Git repository: no "
+            "repository was found. Run 'git init' there first."
         )
     return Path(result.stdout.strip()).resolve()
 
@@ -7295,20 +7766,27 @@ def validate_copy_target(
     if mode == "init" and not repository_target_is_new(target):
         raise CliError(
             "init target must not exist, must be empty, or must be an empty "
-            "Git repository (only .git, no commit or tracked file)."
+            "Git repository (only .git, no commit or tracked file): it has "
+            "files. "
+            "Pass an empty directory, or use 'csarc adopt' for an existing "
+            "project."
         )
     if mode != "adopt":
         return
     if not target.is_dir():
-        raise CliError("adopt target must be an existing directory.")
+        raise CliError(
+            "adopt target must be an existing directory: none was found. "
+            "Pass the path of the existing repository."
+        )
     if (target / PENDING_ADOPTION_FILE).is_file():
         raise CliError(
-            "Adoption is pending; complete the manual merge, then run "
-            "csarc adopt --finalize."
+            "Adoption is pending: a manual merge is not finished. Complete it, "
+            "then run 'csarc adopt --finalize'."
         )
     if config_path(target).exists():
         raise CliError(
-            "Repository already has CSARC configuration; use csarc update."
+            "Repository already has CSARC configuration: it was adopted "
+            "before. Use 'csarc update'."
         )
     if require_clean:
         require_clean_repository(target)
@@ -7318,50 +7796,68 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
     """Plan or apply a verified second-stage adoption transaction."""
     target = resolve_repository_target(args.path or Path.cwd())
     if not target.is_dir():
-        raise CliError("adopt target must be an existing directory.")
+        raise CliError(
+            "adopt target must be an existing directory: none was found. "
+            "Pass the path of the existing repository."
+        )
     if args.apply_plan is not None and args.dry_run:
         raise CliError(
-            "adopt --finalize cannot combine --apply-plan and --dry-run."
+            "adopt --finalize cannot combine --apply-plan and --dry-run: they "
+            "are separate steps. Pass only one of them."
         )
     if args.json and not args.dry_run:
-        raise CliError("--json requires --dry-run for adopt --finalize.")
+        raise CliError(
+            "--json requires --dry-run for adopt --finalize: only the dry run "
+            "prints JSON. Add '--dry-run' or remove '--json'."
+        )
     if args.json and args.report_dir is not None:
-        raise CliError("--report-dir cannot be combined with --json.")
+        raise CliError(
+            "--report-dir cannot be combined with --json: JSON goes to stdout. "
+            "Remove one of them."
+        )
     if not args.dry_run and args.apply_plan is None:
         raise CliError(
-            "Run adopt --finalize --dry-run first, then apply its machine "
-            "plan with --finalize --apply-plan."
+            "Finalize needs a reviewed plan: no machine plan was given. Run "
+            "'csarc adopt --finalize --dry-run' first, then apply its machine "
+            "plan "
+            "with '--finalize --apply-plan'."
         )
     if args.to is not None:
         raise CliError(
             "adopt --finalize uses the release label saved by the pending "
-            "adoption; do not pass --to."
+            "adoption: '--to' would change it. Remove '--to'."
         )
 
     explicit_data = parse_data(args.data)
     if args.apply_plan is not None and explicit_data:
         raise CliError(
-            "--apply-plan uses the repository state saved by dry-run."
+            "--apply-plan uses the repository state saved by dry-run: extra "
+            "'--data' values conflict with it. Remove the '--data' options."
         )
     unsupported = sorted(set(explicit_data) - {"project_visibility"})
     if unsupported:
         raise CliError(
-            "adopt --finalize only accepts project_visibility; saved Copier "
-            f"answers cannot change ({', '.join(unsupported)})."
+            "adopt --finalize only accepts project_visibility: saved Copier "
+            f"answers cannot change ({', '.join(unsupported)}). Remove those "
+            "'--data' options."
         )
     saved: dict[str, object] | None = None
     if args.apply_plan is not None:
         plan_path = args.apply_plan.expanduser().resolve()
         if plan_path == target or target in plan_path.parents:
             raise CliError(
-                "Adoption plans must remain outside the target repo."
+                "Adoption plans must remain outside the target repo: the plan "
+                "is "
+                "inside it. Move the plan folder outside the repository."
             )
         saved = read_adoption_plan(plan_path)
         if saved.get("mode") != "adopt-finalize" or saved.get("target") != str(
             target
         ):
             raise CliError(
-                "Finalize plan does not match this target repository."
+                "Finalize plan does not match this target repository: it was "
+                "made "
+                "for another path. Pass the plan made for this repository."
             )
         report_directory = applied_report_directory(
             target, plan_path, args.report_dir
@@ -7394,7 +7890,12 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
     answers = resolve_release_answers(target, finalize_answers)
     saved_visibility = answers.get("project_visibility")
     if not isinstance(saved_visibility, str):
-        raise CliError("Copier answers are missing project_visibility.")
+        raise CliError(
+            "Copier answers are missing project_visibility: the answers file "
+            "is "
+            "incomplete. Pass '--data project_visibility=private' or another "
+            "value."
+        )
     explicit_visibility = explicit_data.get("project_visibility")
     if (
         explicit_visibility is None
@@ -7408,7 +7909,10 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
     )
     saved_repository = raw_repository.get("repository")
     if saved_repository is not None and not isinstance(saved_repository, str):
-        raise CliError("Pending repository identity is invalid.")
+        raise CliError(
+            "Pending repository identity is invalid: the state is damaged. "
+            "Restore the checkpoint or restart adoption from a clean commit."
+        )
     repository_matches = (
         repository.repository is None and saved_repository is None
     ) or (
@@ -7420,8 +7924,9 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         "visibility"
     ):
         raise CliError(
-            "Repository origin or visibility changed after adoption started; "
-            "restore it or restart adoption from a clean commit."
+            "Repository origin or visibility changed after adoption started: "
+            "GitHub no longer matches the saved state. Restore it or restart "
+            "adoption from a clean commit."
         )
 
     raw_work_item_mapping = pending.get("work_item_mapping")
@@ -7430,13 +7935,19 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         "accept-safe" if raw_work_item_mapping is None else "pending",
     )
     if not isinstance(review, str):
-        raise CliError("work_item_mapping_review must be a string.")
+        raise CliError(
+            "work_item_mapping_review is invalid: it must be a string. "
+            "Pass '--data work_item_mapping_review=accept-safe' or another "
+            "value."
+        )
     current_mapping = inspect_work_item_mapping(repository, review)
     if isinstance(raw_work_item_mapping, dict):
         if current_mapping != raw_work_item_mapping:
             raise CliError(
-                "GitHub work-item metadata drifted after adoption started; "
-                "restart adoption with a new dry-run plan."
+                "GitHub work-item metadata drifted after adoption started: "
+                "labels "
+                "or Milestones changed. Restart adoption with a new "
+                "'csarc adopt --dry-run' plan."
             )
         work_item_mapping = raw_work_item_mapping
     else:
@@ -7448,7 +7959,10 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         if not isinstance(raw_saved_adoption, dict) or not isinstance(
             raw_saved_adoption.get("generated_at"), str
         ):
-            raise CliError("Finalize plan has invalid target state.")
+            raise CliError(
+                "Finalize plan has invalid target state: the plan is damaged. "
+                "Run 'csarc adopt --finalize --dry-run' again."
+            )
         saved_adoption = cast(dict[str, object], raw_saved_adoption)
         validate_target_snapshot(target, saved_adoption)
         print_saved_adoption_plan(saved)
@@ -7474,8 +7988,10 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
     if allow_unreleased:
         if not source_path.exists():
             raise CliError(
-                "Pending unreleased template source is unavailable; restore "
-                "the same local source, then rerun csarc adopt --finalize."
+                "Pending unreleased template source is unavailable: the local "
+                "clone moved or is gone. Restore the same local source, then "
+                "rerun "
+                "'csarc adopt --finalize'."
             )
         git_commit(source_path, sha)
 
@@ -7619,7 +8135,9 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         ) != pre_verification_binding(saved):
             raise CliError(
                 "Repository or manual merge results drifted after finalize "
-                "dry-run; create a new finalize plan."
+                "dry-run: files changed. Run 'csarc adopt --finalize "
+                "--dry-run' again to "
+                "create a new finalize plan."
             )
         if saved is not None:
             plan = authorize_adoption_candidate(plan, candidate)
@@ -7648,13 +8166,15 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
                     "manual files: "
                     + ", ".join(manual_files)
                     + ". Fix the related merge or verification failure, then "
-                    "rerun csarc adopt --finalize."
+                    "rerun 'csarc adopt --finalize'."
                 )
             effects = cast(Plan, plan.files)
             raw_artifacts = adoption.get("artifacts")
             if not isinstance(raw_artifacts, dict):
                 raise CliError(
-                    "Verified finalize candidate has no artifact plan."
+                    "Verified finalize candidate has no artifact plan: the "
+                    "plan is "
+                    "damaged. Run 'csarc adopt --finalize --dry-run' again."
                 )
             artifacts = raw_artifacts
         if args.json:
@@ -7666,12 +8186,13 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         else:
             print_plan(plan)
             print(
-                "Pending state: "
+                "NOTICE: Pending state: "
                 + (
-                    "verified; ready to finalize."
+                    "verified; ready to finalize"
                     if saved is not None
-                    else "verification awaits plan approval."
+                    else "verification awaits plan approval"
                 )
+                + "."
             )
         if saved is None:
             milestone_plan = milestone_description_plan(
@@ -7702,7 +8223,9 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         if copier_config_binding(stage) != preview_config_binding:
             raise CliError(
                 "Copier configuration changed during the approved "
-                "task-bearing render."
+                "task-bearing render: a template task edited it. Report this "
+                "csarc bug "
+                "with the template release you used."
             )
         task_merged = apply_adoption_policies(stage, baseline)
         task_planned = compare_stage(
@@ -7719,8 +8242,10 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         latest_mapping = inspect_work_item_mapping(repository, review)
         if latest_mapping != work_item_mapping:
             raise CliError(
-                "GitHub work-item metadata drifted during finalize; restart "
-                "adoption with a new dry-run plan."
+                "GitHub work-item metadata drifted during finalize: labels or "
+                "Milestones changed. Restart adoption with a new 'csarc adopt "
+                "--dry-run' "
+                "plan."
             )
         write_candidate_patch(
             candidate,
@@ -7742,7 +8267,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         ),
         applied_at=applied_at,
     )
-    print("Adoption complete.")
+    print("OK: Adoption complete.")
     return 0
 
 
@@ -7805,13 +8330,19 @@ def build_adoption_plan(
     ):
         raise CliError(
             "Existing repositories with documentation enabled require a "
-            "product-owned regular README.md before adoption. Create and "
-            "commit README.md, then rerun csarc adopt, or explicitly choose "
-            "--data documentation_mode=off."
+            "product-owned regular README.md before adoption: none was found. "
+            "Create "
+            "and commit README.md, then rerun 'csarc adopt', or explicitly "
+            "choose "
+            "'--data documentation_mode=off'."
         )
     review = answers.get("work_item_mapping_review", "pending")
     if not isinstance(review, str):
-        raise CliError("work_item_mapping_review must be a string.")
+        raise CliError(
+            "work_item_mapping_review is invalid: it must be a string. "
+            "Pass '--data work_item_mapping_review=accept-safe' or another "
+            "value."
+        )
     work_item_mapping = inspect_work_item_mapping(repository, review)
     head, changes, status_sha256 = target_state(target)
     target_files = target_file_snapshot(target)
@@ -7893,21 +8424,33 @@ def command_apply_adoption_plan(  # noqa: C901
     """Rebuild, verify, and apply exactly one saved adoption plan."""
     if args.dry_run or args.json:
         raise CliError(
-            "--apply-plan cannot be combined with --dry-run or --json."
+            "--apply-plan cannot be combined with --dry-run or --json: they "
+            "are "
+            "separate steps. Remove '--dry-run' and '--json'."
         )
     if args.to is not None:
         raise CliError(
-            "--apply-plan uses the release label saved by dry-run; do not "
-            "pass --to."
+            "--apply-plan uses the release label saved by dry-run: '--to' "
+            "would "
+            "change it. Remove '--to'."
         )
     if args.data:
-        raise CliError("--apply-plan uses the answers saved by dry-run.")
+        raise CliError(
+            "--apply-plan uses the answers saved by dry-run: extra '--data' "
+            "values conflict with it. Remove the '--data' options."
+        )
     plan_path = args.apply_plan.expanduser().resolve()
     if plan_path == target or target in plan_path.parents:
-        raise CliError("Adoption plans must remain outside the target repo.")
+        raise CliError(
+            "Adoption plans must remain outside the target repo: the plan is "
+            "inside it. Move the plan folder outside the repository."
+        )
     saved = read_adoption_plan(plan_path)
     if saved.get("mode") != "adopt" or saved.get("target") != str(target):
-        raise CliError("Adoption plan does not match this target repository.")
+        raise CliError(
+            "Adoption plan does not match this target repository: it was made "
+            "for another path. Pass the plan made for this repository."
+        )
     report_directory = applied_report_directory(
         target, plan_path, args.report_dir
     )
@@ -7926,7 +8469,10 @@ def command_apply_adoption_plan(  # noqa: C901
             raw_capabilities,
         )
     ):
-        raise CliError("Adoption plan has an unsupported shape.")
+        raise CliError(
+            "Adoption plan has an unsupported shape: it is damaged or from "
+            "another csarc version. Run 'csarc adopt --dry-run' again."
+        )
     raw_adoption = cast(dict[str, object], raw_adoption)
     raw_template = cast(dict[str, object], raw_template)
     raw_answers = cast(dict[str, object], raw_answers)
@@ -7934,8 +8480,10 @@ def command_apply_adoption_plan(  # noqa: C901
     raw_capabilities = cast(dict[str, object], raw_capabilities)
     if raw_adoption.get("applicable") is not True:
         raise CliError(
-            "Adoption plan is review-only; clean the repository or resolve "
-            "the reported failure, then rerun --dry-run."
+            "Adoption plan is review-only: the dry run found a blocking "
+            "problem. "
+            "Clean the repository or resolve the reported failure, then rerun "
+            "'csarc adopt --dry-run'."
         )
     source = raw_template.get("source")
     release = raw_template.get("release")
@@ -7950,7 +8498,10 @@ def command_apply_adoption_plan(  # noqa: C901
         or not isinstance(generated_at, str)
         or verification not in {"verified", "unverified"}
     ):
-        raise CliError("Adoption plan has invalid template identity.")
+        raise CliError(
+            "Adoption plan has invalid template identity: the plan is damaged. "
+            "Run 'csarc adopt --dry-run' again."
+        )
     verification = cast(str, verification)
     allow_unreleased = require_replay_authorization(
         args,
@@ -7961,7 +8512,10 @@ def command_apply_adoption_plan(  # noqa: C901
     answers = {str(key): value for key, value in raw_answers.items()}
     visibility = answers.get("project_visibility")
     if not isinstance(visibility, str):
-        raise CliError("Adoption plan has no project_visibility answer.")
+        raise CliError(
+            "Adoption plan has no project_visibility answer: the plan is "
+            "incomplete. Run 'csarc adopt --dry-run' again."
+        )
     explicit_visibility = (
         visibility if raw_repository.get("source") == "explicit" else None
     )
@@ -7969,7 +8523,9 @@ def command_apply_adoption_plan(  # noqa: C901
     if repository.as_dict() != raw_repository:
         raise CliError(
             "Repository context changed after the plan was created or "
-            "confirmed; create a new plan."
+            "confirmed: GitHub state differs. Run 'csarc adopt --dry-run' "
+            "again to "
+            "create a new plan."
         )
     validate_target_snapshot(target, raw_adoption)
     print_saved_adoption_plan(saved)
@@ -8018,8 +8574,11 @@ def command_apply_adoption_plan(  # noqa: C901
             if len(differences) > 10:
                 detail += f"; ... and {len(differences) - 10} more"
             raise CliError(
-                "Repository or rendered output drifted after dry-run; create "
-                f"a new adoption plan. Differing fields: {detail}"
+                "Repository or rendered output drifted after dry-run: "
+                "differing "
+                f"fields: {detail}. Run 'csarc adopt --dry-run' again to "
+                "create a new "
+                "adoption plan."
             )
         shutil.rmtree(preview_stage)
         preview_stage.mkdir()
@@ -8035,7 +8594,9 @@ def command_apply_adoption_plan(  # noqa: C901
         if copier_config_binding(stage) != preview_config_binding:
             raise CliError(
                 "Copier configuration changed during the approved "
-                "task-bearing render."
+                "task-bearing render: a template task edited it. Report this "
+                "csarc bug "
+                "with the template release you used."
             )
         validate_target_snapshot(target, raw_adoption)
         candidate = temporary_root / "candidate"
@@ -8067,7 +8628,8 @@ def command_apply_adoption_plan(  # noqa: C901
                 detail += f"; ... and {len(differences) - 10} more"
             raise CliError(
                 "GitHub work-item metadata drifted during the approved "
-                f"task-bearing render. Differing fields: {detail}"
+                f"task-bearing render: differing fields: {detail}. Run "
+                "'csarc adopt --dry-run' again."
             )
         fresh = authorize_adoption_candidate(fresh, candidate)
         # The reviewed setup record (questions, work mode, warnings, and
@@ -8090,13 +8652,21 @@ def command_apply_adoption_plan(  # noqa: C901
                 else "unknown"
             )
             raise CliError(
-                f"Project verification failed after plan approval: {detail}"
+                f"Project verification failed after plan approval: {detail}. "
+                "Fix the failure, then run 'csarc adopt --dry-run' again."
             )
         if fresh_adoption.get("applicable") is not True:
-            raise CliError("Rebuilt adoption candidate is not applicable.")
+            raise CliError(
+                "Rebuilt adoption candidate is not applicable: the plan no "
+                "longer "
+                "matches. Run 'csarc adopt --dry-run' again."
+            )
         artifacts = fresh_adoption.get("artifacts")
         if not isinstance(artifacts, dict):
-            raise CliError("Rebuilt adoption candidate has no artifact plan.")
+            raise CliError(
+                "Rebuilt adoption candidate has no artifact plan: the plan is "
+                "damaged. Run 'csarc adopt --dry-run' again."
+            )
         print_plan(fresh)
         validate_repository_context(
             target,
@@ -8115,8 +8685,8 @@ def command_apply_adoption_plan(  # noqa: C901
     phase = fresh_adoption.get("phase")
     if phase == "pending":
         print(
-            "Adoption pending: complete the listed manual merges, then run "
-            "csarc adopt --finalize."
+            "NOTICE: Adoption pending: complete the listed manual merges, then "
+            "run 'csarc adopt --finalize'."
         )
         return 1
     settings_plan(target)
@@ -8129,7 +8699,7 @@ def command_apply_adoption_plan(  # noqa: C901
         approved_sha256=str(saved["plan_sha256"]),
         applied_at=applied_at,
     )
-    print("Adoption complete.")
+    print("OK: Adoption complete.")
     return 0
 
 
@@ -8150,11 +8720,20 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         target, mode, require_clean=mode != "adopt" or not args.dry_run
     )
     if mode == "adopt" and args.report_dir is not None and not args.dry_run:
-        raise CliError("--report-dir requires adopt --dry-run.")
+        raise CliError(
+            "--report-dir requires adopt --dry-run: other modes write no "
+            "report. Add '--dry-run' or remove '--report-dir'."
+        )
     if args.json and not args.dry_run:
-        raise CliError("--json requires --dry-run for init or adopt.")
+        raise CliError(
+            "--json requires --dry-run for init or adopt: only the dry run "
+            "prints JSON. Add '--dry-run' or remove '--json'."
+        )
     if args.json and mode == "adopt" and args.report_dir is not None:
-        raise CliError("--report-dir cannot be combined with --json.")
+        raise CliError(
+            "--report-dir cannot be combined with --json: JSON goes to stdout. "
+            "Remove one of them."
+        )
     explicit_data = parse_settings_data(args.data)
     # Issue #1078: every question and every missing required input is
     # settled before the release lookup, GitHub, or Copier runs.
@@ -8172,8 +8751,13 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
     )
     if not revision.verified:
         print(
-            "WARNING: --allow-unreleased bypasses release identity, "
-            "immutability, attestation, and signature verification.",
+            (
+                "WARNING: Release checks are off: --allow-unreleased bypasses "
+                "release "
+                "identity, immutability, attestation, and signature "
+                "verification. "
+                "Use it only for local development."
+            ),
             file=sys.stderr,
         )
     repository = repository_context(
@@ -8202,8 +8786,9 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         is None
     ):
         raise CliError(
-            "No GitHub origin or GH_REPO identifies this repository; pass "
-            "--data repository_url=https://github.com/owner/repository."
+            "No GitHub origin or GH_REPO identifies this repository: the "
+            "repository URL is unknown. Pass "
+            "'--data repository_url=https://github.com/owner/repository'."
         )
     data["project_visibility"] = repository.visibility
     if repository.repository is not None:
@@ -8289,8 +8874,9 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
             )
             if approved_revision != revision:
                 raise CliError(
-                    "Template revision changed after approval; review a new "
-                    "plan."
+                    "Template revision changed after approval: the release "
+                    "moved. "
+                    "Review a new plan with '--dry-run'."
                 )
             validate_copy_target(target, mode, require_clean=True)
             shutil.rmtree(stage)
@@ -8325,8 +8911,9 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 or rebound_files != preview_files
             ):
                 raise CliError(
-                    "Repository or preview render drifted after approval; "
-                    "review a new plan."
+                    "Repository or preview render drifted after approval: "
+                    "files "
+                    "changed. Review a new plan with '--dry-run'."
                 )
             preview_config_binding = copier_config_binding(stage)
             shutil.rmtree(stage)
@@ -8342,14 +8929,20 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
             if copier_config_binding(stage) != preview_config_binding:
                 raise CliError(
                     "Copier configuration changed during the approved "
-                    "task-bearing render."
+                    "task-bearing render: a template task edited it. Report "
+                    "this csarc bug "
+                    "with the template release you used."
                 )
             validate_copy_target(target, mode, require_clean=True)
             # An empty directory or an empty Git repository (only `.git`,
             # no commit or tracked file) keeps its `.git` (Issue #1078).
             shutil.copytree(stage, target, symlinks=True, dirs_exist_ok=True)
         else:
-            raise CliError("Adoption requires a saved machine plan.")
+            raise CliError(
+                "Adoption requires a saved machine plan: none was given. Run "
+                "'csarc adopt --dry-run', then pass its plan with "
+                "'--apply-plan'."
+            )
 
     verify_project(target)
     write_provenance(target, revision, answers=answers)
@@ -8363,7 +8956,10 @@ def read_answer(path: Path, key: str) -> str:
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.startswith(prefix):
             return line.removeprefix(prefix).strip().strip("'\"")
-    raise CliError(f"Copier answers are missing {key}.")
+    raise CliError(
+        f"Copier answers are missing {key}: the answers file is incomplete. "
+        f"Pass '--data {key}=<value>'."
+    )
 
 
 def find_conflicts(target: Path) -> tuple[str, ...]:
@@ -8393,15 +8989,15 @@ def require_legacy_migration_flags(saved: dict[str, object] | None) -> NoReturn:
     """
     if saved is None:
         raise CliError(
-            "Legacy repository has no verifiable provenance; review "
-            "the Copier source/SHA, then pass --accept-legacy and "
-            "--from-release <tag>."
+            "Legacy repository has no verifiable provenance: it predates "
+            "CSARC provenance. Review the Copier source/SHA, then pass "
+            "'--accept-legacy' and '--from-release <tag>'."
         )
     raise CliError(
         "Saved provenance uses an unverified legacy format "
-        f"({saved.get('verification')!r}); review the Copier "
-        "source/SHA, then pass --accept-legacy and --from-release "
-        "<tag> to migrate it."
+        f"({saved.get('verification')!r}): it cannot be trusted. Review the "
+        "Copier source/SHA, then pass '--accept-legacy' and "
+        "'--from-release <tag>' to migrate it."
     )
 
 
@@ -8481,8 +9077,9 @@ def migrate_legacy_commit(
     if saved is not None and saved.get("verification") == "verified":
         raise CliError(
             f"{legacy_commit_error(commit)} Saved verified provenance "
-            "prevents legacy migration; restore _commit to its recorded "
-            "commit_sha instead."
+            "prevents legacy migration: the record is trusted. Restore _commit "
+            "to its "
+            "recorded commit_sha instead."
         )
     if (
         not accept_legacy
@@ -8494,7 +9091,9 @@ def migrate_legacy_commit(
     if not legacy_commit_matches_release(commit, revision):
         raise CliError(
             f"Copier answer _commit {commit!r} does not match verified "
-            f"release {from_release!r} at {revision.sha}."
+            f"release {from_release!r} at {revision.sha}: they differ. Pass "
+            "the "
+            "release that matches '_commit' with '--from-release'."
         )
     return revision, {
         "commit_sha": revision.sha,
@@ -8580,7 +9179,11 @@ def current_revision(  # noqa: C901
             client=client,
         )
         if saved is not None and saved.get("commit_sha") != revision.sha:
-            raise CliError("Saved provenance does not match Copier answers.")
+            raise CliError(
+                "Saved provenance does not match Copier answers: one was "
+                "edited. "
+                f"Restore {PROVENANCE_FILE} and '.copier-answers.yml' from Git."
+            )
         return revision, saved
 
     # Saved provenance predating the current schema (for example the
@@ -8617,10 +9220,16 @@ def current_revision(  # noqa: C901
     }
     for key, expected in required.items():
         if saved.get(key) != expected:
-            raise CliError(f"Saved provenance field {key!r} is not trusted.")
+            raise CliError(
+                f"Saved provenance field {key!r} is not trusted: it was not "
+                f"verified. Restore {PROVENANCE_FILE} from Git."
+            )
     tag = saved.get("release_tag")
     if not isinstance(tag, str) or not tag:
-        raise CliError("Saved provenance has no release tag.")
+        raise CliError(
+            "Saved provenance has no release tag: the record is incomplete. "
+            f"Restore {PROVENANCE_FILE} from Git."
+        )
     revision = resolve_revision(source, tag, expected_sha=commit, client=client)
     if (
         saved.get("release_id") != revision.release_id
@@ -8628,7 +9237,11 @@ def current_revision(  # noqa: C901
         or saved.get("release_attestation_verified") is not True
         or saved.get("signature_verified") is not True
     ):
-        raise CliError("Saved release provenance does not match GitHub.")
+        raise CliError(
+            "Saved release provenance does not match GitHub: the release "
+            f"moved. Restore {PROVENANCE_FILE} from Git, or pass '--to' with a "
+            "published tag."
+        )
     return revision, saved
 
 
@@ -8646,7 +9259,10 @@ def update_status(
     """Return stable status plus verified current and target state."""
     answers = config_path(target)
     if not answers.is_file():
-        raise CliError(f"Missing {CONFIG_FILE}; use csarc adopt first.")
+        raise CliError(
+            f"Missing {CONFIG_FILE}: the repository is not adopted. "
+            "Use 'csarc adopt' first."
+        )
     source = read_answer(answers, "_src_path")
     current = read_answer(answers, "_commit")
     previous_revision, previous = current_revision(
@@ -9030,10 +9646,12 @@ def command_status(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     else:
+        # message-pattern: allow-begin X5 status report
         print(f"Target: {result['target']}")
         print(f"Install state: {result['state']}")
         print(f"Reason: {result['reason']}")
         print(f"Next: {result['next_command']}")
+        # message-pattern: allow-end
         print_governance_audit(governance)
     return 1 if governance["blocking"] else 0
 
@@ -9050,7 +9668,11 @@ def governance_audit(  # noqa: C901
     )
     if head.returncode != 0:
         if confirm:
-            raise CliError("No Git history exists to confirm a baseline in.")
+            raise CliError(
+                "No Git history exists to confirm a baseline in: the "
+                "repository has "
+                "no commit. Commit once, then run the command again."
+            )
         return {
             "baseline": {
                 "result": "not-installed",
@@ -9121,6 +9743,7 @@ def print_governance_audit(governance: Mapping[str, object]) -> None:
     """Print the baseline and every merge finding that needs attention."""
     baseline = cast(dict[str, object], governance["baseline"])
     merges = cast(dict[str, object], governance["merges"])
+    # message-pattern: allow-begin X5 governance audit report
     print(
         f"Governance baseline: {baseline['result']} "
         f"{baseline.get('baseline') or '-'} ({baseline['reason']})"
@@ -9140,6 +9763,7 @@ def print_governance_audit(governance: Mapping[str, object]) -> None:
                 f"  {kind}: merge {item['sha']} is {item['finding']} "
                 f"({item['detail']})"
             )
+    # message-pattern: allow-end
 
 
 def governance_drift_update_recommendation(
@@ -9267,14 +9891,15 @@ def update_plan_answers(  # noqa: C901
     }
     if release_keys.intersection(explicit_data):
         raise CliError(
-            "Derived release observations cannot be changed with --data; "
-            "set only release_ownership and release_trigger."
+            "Derived release observations cannot be changed with --data: CSARC "
+            "reads them from the repository. Set only release_ownership and "
+            "release_trigger."
         )
     requested_mode = explicit_data.get("project_mode")
     if requested_mode is not None and requested_mode != answers["project_mode"]:
         raise CliError(
-            "project_mode cannot change during update because it owns the "
-            "release boundary."
+            "project_mode cannot change during update: it owns the "
+            "release boundary. Remove '--data project_mode'."
         )
     if "code_owner" not in answers and "code_owner" not in explicit_data:
         # Saved answers that predate code_owner were rendered with the old
@@ -9331,12 +9956,18 @@ def update_plan_answers(  # noqa: C901
             elif normalized in {"0", "false", "no", "off"}:
                 result[key] = False
             else:
-                raise CliError(f"{key} must be a boolean value.")
+                raise CliError(
+                    f"{key} must be a boolean value: another value was given. "
+                    f"Pass '--data {key}=true' or '--data {key}=false'."
+                )
         elif isinstance(previous_value, int):
             try:
                 result[key] = int(str(value))
             except ValueError as error:
-                raise CliError(f"{key} must be an integer value.") from error
+                raise CliError(
+                    f"{key} must be an integer value: another value was given. "
+                    f"Pass '--data {key}=<number>'."
+                ) from error
         else:
             result[key] = value
     # Schema 2 stores no retired key; the old side still reads them from
@@ -9441,8 +10072,8 @@ def require_repository_identity(
         if not repository_facts.same_repository(override, live_url):
             raise CliError(
                 f"--data repository_url={override} does not name the "
-                f"repository the origin identifies ({live_url}); the target "
-                "was not changed."
+                f"repository the origin identifies ({live_url}): the target "
+                "was not changed. Pass the origin URL or fix 'git remote'."
             )
         return
     recorded = answers.get("repository_url")
@@ -9453,9 +10084,9 @@ def require_repository_identity(
     ):
         raise CliError(
             f"The origin identifies {live_url}, but the saved settings and "
-            f"provenance record {recorded}; the target was not changed. "
+            f"provenance record {recorded}: the target was not changed. "
             "Check the origin remote, or approve the new identity for this "
-            f"plan only with --data repository_url={live_url}."
+            f"plan only with '--data repository_url={live_url}'."
         )
 
 
@@ -9528,8 +10159,9 @@ def resolve_derived_context(
             if not isinstance(recorded, str) or not recorded:
                 raise CliError(
                     f"{key} has several candidates in the native manifests "
-                    f"({', '.join(candidates)}); pass --data {key}=<value> "
-                    "once to decide. The target was not changed."
+                    f"({', '.join(candidates)}): CSARC cannot choose. Pass "
+                    f"'--data {key}=<value>' once to decide. The target was "
+                    "not changed."
                 )
             differences[key] = candidates
         elif key == "project_run_command":
@@ -9624,7 +10256,10 @@ def _render_reinstall_plan(
     )
     if plan.adoption is None:
         shutil.rmtree(temporary_root, ignore_errors=True)
-        raise CliError("Reinstall plan has no adoption evidence.")
+        raise CliError(
+            "Reinstall plan has no adoption evidence: the plan is incomplete. "
+            "Run 'csarc update --check' again."
+        )
     return temporary_root, plan, answers_relative, fresh_answers
 
 
@@ -9682,8 +10317,12 @@ def command_update_reinstall(  # noqa: C901
     """
     target_label = args.to if args.to else "the newest available release"
     print(
-        f"{missing} Attempting a reinstall targeting {target_label} "
-        "instead of failing outright (Issue #918).",
+        (
+            f"WARNING: Update falls back to a reinstall: {missing} Attempting "
+            "a "
+            f"reinstall targeting {target_label} instead of failing outright "
+            "(Issue #918). Review the reinstall plan below."
+        ),
         file=sys.stderr,
     )
     if not args.check:
@@ -9714,7 +10353,10 @@ def command_update_reinstall(  # noqa: C901
     finally:
         shutil.rmtree(preview_root, ignore_errors=True)
     if adoption is None:
-        raise CliError("Reinstall plan has no adoption evidence.")
+        raise CliError(
+            "Reinstall plan has no adoption evidence: the plan is incomplete. "
+            "Run 'csarc update --check' again."
+        )
     report_directory = lifecycle_report_directory(
         target, args.report_dir, "update"
     )
@@ -9744,15 +10386,22 @@ def command_update_reinstall(  # noqa: C901
         return 1
     if adoption.get("phase") == "pending":
         print(
-            "Reinstall needs manual merges before it can be applied "
-            "automatically. Resolve the listed manual-merge files "
-            "against this directory with csarc adopt, then rerun "
-            "csarc update.",
+            (
+                "WARNING: Reinstall needs manual merges before it can be "
+                "applied "
+                "automatically: some files differ. Resolve the listed "
+                "manual-merge files "
+                "against this directory with 'csarc adopt', then rerun 'csarc "
+                "update'."
+            ),
             file=sys.stderr,
         )
         return 1
     if adoption.get("applicable") is not True:
-        raise CliError("Reinstall plan is not applicable.")
+        raise CliError(
+            "Reinstall plan is not applicable: a check blocked it. "
+            "Fix the reported problem, then run 'csarc update --check' again."
+        )
     if not confirm(args):
         return 0
 
@@ -9777,14 +10426,22 @@ def command_update_reinstall(  # noqa: C901
         fresh_adoption = fresh.adoption
         planned = fresh.files
         if fresh_adoption is None or planned is None:
-            raise CliError("Reinstall plan has no adoption evidence.")
+            raise CliError(
+                "Reinstall plan has no adoption evidence: the plan is "
+                "incomplete. "
+                "Run 'csarc update --check' again."
+            )
         if fresh_adoption.get("phase") == "pending":
             print(
-                "Reinstall needs manual merges before it can be applied "
-                "automatically (the target changed since the preview "
-                "plan). Resolve the listed manual-merge files against "
-                "this directory with csarc adopt, then rerun csarc "
-                "update.",
+                (
+                    "WARNING: Reinstall needs manual merges before it can be "
+                    "applied "
+                    "automatically: the target changed since the preview plan. "
+                    "Resolve the "
+                    "listed manual-merge files against this directory with "
+                    "'csarc adopt', "
+                    "then rerun 'csarc update'."
+                ),
                 file=sys.stderr,
             )
             return 1
@@ -9795,7 +10452,8 @@ def command_update_reinstall(  # noqa: C901
         ):
             raise CliError(
                 "Reinstall plan is not applicable: "
-                f"{owner_state.get('reason', 'CODEOWNER is blocked')}"
+                f"{owner_state.get('reason', 'CODEOWNER is blocked')}. "
+                "Fix 'code_owner', then run 'csarc update --check' again."
             )
         candidate = apply_root / "candidate"
         (candidate / answers_relative).write_text(
@@ -9805,7 +10463,9 @@ def command_update_reinstall(  # noqa: C901
             verify_project(candidate)
         except ProjectVerificationError as error:
             raise CliError(
-                f"Reinstall verification failed after plan approval: {error}"
+                f"Reinstall verification failed after plan approval: "
+                f"{str(error).rstrip('.')}. Fix the failure, then run 'csarc "
+                "update' again."
             ) from error
         _effects, artifacts = candidate_effects(candidate, target, planned)
         write_candidate_patch(
@@ -9832,7 +10492,7 @@ def command_update_reinstall(  # noqa: C901
         ),
         emit=True,
     )
-    print("Reinstall complete.")
+    print("OK: Reinstall complete.")
     return 0
 
 
@@ -9846,9 +10506,15 @@ def read_raw_answers(path: Path) -> dict[str, object]:
     try:
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
-        raise CliError(f"Cannot read Copier answers from {path}.") from error
+        raise CliError(
+            f"Cannot read Copier answers from {path}: the file is unreadable. "
+            "Restore it from Git with 'git checkout'."
+        ) from error
     if not isinstance(payload, dict):
-        raise CliError(f"Copier answers in {path} must be a mapping.")
+        raise CliError(
+            f"Copier answers in {path} must be a mapping: the file has another "
+            "shape. Restore it from Git with 'git checkout'."
+        )
     return {str(key): value for key, value in payload.items()}
 
 
@@ -9889,8 +10555,10 @@ def render_old_side(
         except CliError as error:
             raise CliError(
                 f"The old template {revision.label} cannot be rebuilt from "
-                f"the saved answers and trusted provenance ({error}). The "
-                "target was not changed."
+                "the saved answers and trusted provenance: "
+                f"{str(error).rstrip('.')}. "
+                "The target was not changed. Restore '.copier-answers.yml' "
+                "from Git."
             ) from error
         return update_plan.asked_keys(read_copier_answers(config_path(stage)))
 
@@ -10346,8 +11014,8 @@ def retire_kept_files(
         if name not in retained:
             raise CliError(
                 f"The final plan retires {name}, but the update no longer "
-                "keeps it as a retire-modified file; the target was not "
-                "changed. Create a new plan."
+                "keeps it as a retire-modified file: the target was not "
+                "changed. Create a new plan with 'csarc update --check'."
             )
         checked_destination(candidate, name).unlink()
 
@@ -10573,7 +11241,9 @@ def ignored_paths(
     if result.returncode not in {0, 1}:
         raise CliError(
             "Cannot evaluate the repository ignore rules for the rendered "
-            "files; the target was not changed."
+            "files: 'git check-ignore' failed. Fix '.gitignore'; the target "
+            "was not "
+            "changed."
         )
     # Each line is `<source>:<line>:<pattern>\t<path>`; rendered paths are
     # plain template names, so Git never quotes them.
@@ -10681,7 +11351,7 @@ def resolve_recorded_conflicts(
             + (", ".join(sorted(resolutions)) or "none")
             + "; realized: "
             + (", ".join(conflicts) or "none")
-            + "); the target was not changed. Create a new plan."
+            + "); the target was not changed. Run 'csarc update --check' again."
         )
     apply_conflict_resolutions(candidate, resolutions)
     return find_conflicts(candidate)
@@ -10720,11 +11390,12 @@ def update_action_pin_preflight(
         )
     except action_pin_preflight.PinPreflightError as error:
         raise CliError(
-            "Action pin preflight failed closed; the target was not "
-            f"changed. {error} Repair: make the template source reachable "
-            "at the reviewed commit (or pass a verified --to release) and "
+            "Action pin preflight failed closed: the target was not "
+            f"changed. {str(error).rstrip('.')}. Repair: make the template "
+            "source reachable at the reviewed commit (or pass a verified --to "
+            "release) and "
             "keep each .github/workflows file a regular UTF-8 file, then "
-            "rerun csarc update --check."
+            "rerun 'csarc update --check'."
         ) from error
 
 
@@ -10771,8 +11442,8 @@ def write_conflict_sides(
     folder = report_directory / CONFLICT_SIDES_DIRECTORY
     if folder.is_symlink():
         raise CliError(
-            f"{folder} is a symlink; remove it so conflict sides can be "
-            "written."
+            f"{folder} is a symlink: conflict sides cannot be written there. "
+            "Remove it, then run the command again."
         )
     if folder.is_dir():
         shutil.rmtree(folder)
@@ -10836,9 +11507,10 @@ def plan_update(
     )
     if run_result.returncode != 0 and not run_result.conflicts:
         raise CliError(
-            "Copier could not plan the update ("
-            + (run_result.output or "unknown Copier error")
-            + "). The target was not changed."
+            "Copier could not plan the update: "
+            + (run_result.output or "unknown Copier error").rstrip(".")
+            + ". The target was not changed. Fix the cause, then run "
+            "'csarc update --check' again."
         )
     answers_files = {CONFIG_FILE.as_posix(), LEGACY_ANSWERS_FILE.as_posix()}
     old_files = project_files(old_stage)
@@ -11121,9 +11793,10 @@ def split_retirement_decisions(
     if wrong:
         raise CliError(
             "A retire-modified file is kept unless you retire it with "
-            "--decision PATH=take-new; leave it out to keep it ("
+            "--decision PATH=take-new: "
             + ", ".join(wrong)
-            + "). The target was not changed."
+            + ". The target was not "
+            "changed. Leave the decision out to keep it."
         )
     conflicts = {
         name: choice for name, choice in choices.items() if name not in kept
@@ -11409,9 +12082,10 @@ def apply_update_transitions(
     )
     if problems:
         raise CliError(
-            "Update apply diverged from the approved file transitions ("
+            "Update apply diverged from the approved file transitions: "
             + "; ".join(problems)
-            + "); the target was not changed. Create a new plan."
+            + ". The target was not changed. Create a new plan with "
+            "'csarc update --check'."
         )
     for relative_name in (*artifacts, *delete_paths):
         checked_destination(target, relative_name)
@@ -11422,8 +12096,9 @@ def apply_update_transitions(
         )
     except (OSError, file_transition.TransitionError) as error:
         raise CliError(
-            f"Update apply failed ({error}); the target was restored to "
-            "its base. Create a new plan."
+            f"Update apply failed: {str(error).rstrip('.')}. The target was "
+            "restored to its base. Create a new plan with 'csarc update "
+            "--check'."
         ) from error
 
 
@@ -11449,7 +12124,10 @@ def update_toolchain() -> dict[str, str]:
     try:
         final_plan.require_pinned_toolchain(toolchain)
     except final_plan.FinalPlanError as error:
-        raise CliError(f"{error} The target was not changed.") from error
+        raise CliError(
+            f"Toolchain check failed: {str(error).rstrip('.')}. The target was "
+            "not changed."
+        ) from error
     return toolchain
 
 
@@ -11534,27 +12212,38 @@ def decision_content(
     if choice == final_plan.DECISION_KEEP:
         path = target / name
         if path.is_symlink():
-            raise CliError(f"Cannot keep {name}: it is a symlink.")
+            raise CliError(
+                f"Cannot keep {name}: it is a symlink. "
+                f"Pass '--decision {name}=take-new' or replace the symlink."
+            )
         content = path.read_bytes() if path.is_file() else None
     elif choice == final_plan.DECISION_TAKE:
         content = new_side.get(name)
     else:
         if custom is None:
-            raise CliError(f"The custom decision for {name} needs a FILE.")
+            raise CliError(
+                f"The custom decision for {name} needs a FILE: none was given. "
+                f"Pass '--decision {name}=custom:FILE'."
+            )
         resolved = Path(os.path.abspath(custom.expanduser()))
         if resolved == target or target in resolved.parents:
             raise CliError(
                 f"The custom resolution for {name} must live outside the "
-                "target repository."
+                "target repository: it is inside. Move the file outside the "
+                "repository."
             )
         if resolved.is_symlink() or not resolved.is_file():
             raise CliError(
-                f"The custom resolution for {name} must be a regular file."
+                f"The custom resolution for {name} must be a regular file: it "
+                "is "
+                "not. Pass a regular file."
             )
         content = resolved.read_bytes()
     if content is not None and CONFLICT_MARKER.search(content):
         raise CliError(
-            f"The {choice} resolution for {name} still has conflict markers."
+            f"The {choice} resolution for {name} still has conflict markers: "
+            "the merge is unfinished. Remove the conflict markers from the "
+            "file."
         )
     return content
 
@@ -11607,14 +12296,16 @@ def replay_pin_decisions(
         )
     except action_pin_preflight.PinPreflightError as error:
         raise CliError(
-            f"Action pin decisions failed closed ({error}); the target was "
-            "not changed."
+            f"Action pin decisions failed closed: {str(error).rstrip('.')}. "
+            "The target was not changed. Fix the pin commit, then run "
+            "'csarc update --finalize-plan' again."
         ) from error
     if unlisted:
         raise CliError(
-            "Pin commit changes more than the listed action pins ("
+            "Pin commit changes more than the listed action pins: "
             + ", ".join(unlisted)
-            + "); the target was not changed."
+            + ". The target was not changed. "
+            "Commit only the listed pin changes."
         )
     return accepted
 
@@ -11634,13 +12325,14 @@ def final_pin_decisions(
         if pin_commit is not None:
             raise CliError(
                 "--pin-commit was given, but the stage-1 plan lists no "
-                "action pin drift."
+                "action pin drift: nothing to pin. Remove '--pin-commit'."
             )
         return {"commit": None, "decisions": [], "items": []}
     if pin_commit is None:
         raise CliError(
-            "The stage-1 plan lists action pin drift; commit the product "
-            "pin changes, then pass --pin-commit <full SHA>."
+            "The stage-1 plan lists action pin drift: no pin commit was given. "
+            "Commit the product pin changes, then pass '--pin-commit <full "
+            "SHA>'."
         )
     decisions = [dict(item, commit_sha=pin_commit) for item in items]
     accepted = replay_pin_decisions(target, items, decisions, pin_commit)
@@ -11681,7 +12373,10 @@ def final_report(
             },
         )
     except lifecycle_report.LifecycleReportError as error:
-        raise CliError(f"Lifecycle report is invalid: {error}") from error
+        raise CliError(
+            f"Lifecycle report is invalid: {str(error).rstrip('.')}. "
+            "Report this csarc bug with the command you ran."
+        ) from error
 
 
 @dataclass(frozen=True)
@@ -11816,10 +12511,13 @@ def write_update_final_plan(
     final_path = report_directory / final_plan.FINAL_PLAN_BASENAME
     if final_path.exists() or final_path.is_symlink():
         raise CliError(
-            f"Final plan {final_path} already exists and is immutable; apply "
-            "it with csarc update --apply-plan, or keep it and decide again "
-            "in a new report folder: run csarc update --check with a new "
-            "--report-dir, then --finalize-plan with that same --report-dir."
+            f"Final plan {final_path} already exists and is immutable: it "
+            "cannot be replaced. Apply it with 'csarc update --apply-plan', or "
+            "keep it "
+            "and decide again in a new report folder: run 'csarc update "
+            "--check' with "
+            "a new --report-dir, then --finalize-plan with that same "
+            "--report-dir."
         )
     toolchain = update_toolchain()
     try:
@@ -11842,9 +12540,9 @@ def write_update_final_plan(
         or template.get("sha") != context.plan.revision.sha
     ):
         raise CliError(
-            "The stage-1 plan no longer matches the update planning (the "
-            "template, inputs, or conflicts changed); run csarc update "
-            "--check again and review it before deciding."
+            "The stage-1 plan no longer matches the update planning: the "
+            "template, inputs, or conflicts changed. Run 'csarc update "
+            "--check' again and review it before deciding."
         )
     pins = final_pin_decisions(target, stage1, args.pin_commit)
     resolutions: dict[str, bytes | None] = {
@@ -11917,7 +12615,10 @@ def write_update_final_plan(
         final_plan.FinalPlanError,
         lifecycle_report.LifecycleReportError,
     ) as error:
-        raise CliError(f"Cannot create the final plan: {error}") from error
+        raise CliError(
+            f"Cannot create the final plan: {str(error).rstrip('.')}. "
+            "Check that the report folder is writable."
+        ) from error
     digest = str(sealed["final_plan_sha256"])
     filesystem_root = Path(report_directory.anchor)
     atomic_replace_text(
@@ -11933,7 +12634,7 @@ def write_update_final_plan(
         report=final_report(report, digest),
         emit=True,
     )
-    print(f"Final plan: {final_path} (sha256 {digest}).")
+    print(f"OK: Final plan: {final_path} (sha256 {digest}).")
     return 0
 
 
@@ -11960,8 +12661,8 @@ def reject_apply_plan_arguments(args: argparse.Namespace) -> None:
     ]
     if conflicting:
         raise CliError(
-            "--apply-plan uses only the values recorded in the final plan; "
-            "remove " + ", ".join(conflicting) + "."
+            "--apply-plan uses only the values recorded in the final plan: "
+            "extra options conflict. Remove " + ", ".join(conflicting) + "."
         )
 
 
@@ -12024,8 +12725,10 @@ def recorded_run(
     )
     if planning.digest() != recorded["digest"]:
         raise CliError(
-            "The final plan's planning record does not match its digest; "
-            "the target was not changed."
+            "The final plan's planning record does not match its digest: the "
+            "plan was edited. The target was not changed. Create a new plan "
+            "with "
+            "'csarc update --check'."
         )
     approved = derived["transitions"]
     transitions = file_transition.ApprovedTransitions(
@@ -12046,11 +12749,15 @@ def load_final_plan(
     try:
         sealed = final_plan.load(plan_path)
     except final_plan.FinalPlanError as error:
-        raise CliError(f"{error} The target was not changed.") from error
+        raise CliError(
+            f"Final plan is unusable: {str(error).rstrip('.')}. The target was "
+            "not changed."
+        ) from error
     if sealed["target"] != str(target):
         raise CliError(
             f"The final plan was created for {sealed['target']}, not "
-            f"{target}; the target was not changed."
+            f"{target}: the target was not changed. Pass the plan made for "
+            "this repository."
         )
     report_directory = lifecycle_report_directory(
         target, plan_path.parent, "update"
@@ -12062,7 +12769,8 @@ def load_final_plan(
     ):
         raise CliError(
             "--report-dir must match the directory of the applied final "
-            "plan; the applied report is written beside that plan."
+            "plan: the applied report is written beside that plan. Remove "
+            "'--report-dir' or pass the plan's directory."
         )
     return sealed, report_directory
 
@@ -12077,9 +12785,9 @@ def require_recorded_live_facts(
     )
     if drift:
         raise CliError(
-            "The toolchain differs from the final plan ("
+            "The toolchain differs from the final plan: "
             + ", ".join(drift)
-            + "); the target was not changed. Use the recorded versions or "
+            + ". The target was not changed. Use the recorded versions or "
             "create a new plan."
         )
     inputs = cast(dict[str, Any], sealed["inputs"])
@@ -12114,10 +12822,10 @@ def require_recorded_live_facts(
     )
     if changed:
         raise CliError(
-            "Live facts differ from the final plan ("
+            "Live facts differ from the final plan: "
             + ", ".join(changed)
-            + "); the target was not changed. Keep this final plan and "
-            "create a new one: run csarc update --check with a new "
+            + ". The target was not changed. Keep this final plan and "
+            "create a new one: run 'csarc update --check' with a new "
             "--report-dir, then --finalize-plan with that same --report-dir."
         )
     return resolved, previous
@@ -12132,14 +12840,14 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
     provenance = read_provenance(target)
     if provenance is not None and provenance.get("final_plan_sha256") == digest:
         print(
-            f"Final plan {digest} is already applied to {target}; nothing "
+            f"OK: Final plan {digest} is already applied to {target}: nothing "
             "was changed."
         )
         return 0
     if (target / PENDING_ADOPTION_FILE).is_file():
         raise CliError(
-            "Adoption is pending; complete the manual merge and run "
-            "csarc adopt --finalize before update."
+            "Adoption is pending: the manual merge is not finished. Complete "
+            "it and run 'csarc adopt --finalize' before update."
         )
     # Hand-edited or contradictory schema 2 settings stop before any write
     # (SPEC-009, Issue #1071 AC4).
@@ -12163,7 +12871,10 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
             for entry in decisions["files"]
         }
     except final_plan.FinalPlanError as error:
-        raise CliError(f"{error} The target was not changed.") from error
+        raise CliError(
+            f"Final plan is unusable: {str(error).rstrip('.')}. The target was "
+            "not changed."
+        ) from error
     # A decided retire-modified file is retired, not a Copier conflict
     # (Issue #1157).
     retire = tuple(
@@ -12200,9 +12911,10 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
         )
         if divergence:
             raise CliError(
-                "Update apply diverged from the final plan ("
+                "Update apply diverged from the final plan: "
                 + "; ".join(divergence)
-                + "); the target was not changed. Create a new plan."
+                + ". The target was not changed. Create a new plan with "
+                "'csarc update --check'."
             )
         candidate = applied.candidate
         pin_answer_commit(candidate, run_inputs.target_sha)
@@ -12264,7 +12976,7 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
         ),
         emit=True,
     )
-    print(f"Applied final plan {digest}.")
+    print(f"OK: Applied final plan {digest}.")
     return 0
 
 
@@ -12275,21 +12987,27 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     if (args.decision or args.pin_commit is not None) and not (
         args.finalize_plan
     ):
-        raise CliError("--decision and --pin-commit need --finalize-plan.")
+        raise CliError(
+            "--decision and --pin-commit need --finalize-plan: only that step "
+            "records decisions. Add '--finalize-plan'."
+        )
     if args.finalize_plan and (args.check or args.dry_run or args.json):
         raise CliError(
             "--finalize-plan cannot be combined with --check, --dry-run, "
-            "or --json."
+            "or --json: they are separate steps. Remove those options."
         )
     target = resolve_repository_target(args.path)
     if (target / PENDING_ADOPTION_FILE).is_file():
         raise CliError(
-            "Adoption is pending; complete the manual merge and run "
-            "csarc adopt --finalize before update."
+            "Adoption is pending: the manual merge is not finished. Complete "
+            "it and run 'csarc adopt --finalize' before update."
         )
     answers_path = config_path(target)
     if not answers_path.is_file():
-        raise CliError(f"Missing {CONFIG_FILE}; use csarc adopt first.")
+        raise CliError(
+            f"Missing {CONFIG_FILE}: the repository is not adopted. "
+            "Use 'csarc adopt' first."
+        )
     # Unknown schemas and hand-edited or contradictory schema 2 settings
     # stop here, before any render or write (Issue #1071 AC4/AC6).
     saved_settings = load_saved_settings(target)
@@ -12359,7 +13077,10 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         )
     source = status.get("source")
     if not isinstance(source, str):
-        raise CliError("Update source must be a string.")
+        raise CliError(
+            "Update source must be a string: another type was given. "
+            "Pass a path or URL with '--source'."
+        )
     release_migrated = bool(
         "release_ownership" not in saved_answers
         and explicit_data.get("release_ownership") in {None, "csarc-owned"}
@@ -12408,9 +13129,11 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         if release_migrated and not (stage / CSARC_RELEASE_WORKFLOW).is_file():
             raise CliError(
                 "This template release cannot render the CSARC release "
-                "workflow that replaces the legacy release writer; update to "
-                "a release that supports the migration. The target was not "
-                "changed."
+                "workflow that replaces the legacy release writer: it predates "
+                "the "
+                "migration. Update to a release that supports the migration "
+                "with "
+                "'--to'. The target was not changed."
             )
         target_uses_current_config = (stage / CONFIG_FILE).is_file()
         # The persisted file intentionally keeps only user-owned release
@@ -12755,7 +13478,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
 
     print_plan(plan)
     print(
-        "Update planning digest: "
+        "NOTICE: Update planning digest: "
         f"{planning.digest()} (old side "
         f"{old_side.as_dict()['answers_sha256']}, render parity "
         f"{planning.render_parity})."
@@ -12797,9 +13520,10 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         )
         if divergence:
             raise CliError(
-                "Update apply diverged from the reviewed plan ("
+                "Update apply diverged from the reviewed plan: "
                 + "; ".join(divergence)
-                + "); the target was not changed. Create a new plan."
+                + ". The target was not changed. Create a new plan with "
+                "'csarc update --check'."
             )
         candidate = applied.candidate
         pin_answer_commit(candidate, str(status["target_sha"]))
@@ -13095,6 +13819,7 @@ def command_risk(args: argparse.Namespace) -> int:  # noqa: C901
         if args.json:
             print(json.dumps(found, ensure_ascii=False, indent=2))
         for item in [] if args.json else found:
+            # message-pattern: allow-begin X5 risk suggestion report
             print(
                 f"#{item['issue']}: "
                 + (
@@ -13103,6 +13828,7 @@ def command_risk(args: argparse.Namespace) -> int:  # noqa: C901
                     else "; ".join(item["problems"]) or "valid"
                 )
             )
+            # message-pattern: allow-end
             if item["suggestion"]:
                 print(item["suggestion"])
         return 0
@@ -13119,19 +13845,27 @@ def command_risk(args: argparse.Namespace) -> int:  # noqa: C901
         return 0
     if args.verify is not None:
         if not args.digest:
-            raise CliError("--verify needs the saved --digest")
+            raise CliError(
+                "--verify needs the saved --digest: none was given. "
+                "Pass '--digest' with the value 'csarc risk backfill' printed."
+            )
         problems = risk_tools.verify_backfill(args.verify, args.digest)
         for line in problems:
+            # message-pattern: allow X5 one finding of the backfill report
             print(f"risk backfill: {line}", file=sys.stderr)
         return 1 if problems else 0
     if args.milestone is None:
-        raise CliError("risk backfill needs --milestone or --verify")
+        raise CliError(
+            "risk backfill needs --milestone or --verify: neither was given. "
+            "Pass '--milestone <N>' or '--verify <FILE>'."
+        )
     manifest = risk_tools.backfill(args.repo, args.milestone)
     data = risk_tools.canonical(manifest)
     if args.out is not None:
         args.out.write_bytes(data)
     elif args.json:
         print(data.decode("utf-8"))
+    # message-pattern: allow X1 digest line copied into --verify
     print(f"digest: {risk_tools.manifest_digest(manifest)}")
     return 0
 
@@ -13141,7 +13875,10 @@ def main(arguments: list[str] | None = None) -> int:
     args = parser().parse_args(arguments)
     try:
         if sys.platform == "win32":
-            raise CliError("Native Windows is unsupported; run csarc in WSL2.")
+            raise CliError(
+                "Native Windows is unsupported: csarc needs a POSIX system. "
+                "Run csarc in WSL2."
+            )
         if args.command in {"init", "adopt"}:
             return command_copy(args, args.command)
         if args.command == "status":
@@ -13149,7 +13886,11 @@ def main(arguments: list[str] | None = None) -> int:
         if args.command in {"issue", "risk"}:
             return command_risk(args)
         if args.json and not args.check:
-            raise CliError("--json is only valid with update --check.")
+            raise CliError(
+                "--json is only valid with update --check: other modes print "
+                "text. "
+                "Add '--check' or remove '--json'."
+            )
         return command_update(args)
     except (
         CliError,
@@ -13167,7 +13908,7 @@ def main(arguments: list[str] | None = None) -> int:
                 )
             )
         else:
-            print(f"csarc: {error}", file=sys.stderr)
+            print(f"ERROR: {error}", file=sys.stderr)
         return 2
 
 

@@ -184,8 +184,8 @@ class Session:
             except SetupError as error:
                 self.emit(f"  {error}")
         raise SetupError(
-            f"No valid answer for {question.key}; pass --data "
-            f"{question.key}={question.data_hint} instead."
+            f"No valid answer for {question.key}: 3 attempts failed. Pass "
+            f"'--data {question.key}={question.data_hint}' instead."
         )
 
     def confirm(self, prompt: str, *, default: bool = False) -> bool:
@@ -208,8 +208,8 @@ class Session:
         )
         keys = ", ".join(dict(self.missing))
         raise SetupError(
-            f"Missing required setup input ({keys}); nothing was rendered or "
-            f"written. Rerun `csarc {command}` with {flags}, or answer in a "
+            f"Missing required setup input ({keys}): nothing was rendered or "
+            f"written. Rerun 'csarc {command}' with {flags}, or answer in a "
             "terminal."
         )
 
@@ -222,43 +222,59 @@ def parse_answer(question: Question, answer: str) -> object:  # noqa: C901
             return True
         if lowered in {"n", "no", "false", "0"}:
             return False
-        raise SetupError("Answer yes or no.")
+        raise SetupError(
+            "Answer is invalid: it is not yes or no. Enter 'y' or 'n'."
+        )
     if question.kind == "multi":
         if answer.casefold() in {"", "none"}:
             if question.allow_empty:
                 return []
-            raise SetupError("Select at least one value.")
+            raise SetupError(
+                "Answer is invalid: it selects no value. Enter at least one "
+                "listed value."
+            )
         values = [part.strip() for part in answer.split(",") if part.strip()]
         unknown = [value for value in values if value not in question.choices]
         if unknown:
             raise SetupError(
-                "Choose from "
+                "Answer is invalid: "
+                + ", ".join(unknown)
+                + " is not listed. Enter values from "
                 + ", ".join(question.choices)
-                + " (comma-separated)."
+                + ", separated by commas."
             )
         return list(dict.fromkeys(values))
     if question.kind == "choice":
         if answer not in question.choices:
             raise SetupError(
-                "Choose one of " + ", ".join(question.choices) + "."
+                f"Answer is invalid: {answer!r} is not listed. Enter one of "
+                + ", ".join(question.choices)
+                + "."
             )
         return answer
     if not answer.strip():
-        raise SetupError("A non-empty value is required.")
+        raise SetupError("Answer is invalid: it is empty. Enter a value.")
     if question.key == "project_description" and (
         answer.strip().casefold() in PLACEHOLDERS or "<" in answer
     ):
-        raise SetupError("Enter the approved purpose without placeholder text.")
+        raise SetupError(
+            "Answer is invalid: it has placeholder text. Enter the approved "
+            "purpose without placeholder text."
+        )
     if question.key == "repository_url" and not GITHUB_REPOSITORY_URL.fullmatch(
         answer
     ):
-        raise SetupError("Use https://github.com/owner/repository.")
+        raise SetupError(
+            "Answer is invalid: it is not a GitHub repository URL. Enter "
+            "'https://github.com/owner/repository'."
+        )
     if question.key == "security_reporting_channel" and not private_channel(
         answer
     ):
         raise SetupError(
-            "Use a private channel outside GitHub: an email address, a "
-            "mailto: link, or a non-GitHub https:// URL."
+            "Answer is invalid: it is not a private channel outside "
+            "GitHub. Enter an email address, a 'mailto:' link, or a "
+            "non-GitHub 'https://' URL."
         )
     return answer.strip()
 
@@ -353,9 +369,10 @@ def check_work_mode(requested: str | None) -> None:
     """Reject an unknown preset before any question is asked."""
     if requested is not None and requested not in WORK_MODES:
         raise SetupError(
-            f"Unknown work mode {requested!r}; use --preset "
+            f"Unknown work mode {requested!r}: no such preset. Pass "
+            + "'--preset "
             + "|".join(WORK_MODES)
-            + "."
+            + "'."
         )
 
 
@@ -554,9 +571,9 @@ def plan_adopt(  # noqa: C901
         )
         if accepted is False:
             raise SetupError(
-                "Detected values were not accepted; nothing was written. "
-                "Rerun csarc adopt with --data KEY=VALUE for each value to "
-                "change."
+                "Detected values were not accepted: nothing was written. "
+                "Rerun 'csarc adopt' with '--data KEY=VALUE' for each value "
+                "to change."
             )
     for item in detections:
         if item.state == "known" or item.key in explicit:
@@ -757,11 +774,16 @@ def copilot_route_possible(values: Mapping[str, object]) -> bool:
 def _api_json(api: Runner, arguments: Sequence[str]) -> object:
     code, output, error = api(arguments)
     if code != 0:
-        raise SetupError(error.strip() or "GitHub API request failed")
+        raise SetupError(
+            f"GitHub API request failed: {error.strip() or 'no output'}. "
+            "Run 'gh auth status', then plan again."
+        )
     try:
         return json.loads(output)
     except json.JSONDecodeError as exc:
-        raise SetupError("GitHub returned invalid JSON") from exc
+        raise SetupError(
+            "GitHub API read failed: GitHub returned invalid JSON. Plan again."
+        ) from exc
 
 
 def _collaborators(api: Runner, repository: str) -> list[Mapping[str, object]]:
@@ -774,13 +796,19 @@ def _collaborators(api: Runner, repository: str) -> list[Mapping[str, object]]:
         ],
     )
     if not isinstance(pages, list):
-        raise SetupError("the collaborator list has an unexpected shape")
+        raise SetupError(
+            "Collaborator read failed: the list has an unexpected shape. "
+            "Plan again."
+        )
     rows: list[Mapping[str, object]] = []
     for page in pages:
         items = page if isinstance(page, list) else [page]
         for item in items:
             if not isinstance(item, Mapping):
-                raise SetupError("a collaborator entry has no fields")
+                raise SetupError(
+                    "Collaborator read failed: an entry has no fields. "
+                    "Plan again."
+                )
             rows.append(item)
     return rows
 
@@ -790,7 +818,10 @@ def observe_actor(api: Runner) -> str:
     payload = _api_json(api, ["user"])
     login = payload.get("login") if isinstance(payload, Mapping) else None
     if not isinstance(login, str) or not login:
-        raise SetupError("the authenticated GitHub login is unavailable")
+        raise SetupError(
+            "GitHub login is unavailable: 'gh api user' returned none. Run "
+            "'gh auth status'."
+        )
     return login
 
 
@@ -817,7 +848,8 @@ def approval_route(  # noqa: C901
         actor = observe_actor(api)
         collaborators = _collaborators(api, repository)
     except SetupError as error:
-        return INCONCLUSIVE, f"the collaborator read is incomplete: {error}"
+        detail = str(error).rstrip(".")
+        return INCONCLUSIVE, f"the collaborator read is incomplete: {detail}"
     incomplete = ""
     for item in collaborators:
         login = item.get("login")
@@ -854,7 +886,7 @@ def approval_route(  # noqa: C901
             return (
                 INCONCLUSIVE,
                 f"organization roles of {organization} are not readable: "
-                f"{error}",
+                f"{str(error).rstrip('.')}",
             )
         role = (
             membership.get("role") if isinstance(membership, Mapping) else None
@@ -899,7 +931,7 @@ def resolve_approval(
     possible = copilot_route_possible(values)
     if confirm_copilot and not possible:
         raise SetupError(
-            f"admin_bypass {bypass} needs a peer approver for {scope}; a "
+            f"admin_bypass {bypass} needs a peer approver for {scope}: a "
             "Copilot review cannot replace it here because "
             + (
                 "copilot_review is off"
@@ -907,7 +939,7 @@ def resolve_approval(
                 else "local verification with admin_bypass off requires one "
                 "native approval"
             )
-            + ". Pass --data admin_bypass=always or add a maintainer."
+            + ". Pass '--data admin_bypass=always' or add a maintainer."
         )
     if possible and (
         confirm_copilot
@@ -926,15 +958,16 @@ def resolve_approval(
             record["confirmation"] = "second-approver"
             return record
         raise SetupError(
-            f"Approval route for admin_bypass {bypass} is inconclusive "
-            f"({reason}); nothing was written. Pass "
-            "--confirm-second-approver after checking that another "
-            "maintainer can approve, or --data admin_bypass=always."
+            f"Approval route for admin_bypass {bypass} is inconclusive: "
+            f"{reason}; nothing was written. Pass '--confirm-second-approver' "
+            "after checking that "
+            "another maintainer can approve, or '--data admin_bypass=always'."
         )
     raise SetupError(
-        f"No peer approver was observed for admin_bypass {bypass} ({reason}); "
-        f"{scope} would wait for an approval nobody observed can give. Add a "
-        "maintainer and plan again, or pass --data admin_bypass=always."
+        f"No peer approver was observed for admin_bypass {bypass}: "
+        f"{reason}, so {scope} would wait for an approval nobody observed "
+        "can give. Add a maintainer and plan again, or pass '--data "
+        "admin_bypass=always'."
     )
 
 

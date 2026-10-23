@@ -131,6 +131,10 @@ _issue_creation_policy_apply_end = SCRIPT_SOURCE.index(
 ISSUE_CREATION_POLICY_APPLY_SOURCE = SCRIPT_SOURCE[
     _issue_creation_policy_apply_start:_issue_creation_policy_apply_end
 ]
+_gh_error_start = SCRIPT_SOURCE.index("gh_error() {")
+GH_ERROR_SOURCE = SCRIPT_SOURCE[
+    _gh_error_start : SCRIPT_SOURCE.index("\n}\n", _gh_error_start) + 3
+]
 
 
 def run_drift_check(
@@ -347,7 +351,7 @@ def run_issue_creation_policy_apply(
     script = (
         f'repo="{repo}"\n'
         f'desired_issue_creation_policy="{desired_policy}"\n'
-        f"{source}"
+        f"{GH_ERROR_SOURCE}{source}"
     )
     env = dict(os.environ)
     env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"

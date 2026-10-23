@@ -23,7 +23,9 @@ def parse_version(value: str) -> tuple[int, int]:
     """Parse a Python feature release such as 3.14."""
     match = re.fullmatch(r"(\d+)\.(\d+)", value)
     if match is None:
-        raise ValueError(f"Invalid Python feature release: {value}")
+        raise ValueError(
+            f"Invalid Python feature release: {value}. Use the form '3.14'."
+        )
     return int(match.group(1)), int(match.group(2))
 
 
@@ -37,7 +39,10 @@ def current_version(repo_root: Path) -> tuple[int, int]:
     catalog = (repo_root / "profiles/catalog.yaml").read_text(encoding="utf-8")
     match = re.search(r'latest_reviewed_stable: "(3\.\d+)"', catalog)
     if match is None:
-        raise RuntimeError("latest_reviewed_stable is missing")
+        raise RuntimeError(
+            "Policy is incomplete: latest_reviewed_stable is missing. "
+            "Add it to profiles/catalog.yaml."
+        )
     return parse_version(match.group(1))
 
 
@@ -63,7 +68,10 @@ def eligible_version(now: datetime) -> tuple[int, int]:
             eligible.append((int(match.group(1)), int(match.group(2))))
 
     if not eligible:
-        raise RuntimeError("No eligible Python 3 release found")
+        raise RuntimeError(
+            "No Python release is eligible: no reviewed 3.x. "
+            "Run it after 30 days."
+        )
     return max(eligible)
 
 
@@ -71,7 +79,9 @@ def replace_once(path: Path, old: str, new: str) -> None:
     """Replace one required text fragment."""
     text = path.read_text(encoding="utf-8")
     if text.count(old) != 1:
-        raise RuntimeError(f"Expected one match in {path}: {old!r}")
+        raise RuntimeError(
+            f"Edit is ambiguous: {path} has not one {old!r}. Edit it by hand."
+        )
     path.write_text(text.replace(old, new), encoding="utf-8")
 
 
@@ -79,7 +89,9 @@ def replace_all(path: Path, old: str, new: str) -> None:
     """Replace every required occurrence of a text fragment."""
     text = path.read_text(encoding="utf-8")
     if old not in text:
-        raise RuntimeError(f"Expected a match in {path}: {old!r}")
+        raise RuntimeError(
+            f"Edit target is missing: {path} lacks {old!r}. Edit it by hand."
+        )
     path.write_text(text.replace(old, new), encoding="utf-8")
 
 
@@ -110,7 +122,7 @@ def update_files(
     """Synchronize the runtime policy across the template repository."""
     if current[0] != target[0]:
         raise RuntimeError(
-            "Automatic updates cannot cross a Python major version"
+            "Update is blocked: it crosses a Python major. Update by hand."
         )
 
     old = format_version(current)

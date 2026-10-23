@@ -93,7 +93,9 @@ def fact(
 ) -> Fact:
     """Return one fact in the closed detector shape."""
     if state not in STATES:
-        raise ValueError(f"unknown fact state {state!r}")
+        raise ValueError(
+            f"Unknown fact state {state!r}: not in STATES. Use a STATES value."
+        )
     result: Fact = {
         "reason": reason,
         "source": source,
@@ -489,6 +491,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     root = args.path.resolve()
     payload = detect(root, offline=args.offline)
+    # message-pattern: allow X1 JSON facts
     sys.stdout.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return 0
 

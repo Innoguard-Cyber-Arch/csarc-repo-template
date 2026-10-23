@@ -346,7 +346,7 @@ grep -Fq "create" "$fixture_root/issue-calls.log"
 grep -Fq -- "--type Bug" "$fixture_root/issue-calls.log"
 grep -Fq -- "--remove-label bug" "$fixture_root/issue-calls.log"
 if grep -Fq -- "--assignee" "$fixture_root/issue-calls.log"; then
-  echo "Release drift automation attempted unsupported self-assignment."
+  echo "ERROR: Drift check self-assigned: CI cannot assign. Drop '--assignee'." >&2
   exit 1
 fi
 grep -Fq "已經前進" "$fixture_root/last-issue-body.md"
@@ -486,4 +486,4 @@ set -e
 [[ "$no_gh_status" -ne 0 ]]
 grep -Fiq "gh" <<<"$no_gh_output"
 
-echo "Release drift check cases passed: 18"
+echo "OK: Release drift check cases passed: 18."

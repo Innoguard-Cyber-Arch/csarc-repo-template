@@ -88,7 +88,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -n "$input_file" && -n "$org" ]]; then
-  echo "audit-fleet-adoption: --org and --input are mutually exclusive" >&2
+  echo "ERROR: Options conflict: --org and --input are mutually exclusive. Pass only one." >&2
   exit 2
 fi
 
@@ -97,7 +97,7 @@ label=""
 
 if [[ -n "$input_file" ]]; then
   if [[ ! -f "$input_file" ]]; then
-    echo "audit-fleet-adoption: no such file: $input_file" >&2
+    echo "ERROR: Input is missing: no such file '$input_file'. Pass an existing file to --input." >&2
     exit 2
   fi
   records_json="$(cat "$input_file")"

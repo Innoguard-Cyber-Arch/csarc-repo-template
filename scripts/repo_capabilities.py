@@ -60,18 +60,21 @@ def load_matrix(path: Path) -> list[JsonObject]:
     capabilities = data.get("capabilities")
     if not isinstance(capabilities, list) or not capabilities:
         raise CapabilityDataError(
-            f"{path}: 'capabilities' must be a non-empty list"
+            f"Invalid matrix {path}: 'capabilities' must be a non-empty "
+            f"list. Edit '{path}'."
         )
     seen_ids: set[str] = set()
     for entry in capabilities:
         capability_id = entry.get("id")
         if not isinstance(capability_id, str) or not capability_id:
             raise CapabilityDataError(
-                f"{path}: every capability needs a string 'id'"
+                f"Invalid matrix {path}: every capability needs a string "
+                f"'id'. Edit '{path}'."
             )
         if capability_id in seen_ids:
             raise CapabilityDataError(
-                f"{path}: duplicate capability id {capability_id!r}"
+                f"Invalid matrix {path}: duplicate capability id "
+                f"{capability_id!r}. Edit '{path}'."
             )
         seen_ids.add(capability_id)
         for field in (
@@ -86,8 +89,9 @@ def load_matrix(path: Path) -> list[JsonObject]:
                 not value.get(language) for language in LANGUAGES
             ):
                 raise CapabilityDataError(
-                    f"{path}: capability {capability_id!r} field {field!r} "
-                    f"must provide non-empty text for {LANGUAGES}"
+                    f"Invalid matrix {path}: capability {capability_id!r} "
+                    f"field {field!r} must provide non-empty text for "
+                    f"{LANGUAGES}. Edit '{path}'."
                 )
     return capabilities
 
@@ -97,20 +101,22 @@ def load_facts(raw: str) -> dict[str, JsonObject]:
     data = json.loads(raw)
     if not isinstance(data, dict):
         raise CapabilityDataError(
-            "facts must be a JSON object keyed by capability id"
+            "Invalid facts: they must be a JSON object keyed by capability "
+            "id. Fix the JSON passed to '--facts'."
         )
     facts: dict[str, JsonObject] = {}
     for capability_id, entry in data.items():
         if not isinstance(entry, dict) or "status" not in entry:
             raise CapabilityDataError(
-                f"facts[{capability_id!r}] must be an object with a "
-                "'status' field"
+                f"Invalid facts[{capability_id!r}]: it must be an object "
+                "with a 'status' field. Fix the JSON passed to '--facts'."
             )
         status = entry["status"]
         if status not in VALID_STATUSES:
             raise CapabilityDataError(
-                f"facts[{capability_id!r}].status must be one of "
-                f"{VALID_STATUSES}, got {status!r}"
+                f"Invalid facts[{capability_id!r}].status: it must be one of "
+                f"{VALID_STATUSES}, got {status!r}. "
+                "Fix the JSON passed to '--facts'."
             )
         facts[capability_id] = {
             "status": status,
@@ -137,14 +143,16 @@ def evaluate(
     missing = matrix_ids - fact_ids
     if missing:
         raise CapabilityDataError(
-            "facts is missing status for capabilities: "
+            "Incomplete facts: no status for "
             + ", ".join(sorted(missing))
+            + ". Add them to the JSON passed to '--facts'."
         )
     extra = fact_ids - matrix_ids
     if extra:
         raise CapabilityDataError(
-            "facts references capabilities absent from the matrix: "
+            "Unknown facts: the matrix has no "
             + ", ".join(sorted(extra))
+            + ". Remove them from '--facts' or add them to the matrix."
         )
 
     results: list[JsonObject] = []
@@ -182,7 +190,10 @@ def gaps(results: list[JsonObject]) -> list[JsonObject]:
 def render_report(results: list[JsonObject], *, language: str = "en") -> str:
     """Render the human-readable capability/gap report in one language."""
     if language not in LANGUAGES:
-        raise CapabilityDataError(f"unsupported language: {language!r}")
+        raise CapabilityDataError(
+            f"Unsupported language {language!r}: use one of {LANGUAGES}. "
+            "Pass a supported --language."
+        )
     summary = summarize(results)
     lines = [
         "Repository capability check"
@@ -256,7 +267,12 @@ def _main(argv: list[str]) -> int:
         facts = load_facts(_read_facts_source(args.facts))
         results = evaluate(matrix, facts)
     except (CapabilityDataError, OSError, json.JSONDecodeError) as error:
-        print(f"repo_capabilities: {error}", file=sys.stderr)  # noqa: T201
+        reason = str(error).rstrip(".")
+        print(  # noqa: T201
+            f"ERROR: Cannot load capability data: {reason}. "
+            "Check the '--matrix' and '--facts' files.",
+            file=sys.stderr,
+        )
         return 2
 
     if args.json:

@@ -145,7 +145,9 @@ def _substitute_config_tokens(
     def replace(match: re.Match[str]) -> str:
         key = match.group("key")
         if key not in config:
-            raise BuildError(f"Unknown site content setting: {key}")
+            raise BuildError(
+                f"Unknown site content setting: {key}. Remove the token."
+            )
         return _config_token_text(config[key], lang=lang)
 
     return _CONFIG_TOKEN.sub(replace, markdown)
@@ -290,9 +292,9 @@ def _load_testing_groups(testing_dir: Path) -> list[dict[str, Any]]:
     expected = set(_TESTING_STEP_ORDER)
     if on_disk != expected:
         raise BuildError(
-            "site/data/testing/*.json does not match _TESTING_STEP_ORDER: "
-            f"missing {sorted(expected - on_disk)}, "
-            f"unexpected {sorted(on_disk - expected)}"
+            "Testing steps drifted: missing "
+            f"{sorted(expected - on_disk)}, unexpected "
+            f"{sorted(on_disk - expected)}. Align _TESTING_STEP_ORDER."
         )
     groups = [
         _load_json_file(testing_dir / f"{key}.json")
@@ -301,9 +303,9 @@ def _load_testing_groups(testing_dir: Path) -> list[dict[str, Any]]:
     found = {group["key"] for group in groups}
     if found != expected:
         raise BuildError(
-            "site/data/testing/*.json 'key' fields do not match "
-            f"_TESTING_STEP_ORDER: missing {sorted(expected - found)}, "
-            f"unexpected {sorted(found - expected)}"
+            "Testing keys drifted: missing "
+            f"{sorted(expected - found)}, unexpected "
+            f"{sorted(found - expected)}. Align _TESTING_STEP_ORDER."
         )
     return groups
 
@@ -312,7 +314,9 @@ def _parse_front_matter(text: str) -> tuple[dict[str, Any], str]:
     """Split one content source into its TOML front matter and body."""
     parts = text.split("+++", 2)
     if len(parts) != 3 or parts[0].strip():
-        raise BuildError("expected TOML front matter")
+        raise BuildError(
+            "Front matter is missing: no TOML. Start the file with '+++'."
+        )
     return tomllib.loads(parts[1]), parts[2]
 
 
@@ -547,7 +551,7 @@ def _render_self_closing(
     if name == "audit-trail":
         return render_audit_trail(lang=lang, data=data)
     raise BuildError(
-        f"unknown self-closing shortcode: {name}"
+        f"Unknown shortcode: {name}. Use a listed shortcode."
     )  # pragma: no cover
 
 
@@ -650,8 +654,8 @@ def render_config_guidance(track: str, *, lang: str, data: SiteData) -> str:
     tracks = data.config_examples["tracks"]
     if track not in tracks:
         raise BuildError(
-            f"config-guidance shortcode: unknown track {track!r} "
-            "(no entry in site/data/config_examples.json)"
+            f"Unknown config-guidance track {track!r}: no example. "
+            "Add it to site/data/config_examples.json."
         )
     spec = tracks[track]
     labels = data.config_examples["labels"][lang]
@@ -1396,7 +1400,7 @@ def _render_legacy_body(
     basic = _BLOCKS["find_container"](body, "basic")
     if legacy is None or basic is None:
         raise BuildError(
-            "legacy slide body is missing its {{< legacy >}}/{{< basic >}} pair"
+            "Legacy slide is invalid: no legacy/basic pair. Add both blocks."
         )
     _, legacy_inner, legacy_match = legacy
     _, basic_inner, _basic_match = basic
@@ -1748,7 +1752,9 @@ def _readme_preamble_first_paragraph(root: Path, lang: str) -> str:
         paragraph = paragraph.strip()
         if paragraph and not _LINK_ONLY_PARAGRAPH.match(paragraph):
             return paragraph
-    raise ValueError(f"README ({lang}) preamble has no prose paragraph")
+    raise ValueError(
+        f"README ({lang}) preamble is empty: no prose. Add a paragraph."
+    )
 
 
 # Named markers a site/content/_index.<lang>.md source may embed as
@@ -1765,7 +1771,10 @@ def _inject_readme_markers(markdown_text: str, *, root: Path, lang: str) -> str:
     def _replace(match: re.Match[str]) -> str:
         name = match.group("name")
         if name not in _README_MARKERS:
-            raise ValueError(f"Unknown csarc-readme marker: {name!r}")
+            raise ValueError(
+                f"Unknown csarc-readme marker: {name!r}. "
+                "Use 'preamble-tagline'."
+            )
         replacement = _README_MARKERS[name](root, lang)
         return (
             f"<!-- csarc-readme-{name}:start -->{replacement}"
@@ -1820,7 +1829,10 @@ def build(
         or set(languages) - set(_LANGUAGE_ORDER)
         or primary_language not in languages
     ):
-        raise BuildError("invalid repository-site language selection")
+        raise BuildError(
+            "Site languages are invalid: bad selection. "
+            "Use 'zh-tw', 'en', or both."
+        )
     data = load_site_data(root)
     config = _load_downstream_config(root)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1895,10 +1907,10 @@ def main() -> int:
         UnicodeError,
         tomllib.TOMLDecodeError,
     ) as error:
-        sys.stderr.write(f"repo site build failed: {error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         return 1
     for name, path in outputs.items():
-        sys.stdout.write(f"{name}: {path}\n")
+        sys.stdout.write(f"OK: Wrote {name} to '{path}'.\n")
     return 0
 
 

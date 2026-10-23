@@ -135,4 +135,4 @@ set -e
 [[ "$no_local_status" -eq 2 ]]
 grep -Fq 'no local branch' <<<"$no_local_out"
 
-echo "Check-branch-fresh cases passed: 5"
+echo "OK: Check-branch-fresh cases passed: 5."

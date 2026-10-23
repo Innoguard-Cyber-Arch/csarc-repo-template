@@ -44,6 +44,7 @@ set -Eeuo pipefail
 # clear message on stderr explaining why.
 
 usage() {
+  # message-pattern: allow X3 usage
   echo "usage: $(basename "$0") <pr-number> [--repo <owner/repo>] [--json]" >&2
   exit 2
 }
@@ -84,41 +85,41 @@ if [[ -z "$pr_number" || ! "$pr_number" =~ ^[0-9]+$ ]]; then
 fi
 
 if ! command -v gh >/dev/null 2>&1; then
-  echo "gh (GitHub CLI) is required but was not found on PATH. Install it: https://cli.github.com/" >&2
+  echo "ERROR: GitHub CLI is missing: gh is not on PATH. Install it from 'https://cli.github.com/'." >&2
   exit 1
 fi
 if ! command -v jq >/dev/null 2>&1; then
-  echo "jq is required but was not found on PATH." >&2
+  echo "ERROR: jq is missing: it is not on PATH. Install jq." >&2
   exit 1
 fi
 if ! gh auth status >/dev/null 2>&1; then
-  echo "gh is not authenticated. Run: gh auth login" >&2
+  echo "ERROR: GitHub CLI is not ready: gh is not authenticated. Run 'gh auth login'." >&2
   exit 1
 fi
 
 if [[ -z "$repo" ]]; then
   if ! repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)" || [[ -z "$repo" ]]; then
-    echo "Could not determine the repository from the current directory. Pass --repo <owner/repo>." >&2
+    echo "ERROR: Repository is unknown: the current directory does not name one. Pass --repo <owner/repo>." >&2
     exit 1
   fi
 fi
 
 pr_json=""
 if ! pr_json="$(gh pr view "$pr_number" --repo "$repo" --json number,headRefOid,url,state 2>&1)"; then
-  echo "Could not read pull request #$pr_number in $repo:" >&2
+  echo "ERROR: Pull request read failed: gh could not read #$pr_number in $repo. Read the gh error below, then run 'gh auth status'." >&2
   printf '%s\n' "$pr_json" >&2
   exit 1
 fi
 
 head_sha="$(jq -r '.headRefOid' <<<"$pr_json")"
 if [[ -z "$head_sha" || "$head_sha" == "null" ]]; then
-  echo "Pull request #$pr_number in $repo has no head commit to check." >&2
+  echo "ERROR: Pull request #$pr_number in $repo is incomplete: it has no head commit. Run 'gh pr view $pr_number --repo $repo'." >&2
   exit 1
 fi
 
 check_runs_pages=""
 if ! check_runs_pages="$(gh api "repos/$repo/commits/$head_sha/check-runs" --paginate --slurp 2>&1)"; then
-  echo "Could not read check runs for $repo@$head_sha:" >&2
+  echo "ERROR: Check run read failed: gh could not read '$repo@$head_sha'. Read the gh error below, then run 'gh auth status'." >&2
   printf '%s\n' "$check_runs_pages" >&2
   exit 1
 fi
@@ -142,7 +143,7 @@ if [[ "$title_run" != "null" ]]; then
   title_job_id="$(jq -r '.id' <<<"$title_run")"
   title_job_json=""
   if ! title_job_json="$(gh api "repos/$repo/actions/jobs/$title_job_id" 2>&1)"; then
-    echo "Could not read step-level detail for the title job (job id $title_job_id):" >&2
+    echo "ERROR: Step read failed: gh could not read title job $title_job_id. Read the gh error below, then run 'gh auth status'." >&2
     printf '%s\n' "$title_job_json" >&2
     exit 1
   fi
@@ -205,6 +206,7 @@ if [[ "$json_output" -eq 1 ]]; then
   exit 0
 fi
 
+# message-pattern: allow-begin X5 status report and its labels
 bool_label() {
   # $1: JSON boolean-ish string ("true"/"false"), $2: "found" flag.
   if [[ "$2" != "true" ]]; then
@@ -244,3 +246,4 @@ else
 fi
 echo
 echo "Use --json for a machine-readable result."
+# message-pattern: allow-end

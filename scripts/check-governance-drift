@@ -12,9 +12,9 @@ set -e
 if [[ "$check_exit" -eq 0 ]]; then
   printf '%s\n' "$check_output"
   if grep -q '^DEGRADED ' <<<"$check_output"; then
-    echo "Repository settings have degraded capability differences; the concrete differences above remain recorded in this workflow run."
+    echo "NOTICE: Repository settings have degraded capability differences, listed above."
   else
-    echo "No repository settings drift detected."
+    echo "OK: No repository settings drift detected."
   fi
   exit 0
 fi
@@ -28,10 +28,11 @@ normalize_tracking_issue() {
   local number="$1"
   if python3 "$repo_root/scripts/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$number" --type Bug >/dev/null 2>&1; then
     python3 "$repo_root/scripts/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$number" --remove-label bug >/dev/null
-    echo "Normalized governance drift tracking Issue #$number to native Type Bug."
+    echo "NOTICE: Set drift Issue #$number to native Type Bug."
   else
     python3 "$repo_root/scripts/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$number" --add-label bug >/dev/null
-    echo "::notice::Native Issue Types are unavailable; the bug label remains authoritative for Issue #$number."
+    # message-pattern: allow X1 workflow annotation
+    echo "::notice::Native Issue Types are unavailable; the bug label stays on Issue #$number."
   fi
 }
 
@@ -68,10 +69,10 @@ issue_number="$(
 if [[ -n "$issue_number" ]]; then
   existing_body="$(gh issue view "$issue_number" --repo "$repo" --json body --jq .body)"
   if [[ "$existing_body" == "$(<"$body_file")" ]]; then
-    echo "Governance drift is unchanged; tracking Issue #$issue_number was not updated."
+    echo "NOTICE: Governance drift is unchanged; Issue #$issue_number stays as is."
   else
     python3 "$repo_root/scripts/pr_lifecycle.py" issue-edit --repo "$repo" --issue-number "$issue_number" --body-file "$body_file" >/dev/null
-    echo "Updated governance drift tracking Issue #$issue_number."
+    echo "OK: Updated drift Issue #$issue_number."
   fi
 else
   create_args=(--repo "$repo" --title "$title" --label bug --body-file "$body_file")
@@ -81,10 +82,10 @@ else
   issue_url="$(gh issue create "${create_args[@]}")"
   issue_number="${issue_url##*/}"
   [[ "$issue_number" =~ ^[0-9]+$ ]] || {
-    echo "check-governance-drift: created Issue number could not be determined" >&2
+    echo "ERROR: Issue number is unknown: gh returned '$issue_url'. Check GitHub." >&2
     exit 1
   }
-  echo "Opened a governance drift tracking Issue."
+  echo "OK: Opened a governance drift Issue."
 fi
 normalize_tracking_issue "$issue_number"
 

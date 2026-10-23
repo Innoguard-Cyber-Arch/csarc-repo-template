@@ -112,8 +112,9 @@ def legacy_governance_mode(answers: Mapping[str, object]) -> str:
     if all(value is False for value in values):
         return "observe"
     raise GovernanceMigrationError(
-        "Legacy policy_* settings are mixed. Pass one explicit "
-        "governance_mode=managed or governance_mode=observe choice."
+        "Legacy policy_* settings are mixed: they map to no single "
+        "governance_mode. Pass '--data governance_mode=managed' or "
+        "'--data governance_mode=observe'."
     )
 
 

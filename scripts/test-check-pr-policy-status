@@ -189,4 +189,4 @@ set -e
 [[ "$no_args_status" -ne 0 ]]
 grep -Fiq "usage" <<<"$no_args_output"
 
-echo "PR policy status cases passed: 7"
+echo "OK: PR policy status cases passed: 7."

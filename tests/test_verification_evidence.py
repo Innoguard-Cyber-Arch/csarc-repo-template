@@ -470,7 +470,7 @@ def test_hosted_caller_cannot_widen_the_trusted_window() -> None:
     check_run, workflow_run, job = evidence(
         completed_at=NOW - timedelta(hours=30)
     )
-    with pytest.raises(RuntimeError, match="cannot exceed the trusted"):
+    with pytest.raises(RuntimeError, match="freshness window is too wide"):
         validate_verification_job(
             check_run,
             workflow_run,
@@ -508,7 +508,7 @@ def test_generated_reader_shares_the_window_and_tamper_rule() -> None:
             tree_sha=TREE,
             now=NOW + timedelta(seconds=1),
         )
-    with pytest.raises(RuntimeError, match="cannot exceed the trusted"):
+    with pytest.raises(RuntimeError, match="freshness window is too wide"):
         validate_template_verification_job(
             check_run,
             workflow_run,

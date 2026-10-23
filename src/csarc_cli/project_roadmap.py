@@ -127,7 +127,10 @@ def gh_runner(command: list[str]) -> str:
         detail = result.stderr.strip() or result.stdout.strip()
         if "rate limit" in detail.casefold():
             detail = f"GitHub API rate limit reached ({detail})"
-        raise ProjectSyncError(f"gh {command[0]} failed: {detail}")
+        raise ProjectSyncError(
+            f"gh {command[0]} failed: {detail.rstrip('.')}. Run 'gh auth "
+            "status', then run the printed repair command."
+        )
     return result.stdout
 
 
@@ -146,9 +149,10 @@ def parse_project_url(url: str) -> ProjectRef:
     match = PROJECT_URL.fullmatch(url)
     if match is None:
         raise ProjectSyncError(
-            f"{SETTING} {url!r} is not a full ProjectV2 URL; use "
-            "https://github.com/orgs/<org>/projects/<n> or "
-            "https://github.com/users/<user>/projects/<n>"
+            f"{SETTING} {url!r} is invalid: it is not a full ProjectV2 "
+            f"URL. Set {SETTING} in '.csarc/config.yml' to "
+            "'https://github.com/orgs/<org>/projects/<n>' or "
+            "'https://github.com/users/<user>/projects/<n>'."
         )
     return ProjectRef(
         url,
@@ -167,7 +171,10 @@ def configured_project_url(path: Path = CONFIG_FILE) -> str:
     if value in {None, ""}:
         return ""
     if not isinstance(value, str):
-        raise ProjectSyncError(f"{SETTING} in {path} must be a string")
+        raise ProjectSyncError(
+            f"{SETTING} in {path} is invalid: it is not a string. Set it to "
+            "a quoted Project URL."
+        )
     parse_project_url(value)
     return value
 
@@ -184,10 +191,16 @@ def graphql(run: Runner, query: str, **variables: object) -> dict[str, Any]:
         message = "; ".join(str(error.get("message")) for error in errors)
         if any(error.get("type") == "RATE_LIMITED" for error in errors):
             message = f"GitHub API rate limit reached ({message})"
-        raise ProjectSyncError(f"GitHub GraphQL failed: {message}")
+        raise ProjectSyncError(
+            f"GitHub GraphQL failed: {str(message).rstrip('.')}. Run 'gh "
+            "auth status', then run the printed repair command."
+        )
     data = payload.get("data")
     if not isinstance(data, dict):
-        raise ProjectSyncError("GitHub GraphQL returned no data")
+        raise ProjectSyncError(
+            "GitHub GraphQL failed: the response has no data. Run the "
+            "printed repair command."
+        )
     return data
 
 
@@ -228,13 +241,14 @@ def date_field(nodes: list[Any], name: str) -> str:
     ]
     if len(found) != 1:
         raise ProjectSyncError(
-            f"the Project needs exactly one field named {name!r} "
-            f"(found {len(found)}); fix the Project fields first"
+            f"Project field {name!r} is ambiguous: the Project needs "
+            f"exactly one field named {name!r} (found {len(found)}). Rename "
+            "or add the field in the Project settings."
         )
     if found[0].get("dataType") != "DATE":
         raise ProjectSyncError(
-            f"Project field {name!r} is {found[0].get('dataType')}; it "
-            "must be a DATE field"
+            f"Project field {name!r} is {found[0].get('dataType')}: it "
+            "must be a DATE field. Change its type in the Project settings."
         )
     return str(found[0]["id"])
 
@@ -246,8 +260,8 @@ def resolve_project(run: Runner, url: str) -> Project:
     if scopes is not None and REQUIRED_SCOPE not in scopes:
         listed = ", ".join(sorted(scopes)) or "none"
         raise ProjectSyncError(
-            f"the GitHub token lacks the `{REQUIRED_SCOPE}` scope (has: "
-            f"{listed}); run `gh auth refresh -s {REQUIRED_SCOPE}`"
+            f"GitHub token lacks the '{REQUIRED_SCOPE}' scope: it has "
+            f"{listed}. Run 'gh auth refresh -s {REQUIRED_SCOPE}'."
         )
     data = graphql(
         run, PROJECT_QUERY % ref.owner_kind, login=ref.login, number=ref.number
@@ -255,24 +269,36 @@ def resolve_project(run: Runner, url: str) -> Project:
     owner = data.get("owner")
     if not isinstance(owner, dict):
         raise ProjectSyncError(
-            f"{ref.owner_kind} {ref.login!r} is not visible to this token"
+            f"{ref.owner_kind} {ref.login!r} is not visible: this token "
+            "cannot read it. Check the owner in the Project URL and 'gh auth "
+            "status'."
         )
     if str(owner.get("login", "")).casefold() != ref.login.casefold():
         raise ProjectSyncError(
-            f"GitHub resolved owner {owner.get('login')!r}, not {ref.login!r}"
+            f"GitHub resolved owner {owner.get('login')!r}, not "
+            f"{ref.login!r}: the owner does not match. Fix the owner in "
+            f"{SETTING}."
         )
     project = owner.get("projectV2")
     if not isinstance(project, dict):
-        raise ProjectSyncError(f"{url} does not exist or is not visible")
+        raise ProjectSyncError(
+            f"{url} is not available: it does not exist or is not visible. "
+            f"Check {SETTING} and the token's Project access."
+        )
     if str(project.get("url", "")).casefold() != url.casefold():
         raise ProjectSyncError(
-            f"GitHub resolved {project.get('url')!r}, not {url}"
+            f"GitHub resolved {project.get('url')!r}, not {url}: the "
+            f"Project URL does not match. Fix {SETTING}."
         )
     if project.get("closed"):
-        raise ProjectSyncError(f"{url} is closed")
+        raise ProjectSyncError(
+            f"{url} is closed: a closed Project takes no writes. Reopen it or "
+            f"set {SETTING} to an open Project."
+        )
     if project.get("viewerCanUpdate") is not True:
         raise ProjectSyncError(
-            f"this token cannot update {url} (viewerCanUpdate is false)"
+            f"Token cannot update {url}: viewerCanUpdate is false. Ask a "
+            "Project admin for write access."
         )
     nodes = (project.get("fields") or {}).get("nodes") or []
     return Project(
@@ -320,7 +346,8 @@ def checked_date(value: str) -> str:
         return date.fromisoformat(value).isoformat()
     except ValueError as error:
         raise ProjectSyncError(
-            f"--target-date {value!r} must be YYYY-MM-DD"
+            f"--target-date {value!r} is invalid: it is not a "
+            "YYYY-MM-DD date. Pass a date such as '2026-12-31'."
         ) from error
 
 
@@ -342,8 +369,8 @@ def issue_facts(item: Mapping[str, Any], repo: str) -> IssueFacts:
     """Return projection facts for one REST Issue; refuse pull requests."""
     if "pull_request" in item:
         raise ProjectSyncError(
-            f"#{item.get('number')} is a pull request; only Issues are "
-            "projected"
+            f"#{item.get('number')} cannot be projected: it is a pull "
+            "request. Pass an Issue number."
         )
     milestone = item.get("milestone") or {}
     due = milestone.get("due_on")
@@ -429,8 +456,9 @@ def target_for(issue: IssueFacts, target_date: str, done: str = "") -> str:
     if issue.due:
         if target_date and target_date != issue.due:
             raise ProjectSyncError(
-                f"#{issue.number}'s Milestone {issue.milestone!r} is due "
-                f"{issue.due}; that is the target, so drop --target-date"
+                f"--target-date conflicts with #{issue.number}: its "
+                f"Milestone {issue.milestone!r} is due {issue.due}. Remove "
+                "'--target-date'."
             )
         return issue.due
     return target_date or default_target(issue.start)
@@ -541,8 +569,9 @@ def apply_plan(run: Runner, project: Project, plan: Plan) -> None:
     item = read_item(run, project, plan.issue)
     if (item.start, item.target) != tuple(c.desired for c in plan.changes):
         raise ProjectSyncError(
-            f"#{plan.issue.number} read back start {item.start} and target "
-            f"{item.target} after the write"
+            f"#{plan.issue.number} read-back failed: start {item.start} "
+            f"and target {item.target} differ from the write. Run the "
+            "printed repair command."
         )
 
 
@@ -587,9 +616,9 @@ def on_board(issues: list[IssueFacts], out: TextIO) -> list[IssueFacts]:
     for issue in issues:
         if issue.skip:
             out.write(
-                f"#{issue.number} skipped: {issue.skip}; only Milestone "
-                "trackers and standalone Issues go to the Project, so no "
-                "Project write was made.\n"
+                f"NOTICE: #{issue.number} skipped: {issue.skip}; only "
+                "Milestone trackers and standalone Issues go to the Project, "
+                "so no Project write was made.\n"
             )
     return [issue for issue in issues if not issue.skip]
 
@@ -624,14 +653,14 @@ def sync(
         )
         if answer.strip().casefold() != "y":
             out.write(
-                "Not confirmed; nothing was written. Rerun with --yes to "
-                "overwrite the listed dates.\n"
+                "NOTICE: Not confirmed; nothing was written. Rerun with "
+                "'--yes' to overwrite the listed dates.\n"
             )
             return 1
     for plan in plans:
         if plan.item_id is None or plan.pending:
             apply_plan(run, project, plan)
-    out.write(f"Synced {len(plans)} Issue(s); Project dates read back.\n")
+    out.write(f"OK: Synced {len(plans)} Issue(s); Project dates read back.\n")
     return 0
 
 
@@ -670,7 +699,9 @@ def precheck_create(
         ]
         if len(found) != 1:
             raise ProjectSyncError(
-                f"Milestone {milestone!r} is not one open Milestone of {repo}"
+                f"Milestone {milestone!r} is not available: {repo} has "
+                "no single open Milestone with that number. Pass an open "
+                "Milestone number."
             )
         if milestone_tracker(found[0]) is not None:
             return None
@@ -679,8 +710,8 @@ def precheck_create(
         )
     if due and target_date and due != target_date:
         raise ProjectSyncError(
-            f"Milestone {milestone!r} is due {due}; that is the target, so "
-            "drop --target-date"
+            f"--target-date conflicts with Milestone {milestone!r}: it is "
+            f"due {due}. Remove '--target-date'."
         )
     return resolve_project(run, url)
 
@@ -690,7 +721,8 @@ def issue_reference(output: str) -> tuple[str, int]:
     match = ISSUE_URL.search(output)
     if match is None:
         raise ProjectSyncError(
-            "could not read the created Issue URL from `gh issue create`"
+            "Issue URL is unknown: 'gh issue create' printed none. Find "
+            "the new Issue with 'gh issue list --author @me'."
         )
     return match["repo"], int(match["number"])
 
@@ -741,7 +773,8 @@ def create_hooks(
             )
         except ProjectSyncError as error:
             raise ProjectSyncError(
-                f"Project check failed; no Issue was created: {error}"
+                "No Issue was created: the Project check failed. "
+                f"{str(error).rstrip('.')}."
             ) from error
 
     def after(output: str) -> int:
@@ -764,7 +797,7 @@ def create_hooks(
                 else 0
             )
         except ProjectSyncError as error:
-            stream.write(f"Project sync failed: {error}\n")
+            stream.write(f"ERROR: Project sync failed: {error}\n")
             status = 1
         if status:
             stream.write(
@@ -794,8 +827,8 @@ def command_sync(
     url = configured_project_url(config)
     if not url:
         stream.write(
-            f"{SETTING} is empty; Project sync is disabled and no Project "
-            "API was called.\n"
+            f"NOTICE: {SETTING} is empty; Project sync is disabled and no "
+            "Project API was called.\n"
         )
         return 0
     target = checked_date(target_date) if target_date else ""
@@ -809,8 +842,8 @@ def command_sync(
         )
         if not issues:
             stream.write(
-                "No selected Issue belongs on the Project; no Project API "
-                "was called.\n"
+                "NOTICE: No selected Issue belongs on the Project; no "
+                "Project API was called.\n"
             )
             return 0
         project = resolve_project(run, url)
@@ -825,7 +858,7 @@ def command_sync(
         )
     except ProjectSyncError as error:
         stream.write(
-            f"Project sync failed: {error}\nRepair (idempotent): "
+            f"ERROR: Project sync failed: {error}\nRepair (idempotent): "
             + repair_command(
                 repo, issue=issue, milestone=milestone, target_date=target
             )

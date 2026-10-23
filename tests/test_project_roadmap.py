@@ -508,7 +508,7 @@ def test_explicit_target_cannot_contradict_a_due_date(tmp_path: Path) -> None:
     status, output = sync(
         fake, issue=41, tmp=tmp_path, target_date="2026-11-30"
     )
-    assert status == 1 and "drop --target-date" in output
+    assert status == 1 and "Remove '--target-date'" in output
     assert fake.add_calls == 0
 
 

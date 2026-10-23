@@ -66,7 +66,7 @@ def test_window_boundary_is_inclusive_at_exactly_24_hours(
     if fresh:
         assert require_fresh(completed, subject=SUBJECT, now=NOW) == completed
     else:
-        with pytest.raises(RuntimeError, match="stale; re-run verification"):
+        with pytest.raises(RuntimeError, match="is stale: too old"):
             require_fresh(completed, subject=SUBJECT, now=NOW)
 
 
@@ -130,7 +130,7 @@ def test_timezone_offsets_are_compared_in_utc() -> None:
 
 def test_naive_reference_time_is_rejected() -> None:
     """A naive `now` would silently mean host-local time, so it fails closed."""
-    with pytest.raises(RuntimeError, match="reference time has no timezone"):
+    with pytest.raises(RuntimeError, match="Reference time has no timezone"):
         require_fresh(
             NOW,
             subject=SUBJECT,
@@ -222,4 +222,4 @@ def test_checker_cli_rejects_a_widened_window_before_any_lookup() -> None:
         text=True,
     )
     assert result.returncode == 1
-    assert "cannot exceed the trusted 24-hour policy" in result.stderr
+    assert "the limit is 24 hours" in result.stderr

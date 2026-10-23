@@ -77,7 +77,7 @@ short_status=$?
 set -e
 [[ "$short_status" -ne 0 ]]
 grep -Fq 'length must be 12-80 characters' <<<"$short_out"
-grep -Fq 'not calling' <<<"$short_out"
+grep -Fq 'was not called' <<<"$short_out"
 assert_gh_not_called
 
 # Case 2: too-long title (over 80 characters) is blocked locally, and gh
@@ -159,8 +159,8 @@ milestone_given_out="$(
   OPEN_MILESTONES_JSON='[{"number":9,"title":"Milestone 9: Decision site and adoption experience overhaul"}]' \
     run_with_stub --title "$title_arg" --body-file "$body_file" --milestone M8 2>&1
 )"
-if grep -Fq 'One open Milestone is currently active' <<<"$milestone_given_out"; then
-  echo "gh-issue-create printed a Milestone notice even though --milestone was already given."
+if grep -Fq 'one open Milestone is active' <<<"$milestone_given_out"; then
+  echo "ERROR: Milestone check failed: it warned although --milestone was given. Fix gh-issue-create." >&2
   exit 1
 fi
 read_logged_args
@@ -180,8 +180,8 @@ one_open_out="$(
   OPEN_MILESTONES_JSON='[{"number":9,"title":"Milestone 9: Decision site and adoption experience overhaul"}]' \
     run_with_stub --title "$title_arg" --body-file "$body_file" 2>&1
 )"
-grep -Fq 'One open Milestone is currently active: #9 Milestone 9: Decision site and adoption experience overhaul' <<<"$one_open_out"
-grep -Fq 'Not attached automatically (non-interactive)' <<<"$one_open_out"
+grep -Fq 'one open Milestone is active, #9 Milestone 9: Decision site and adoption experience overhaul' <<<"$one_open_out"
+grep -Fq 'the session is non-interactive' <<<"$one_open_out"
 read_logged_args
 one_open_expected=(issue create --title "$title_arg" --body-file "$body_file")
 [[ "${#logged_args[@]}" -eq "${#one_open_expected[@]}" ]]
@@ -193,8 +193,8 @@ done
 # notice, silent passthrough (the default OPEN_MILESTONES_JSON="[]").
 : >"$call_log"
 zero_open_out="$(run_with_stub --title "$title_arg" --body-file "$body_file" 2>&1)"
-if grep -Fq 'One open Milestone is currently active' <<<"$zero_open_out"; then
-  echo "gh-issue-create printed a Milestone notice with zero open Milestones."
+if grep -Fq 'one open Milestone is active' <<<"$zero_open_out"; then
+  echo "ERROR: Milestone check failed: it warned with zero open Milestones. Fix gh-issue-create." >&2
   exit 1
 fi
 
@@ -205,8 +205,8 @@ two_open_out="$(
   OPEN_MILESTONES_JSON='[{"number":9,"title":"Milestone 9"},{"number":12,"title":"Research"}]' \
     run_with_stub --title "$title_arg" --body-file "$body_file" 2>&1
 )"
-if grep -Fq 'One open Milestone is currently active' <<<"$two_open_out"; then
-  echo "gh-issue-create printed a Milestone notice with two open Milestones."
+if grep -Fq 'one open Milestone is active' <<<"$two_open_out"; then
+  echo "ERROR: Milestone check failed: it warned with two open Milestones. Fix gh-issue-create." >&2
   exit 1
 fi
 
@@ -234,4 +234,4 @@ read_logged_args
 [[ "${logged_args[4]}" == "--body-file" && "${logged_args[5]}" != "-" ]]
 grep -Fq '#### 風險與控制' "${logged_args[5]}"
 
-echo "gh-issue-create cases passed: 10"
+echo "OK: gh-issue-create cases passed: 10."

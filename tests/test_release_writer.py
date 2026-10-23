@@ -408,7 +408,7 @@ def test_remote_state_conflicts_stop_the_writer() -> None:
     github = writer.GitHub(gh.repo, gh)
     sha = "1" * 40
     gh.releases["v0.2.0"] = {"isDraft": True, "isImmutable": False}
-    with pytest.raises(writer.WriterError, match="unknown Release"):
+    with pytest.raises(writer.WriterError, match="Unknown Release"):
         writer.release_state(github, "v0.2.0", sha)
     gh.tags["v0.2.0"] = sha
     gh.releases["v0.2.0"] = {"isDraft": False, "isImmutable": False}

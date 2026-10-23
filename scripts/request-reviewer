@@ -6,31 +6,35 @@ author="${PR_AUTHOR:?PR_AUTHOR is required}"
 pr_number="${PR_NUMBER:?PR_NUMBER is required}"
 
 if [[ ! "$pr_number" =~ ^[1-9][0-9]*$ ]]; then
-  echo "PR_NUMBER must be a positive integer." >&2
+  echo "ERROR: Bad PR_NUMBER: it must be a positive integer. Set it to the pull request number." >&2
   exit 2
 fi
 if [[ ! "$author" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}(\[bot\])?$ ]]; then
-  echo "PR_AUTHOR must be a GitHub username without @ (a bot login may end in [bot])." >&2
+  echo "ERROR: Bad PR_AUTHOR: it must be a GitHub login without @. Set it to the author login." >&2
   exit 2
 fi
 command -v gh >/dev/null || {
-  echo "GitHub CLI is required to request a reviewer." >&2
+  echo "ERROR: No gh: GitHub CLI is missing. Install it from 'https://cli.github.com/'." >&2
   exit 1
+}
+skip() {
+  # message-pattern: allow X1 Actions annotation
+  echo "::notice title=Reviewer assignment skipped::$1"
+  exit 0
 }
 
 author_folded="$(printf '%s' "$author" | tr '[:upper:]' '[:lower:]')"
 if ! collaborators="$(gh api --paginate \
   "repos/$repo/collaborators?affiliation=all&per_page=100" \
   --jq '.[] | select((.permissions.admin // false) or (.permissions.maintain // false)) | .login')"; then
-  echo "::notice title=Reviewer assignment skipped::Repository collaborator permissions could not be inspected."
-  exit 0
+  skip "Repository collaborator permissions could not be inspected."
 fi
 
 eligible_reviewers=()
 while IFS= read -r reviewer; do
   [[ -z "$reviewer" ]] && continue
   if [[ ! "$reviewer" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}$ ]]; then
-    echo "Invalid collaborator login returned by GitHub: $reviewer" >&2
+    echo "ERROR: Bad login '$reviewer': GitHub returned it. Rerun the 'request reviewer' job." >&2
     exit 1
   fi
   reviewer_folded="$(printf '%s' "$reviewer" | tr '[:upper:]' '[:lower:]')"
@@ -40,12 +44,11 @@ while IFS= read -r reviewer; do
 done < <(printf '%s\n' "$collaborators" | LC_ALL=C sort -fu)
 
 if ((${#eligible_reviewers[@]} == 0)); then
-  echo "::notice title=Reviewer assignment skipped::No non-author collaborator with maintain or admin permission is available."
-  exit 0
+  skip "No non-author collaborator with maintain or admin permission is available."
 fi
 
 reviewer="${eligible_reviewers[$((pr_number % ${#eligible_reviewers[@]}))]}"
 gh api --method POST \
   "repos/$repo/pulls/$pr_number/requested_reviewers" \
   -f "reviewers[]=$reviewer" >/dev/null
-echo "Requested review from @$reviewer."
+echo "OK: Requested review from @$reviewer."

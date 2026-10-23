@@ -47,7 +47,7 @@ class GitHubAPI:
     ) -> None:
         """Create a client restricted to an HTTPS API origin."""
         if urllib.parse.urlparse(base_url).scheme != "https":
-            raise ValueError("GitHub API URL must use HTTPS")
+            raise ValueError("Bad URL: not HTTPS. Use HTTPS.")
         self.token = token
         self.base_url = base_url.rstrip("/")
         self.opener = urllib.request.build_opener(RejectRedirects())
@@ -99,7 +99,9 @@ def issue_labels(payload: dict[str, Any]) -> set[str]:
         not isinstance(item, dict) or not isinstance(item.get("name"), str)
         for item in values
     ):
-        raise RuntimeError("GitHub returned invalid pull request labels")
+        raise RuntimeError(
+            "Bad GitHub reply: invalid PR labels. Rerun the failed job."
+        )
     return {str(item["name"]) for item in values}
 
 
@@ -107,7 +109,10 @@ def require_response(status: int, payload: object, operation: str) -> object:
     """Return a successful API response or fail with concrete evidence."""
     if 200 <= status < 300:
         return payload
-    raise RuntimeError(f"{operation} failed with HTTP {status}: {payload}")
+    raise RuntimeError(
+        f"{operation} failed: HTTP {status} {payload}. Check GH_TOKEN access, "
+        "then rerun the job."
+    )
 
 
 def includes_main(compare_status: str) -> bool:
@@ -125,7 +130,9 @@ def compare(api: API, repo: str, main_sha: str, head_sha: str) -> str:
     data = require_response(status, payload, "compare main with delivery head")
     compare_status = data.get("status") if isinstance(data, dict) else None
     if not isinstance(compare_status, str):
-        raise RuntimeError("GitHub returned an invalid compare response")
+        raise RuntimeError(
+            "Bad GitHub reply: invalid compare. Rerun the failed job."
+        )
     return compare_status
 
 
@@ -137,7 +144,9 @@ def read_main_sha(api: API, repo: str) -> str:
         data.get("object", {}).get("sha") if isinstance(data, dict) else None
     )
     if not isinstance(main_sha, str):
-        raise RuntimeError("GitHub returned an invalid main ref")
+        raise RuntimeError(
+            "Bad GitHub reply: invalid main ref. Rerun the failed job."
+        )
     return main_sha
 
 
@@ -162,7 +171,9 @@ def merged_sync_pr_number(
     status, payload = api.request("GET", f"repos/{repo}/pulls?{query}")
     pulls = require_response(status, payload, "find merged sync PR")
     if not isinstance(pulls, list):
-        raise RuntimeError("GitHub returned invalid sync pull request state")
+        raise RuntimeError(
+            "Bad GitHub reply: invalid sync PR. Rerun the failed job."
+        )
     for pull in pulls:
         if not isinstance(pull, dict):
             continue
@@ -225,11 +236,10 @@ def gate(
         if sync_pr is not None:
             return f"squash-sync-pr-{sync_pr}"
     raise RuntimeError(
-        f"Final promotion does not contain current main {main_sha} or its "
-        "verified reviewed sync squash. Request exactly one reviewed sync "
-        f"action: gh workflow run delivery-maintenance.yml -f "
-        f"delivery_branch={source} -f reason=promotion -f "
-        f"pr_number={pr_number}"
+        f"Final promotion lacks main {main_sha}: no verified reviewed sync "
+        "squash. Request exactly one reviewed sync action: 'gh workflow run "
+        f"delivery-maintenance.yml -f delivery_branch={source} -f "
+        f"reason=promotion -f pr_number={pr_number}'."
     )
 
 
@@ -260,7 +270,8 @@ def validate_sync_identity(
         or parents != [base_sha, main_sha]
     ):
         raise RuntimeError(
-            "Sync candidate is not an exact main-to-delivery merge"
+            "Bad sync: not an exact main-to-delivery merge. Close it and "
+            "request a new sync."
         )
     return merge_tree is not None and head_tree == merge_tree
 
@@ -313,7 +324,10 @@ def validate_sync_route(
         or head_repo.get("full_name") != repo
         or request is None
     ):
-        raise RuntimeError("Sync pull request route is not authorized")
+        raise RuntimeError(
+            "Bad sync: route not authorized. Request the sync from the owner "
+            "PR."
+        )
     request_number = int(request.group(1))
     requesting_pull = pull_request(api, repo, request_number)
     requester = requesting_pull.get("user")
@@ -321,7 +335,9 @@ def validate_sync_route(
         requester.get("login") if isinstance(requester, dict) else None
     )
     if not isinstance(requester_login, str) or not requester_login:
-        raise RuntimeError("Sync requesting pull request owner is unavailable")
+        raise RuntimeError(
+            "Bad sync: requester is unknown. Rerun the failed job."
+        )
     require_sync_request(
         api,
         repo,
@@ -336,7 +352,9 @@ def verify_sync(args: argparse.Namespace) -> None:
     """Validate the authorized route and exact sync topology before tests."""
     token = os.environ.get("GH_TOKEN", "")
     if not token:
-        raise RuntimeError("Sync verification requires GH_TOKEN")
+        raise RuntimeError(
+            "Sync check: no GH_TOKEN. Set GH_TOKEN in the workflow step."
+        )
     api = GitHubAPI(token)
     validate_sync_route(
         api,
@@ -348,15 +366,21 @@ def verify_sync(args: argparse.Namespace) -> None:
         args.head_sha,
     )
     if ref_sha(api, args.repo, args.base) != args.base_sha:
-        raise RuntimeError("Delivery base moved after the sync event")
+        raise RuntimeError(
+            "Stale sync: delivery base moved. Rerun the 'verify' job."
+        )
     if ref_sha(api, args.repo, "main") != args.main_sha:
-        raise RuntimeError("Main moved after the sync event")
+        raise RuntimeError("Stale sync: main moved. Rerun the 'verify' job.")
     if ref_sha(api, args.repo, args.head_ref) != args.head_sha:
-        raise RuntimeError("Sync head moved after the sync event")
+        raise RuntimeError(
+            "Stale sync: sync head moved. Rerun the 'verify' job."
+        )
     commit = git_output(["rev-list", "--parents", "-n", "1", args.head_sha])
     fields = commit.split()
     if not fields or fields[0] != args.head_sha:
-        raise RuntimeError("Sync commit identity is unavailable")
+        raise RuntimeError(
+            "Bad sync: no commit identity. Rerun the 'verify' job."
+        )
     head_tree = git_output(["rev-parse", f"{args.head_sha}^{{tree}}"])
     merge = subprocess.run(  # noqa: S603
         [  # noqa: S607
@@ -396,7 +420,9 @@ def ref_sha(api: API, repo: str, branch: str) -> str:
     data = require_response(status, payload, f"read {branch}")
     sha = data.get("object", {}).get("sha") if isinstance(data, dict) else None
     if not isinstance(sha, str):
-        raise RuntimeError(f"GitHub returned an invalid {branch} ref")
+        raise RuntimeError(
+            f"Bad GitHub reply: invalid {branch} ref. Rerun the failed job."
+        )
     return sha
 
 
@@ -405,7 +431,9 @@ def pull_request(api: API, repo: str, number: int) -> dict[str, Any]:
     status, payload = api.request("GET", f"repos/{repo}/pulls/{number}")
     data = require_response(status, payload, "read pull request")
     if not isinstance(data, dict):
-        raise RuntimeError("GitHub returned invalid pull request state")
+        raise RuntimeError(
+            "Bad GitHub reply: invalid PR. Rerun the failed job."
+        )
     return data
 
 
@@ -424,7 +452,9 @@ def associated_pull_requests(
             status, payload, "read merge queue pull requests"
         )
         if not isinstance(data, list):
-            raise RuntimeError("GitHub returned an invalid associated PR list")
+            raise RuntimeError(
+                "Bad GitHub reply: invalid PR list. Rerun the failed job."
+            )
         pulls.extend(item for item in data if isinstance(item, dict))
         if len(data) < 100:
             break
@@ -448,14 +478,21 @@ def merge_group_gate(
         or FULL_SHA.fullmatch(queue_sha) is None
         or FULL_SHA.fullmatch(base_sha) is None
     ):
-        raise RuntimeError("Merge queue event is not an exact main candidate")
+        raise RuntimeError(
+            "Bad queue: not an exact main candidate. Add the PR to the queue "
+            "again."
+        )
     number = int(match.group(1))
     queue_branch = queue_ref.removeprefix("refs/heads/")
     if ref_sha(api, repo, queue_branch) != queue_sha:
-        raise RuntimeError("Merge queue ref no longer matches this event")
+        raise RuntimeError(
+            "Stale queue: ref moved. Add the PR to the queue again."
+        )
     pulls = associated_pull_requests(api, repo, queue_sha)
     if len(pulls) != 1 or pulls[0].get("number") != number:
-        raise RuntimeError("Merge queue commit has no unique pull request")
+        raise RuntimeError(
+            "Bad queue: no unique pull request. Add the PR to the queue again."
+        )
     candidate = pull_request(api, repo, number)
     base = candidate.get("base")
     head = candidate.get("head")
@@ -472,17 +509,27 @@ def merge_group_gate(
         or not isinstance(head_repo, dict)
         or head_repo.get("full_name") != repo
     ):
-        raise RuntimeError("Queued pull request does not match this event")
+        raise RuntimeError(
+            "Stale queue: PR changed. Add the PR to the queue again."
+        )
     head_ref = str(head["ref"])
     head_sha = str(head["sha"])
     if ref_sha(api, repo, "main") != base_sha:
-        raise RuntimeError("Current main changed after merge queue entry")
+        raise RuntimeError(
+            "Stale queue: main changed. Add the PR to the queue again."
+        )
     if ref_sha(api, repo, head_ref) != head_sha:
-        raise RuntimeError("Pull request head changed after merge queue entry")
+        raise RuntimeError(
+            "Stale queue: PR head changed. Add the PR to the queue again."
+        )
     if not includes_main(compare(api, repo, base_sha, queue_sha)):
-        raise RuntimeError("Merge queue candidate does not contain its base")
+        raise RuntimeError(
+            "Bad queue: base is missing. Add the PR to the queue again."
+        )
     if not includes_main(compare(api, repo, head_sha, queue_sha)):
-        raise RuntimeError("Merge queue candidate does not contain its head")
+        raise RuntimeError(
+            "Bad queue: head is missing. Add the PR to the queue again."
+        )
     return f"exact queue candidate for {head_ref}"
 
 
@@ -497,10 +544,14 @@ def require_sync_request(
     """Authorize one final-promotion or explicitly dependent early sync."""
     if reason not in {"promotion", "explicit-dependency"}:
         raise RuntimeError(
-            "Sync reason must be promotion or explicit-dependency"
+            "Bad sync reason: not promotion or explicit-dependency. Pass one "
+            "of them to '--reason'."
         )
     if request_pr <= 0 or not requester:
-        raise RuntimeError("Sync requires one requesting PR and its owner")
+        raise RuntimeError(
+            "Bad sync: no requesting PR or owner. Pass '--request-pr' and "
+            "'--requester'."
+        )
     pull = pull_request(api, repo, request_pr)
     base = pull.get("base")
     head = pull.get("head")
@@ -517,7 +568,8 @@ def require_sync_request(
         or str(author.get("login") or "").casefold() != requester.casefold()
     ):
         raise RuntimeError(
-            "Sync request must be owned by one live repository PR"
+            "Bad sync: not owned by one live repository PR. Request it from "
+            "your own open PR."
         )
 
     if reason == "promotion":
@@ -531,7 +583,10 @@ def require_sync_request(
             or head.get("ref") not in expected_heads
             or "promotion" not in issue_labels(pull)
         ):
-            raise RuntimeError("Promotion sync requires its matching final PR")
+            raise RuntimeError(
+                "Bad sync: no matching final PR. Request it from the open "
+                "promotion PR."
+            )
         return
 
     dependency = re.search(
@@ -540,7 +595,8 @@ def require_sync_request(
     )
     if base.get("ref") != delivery_branch or dependency is None:
         raise RuntimeError(
-            "Early sync requires an owner PR with an explicit dependency"
+            "Bad sync: owner PR lacks an explicit dependency. Fill "
+            "'Dependencies / non-parallel work' in its body."
         )
 
 
@@ -577,11 +633,16 @@ def main() -> None:
             return
         token = os.environ.get("GH_TOKEN", "")
         if not token:
-            raise RuntimeError("GH_TOKEN is required")
+            raise RuntimeError(
+                "Sync failed: no GH_TOKEN. Set GH_TOKEN in the workflow step."
+            )
         api = GitHubAPI(token)
         if args.command == "gate":
             if not args.base or not args.head_sha:
-                raise RuntimeError("gate requires --base and --head-sha")
+                raise RuntimeError(
+                    "Bad gate: no --base/--head-sha. Pass '--base' and "
+                    "'--head-sha'."
+                )
             result = gate(
                 api,
                 args.repo,
@@ -590,7 +651,7 @@ def main() -> None:
                 head_ref=args.head_ref,
                 pr_number=args.pr_number,
             )
-            print(f"delivery sync gate: {result}")  # noqa: T201
+            print(f"OK: Delivery sync gate: {result}.")  # noqa: T201
         elif args.command == "merge-group-gate":
             result = merge_group_gate(
                 api,
@@ -600,9 +661,9 @@ def main() -> None:
                 args.base,
                 args.base_sha,
             )
-            print(f"delivery sync gate: {result}")  # noqa: T201
+            print(f"OK: Delivery sync gate: {result}.")  # noqa: T201
     except RuntimeError as error:
-        raise SystemExit(str(error)) from error
+        raise SystemExit(f"ERROR: {error}") from error
 
 
 if __name__ == "__main__":

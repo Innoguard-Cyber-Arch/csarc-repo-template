@@ -58,7 +58,7 @@ mode="generate"
 if [[ "${1:-}" == "--check" ]]; then
   mode="check"
 elif [[ "${1:-}" != "" ]]; then
-  echo "Usage: $0 [--check]" >&2
+  echo "ERROR: Bad argument '$1': unknown. Run '$0' or '$0 --check'." >&2
   exit 2
 fi
 
@@ -70,24 +70,24 @@ for pair in "${paired_files[@]}"; do
   target_file="$repo_root/$target_name"
 
   if [[ ! -f "$source_file" ]]; then
-    echo "Missing paired source file: $source_name" >&2
+    echo "ERROR: Paired source is missing: no '$source_name'. Run 'git restore $source_name'." >&2
     exit 1
   fi
 
   if [[ "$mode" == "check" ]]; then
     if [[ ! -f "$target_file" ]]; then
-      echo "$target_name is missing; run scripts/sync-paired-files.sh" >&2
+      echo "ERROR: $target_name is missing: it is not synced. Run 'scripts/sync-paired-files.sh'." >&2
       drifted=1
       continue
     fi
     if ! cmp -s "$source_file" "$target_file"; then
-      echo "$target_name does not match $source_name:" >&2
+      echo "ERROR: $target_name is stale: it differs from $source_name. Run 'scripts/sync-paired-files.sh'." >&2
       diff -u "$target_file" "$source_file" >&2 || true
       drifted=1
     fi
     if { [[ -x "$source_file" ]] && [[ ! -x "$target_file" ]]; } ||
       { [[ ! -x "$source_file" ]] && [[ -x "$target_file" ]]; }; then
-      echo "$target_name has a different executable bit than $source_name" >&2
+      echo "ERROR: $target_name mode is stale: the executable bit differs from $source_name. Run 'scripts/sync-paired-files.sh'." >&2
       drifted=1
     fi
   else
@@ -102,6 +102,6 @@ for pair in "${paired_files[@]}"; do
 done
 
 if [[ "$mode" == "check" && "$drifted" -ne 0 ]]; then
-  echo "Run ./scripts/sync-paired-files.sh to regenerate paired copies." >&2
+  echo "ERROR: Paired copies drifted: see the list above. Run './scripts/sync-paired-files.sh'." >&2
   exit 1
 fi

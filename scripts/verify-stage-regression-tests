@@ -39,7 +39,7 @@ verification_step "Python regression suite" \
 if [[ -s "$cost_root/pytest.xml" ]]; then
   python3 scripts/verification_cost.py report --junit "$cost_root/pytest.xml" \
     --label "Python regression suite (full)" --suite full ||
-    echo "Verification cost summary unavailable (non-blocking)." >&2
+    echo "WARNING: Cost summary is unavailable: the report failed. Read the log above." >&2
 fi
 verification_step "Issue-triage self-test" ./scripts/test-issue-triage
 verification_step "Worktree-cleanup self-test" ./scripts/test-worktree-cleanup

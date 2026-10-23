@@ -1233,9 +1233,7 @@ def test_single_language_site_uses_primary_language_at_index(
         text=True,
     )
     assert stale_check.returncode == 1
-    assert (
-        "stale for the selected documentation languages" in stale_check.stderr
-    )
+    assert "is stale: the documentation languages changed" in stale_check.stderr
     subprocess.run(  # noqa: S603
         [site_builder],
         cwd=project,

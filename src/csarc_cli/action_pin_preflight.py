@@ -60,6 +60,11 @@ DECISION_KEYS = (*ITEM_KEYS, "commit_sha")
 GitRunner = Callable[[list[str]], subprocess.CompletedProcess[str]]
 
 
+OTHER_RELEASE = "Pass a fixed template release with 'csarc update --to'"
+CHECK_AGAIN = "Run 'csarc update --check' again"
+NEW_PIN = "Commit the pin fix and pass its SHA with '--pin-commit'"
+
+
 class PinPreflightError(ValueError):
     """Raised when pins cannot be read or verified; the update stops."""
 
@@ -252,7 +257,7 @@ def template_pins(files: Mapping[str, str]) -> dict[str, str]:
         raise PinPreflightError(
             "Template source pins disagree for "
             + ", ".join(ambiguous)
-            + "; no single trusted new SHA exists."
+            + f": no single trusted new SHA exists. {OTHER_RELEASE}."
         )
     return {action: next(iter(shas)) for action, shas in seen.items()}
 
@@ -267,14 +272,18 @@ def _render_excludes(
     rendered: list[str] = []
     for entry in entries:
         if not isinstance(entry, str):
-            raise PinPreflightError("Template _exclude entries must be text.")
+            raise PinPreflightError(
+                f"Template _exclude is invalid: an entry is not text. "
+                f"{OTHER_RELEASE}."
+            )
         try:
             rendered.append(
                 environment.from_string(entry).render(dict(answers)).strip()
             )
         except Exception as error:
             raise PinPreflightError(
-                f"Cannot evaluate template _exclude entry {entry!r}: {error}"
+                f"Cannot evaluate template _exclude entry {entry!r}: "
+                f"{error}. {OTHER_RELEASE}."
             ) from error
     return [item for item in rendered if item]
 
@@ -306,15 +315,17 @@ def managed_workflows(
     """Return the target workflow paths the template renders for answers."""
     raw_excludes = copier_config.get("_exclude", [])
     if not isinstance(raw_excludes, list):
-        raise PinPreflightError("Template _exclude must be a list.")
+        raise PinPreflightError(
+            f"Template _exclude is invalid: it is not a list. {OTHER_RELEASE}."
+        )
     excludes = _render_excludes(raw_excludes, answers)
     managed: set[str] = set()
     for name in template_files:
         output = name.removesuffix(TEMPLATE_SUFFIX)
         if "{{" in output or "{%" in output:
             raise PinPreflightError(
-                f"Template workflow name {name!r} is templated; ownership "
-                "cannot be resolved without a render."
+                f"Template workflow name {name!r} is templated: ownership "
+                f"needs a render. {OTHER_RELEASE}."
             )
         path = f"{WORKFLOW_DIRECTORY}/{output}"
         if not _excluded(path, excludes):
@@ -326,7 +337,10 @@ def _git_text(git: GitRunner, command: list[str], detail: str) -> str:
     result = git(command)
     if result.returncode != 0:
         output = (result.stderr or result.stdout).strip() or "git failed"
-        raise PinPreflightError(f"{detail}: {output}")
+        raise PinPreflightError(
+            f"{detail}: {output.rstrip('.')}. Check the template source "
+            "and network, then run 'csarc update --check' again."
+        )
     return result.stdout
 
 
@@ -375,7 +389,7 @@ def _source_repository(
     if resolved != sha:
         raise PinPreflightError(
             f"Template pin source resolved {resolved!r}, not the reviewed "
-            f"commit {sha}."
+            f"commit {sha}: the source moved. {CHECK_AGAIN}."
         )
     return base
 
@@ -390,7 +404,8 @@ def _read_copier_config(
     ).split()
     if names != ["copier.yml"]:
         raise PinPreflightError(
-            "Template source has no copier.yml at the reviewed commit."
+            "Template source has no copier.yml: the reviewed commit is "
+            f"not a CSARC template. {OTHER_RELEASE}."
         )
     text = _git_text(
         git,
@@ -401,10 +416,13 @@ def _read_copier_config(
         config = yaml.safe_load(text)
     except yaml.YAMLError as error:
         raise PinPreflightError(
-            f"Template copier.yml cannot be parsed: {error}"
+            f"Template copier.yml cannot be parsed: {error}. {OTHER_RELEASE}."
         ) from error
     if not isinstance(config, dict):
-        raise PinPreflightError("Template copier.yml must be a mapping.")
+        raise PinPreflightError(
+            f"Template copier.yml is invalid: it is not a mapping. "
+            f"{OTHER_RELEASE}."
+        )
     return config
 
 
@@ -412,7 +430,10 @@ def _read_template_workflows(
     git: GitRunner, base: list[str], sha: str, subdirectory: object
 ) -> dict[str, str]:
     if not isinstance(subdirectory, str):
-        raise PinPreflightError("Template _subdirectory must be text.")
+        raise PinPreflightError(
+            f"Template _subdirectory is invalid: it is not text. "
+            f"{OTHER_RELEASE}."
+        )
     prefix = PurePosixPath(subdirectory.strip("/"), WORKFLOW_DIRECTORY)
     listing = _git_text(
         git,
@@ -446,8 +467,9 @@ def read_template_source(
     """
     if FULL_SHA.fullmatch(sha) is None:
         raise PinPreflightError(
-            f"Template revision {sha!r} is not a full commit SHA; the pin "
-            "source cannot be verified."
+            f"Template revision {sha!r} cannot be verified: it is not a "
+            "full commit SHA. Pass a release or a 40-character SHA with "
+            "'csarc update --to'."
         )
     with tempfile.TemporaryDirectory(prefix="csarc-pin-source-") as scratch:
         base = _source_repository(git, source, sha, Path(scratch))
@@ -463,8 +485,8 @@ def _target_workflows(target: Path) -> dict[str, str]:
     directory = target / WORKFLOW_DIRECTORY
     if directory.is_symlink():
         raise PinPreflightError(
-            f"{WORKFLOW_DIRECTORY} is a symlink; workflow pins cannot be "
-            "verified."
+            f"{WORKFLOW_DIRECTORY} is a symlink: its pins cannot be "
+            f"verified. Replace it with a real directory and commit it."
         )
     if not directory.is_dir():
         return {}
@@ -475,13 +497,15 @@ def _target_workflows(target: Path) -> dict[str, str]:
         relative = f"{WORKFLOW_DIRECTORY}/{path.name}"
         if path.is_symlink() or not path.is_file():
             raise PinPreflightError(
-                f"{relative} is not a regular file; its pins cannot be parsed."
+                f"{relative} is not a regular file: its pins cannot be "
+                "parsed. Replace it with a regular file and commit it."
             )
         try:
             files[relative] = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as error:
             raise PinPreflightError(
-                f"{relative} cannot be parsed as UTF-8 text: {error}"
+                f"{relative} cannot be parsed: it is not UTF-8 text "
+                f"({error}). Save it as UTF-8 and commit it."
             ) from error
     return files
 
@@ -543,7 +567,8 @@ def run_preflight(
     for action, pin in new_pins.items():
         if FULL_SHA.fullmatch(pin) is None:
             raise PinPreflightError(
-                f"Template pin for {action} is not a full commit SHA."
+                f"Template pin for {action} is invalid: it is not a full "
+                f"commit SHA. {OTHER_RELEASE}."
             )
     managed = managed_workflows(files, config, answers)
     return evaluate(
@@ -684,7 +709,8 @@ def _read_back_decision(
     commit = decision["commit_sha"]
     if not isinstance(commit, str) or FULL_SHA.fullmatch(commit) is None:
         raise PinPreflightError(
-            "A pin decision commit must be a full lowercase commit SHA."
+            "Pin decision commit is invalid: it is not a full lowercase "
+            "commit SHA. Pass the 40-character SHA with '--pin-commit'."
         )
     base = ["git", "-C", str(target)]
     resolved = _git_text(
@@ -693,11 +719,15 @@ def _read_back_decision(
         f"Pin commit {commit} cannot be read back",
     ).strip()
     if resolved != commit:
-        raise PinPreflightError(f"Pin commit {commit} cannot be read back.")
+        raise PinPreflightError(
+            f"Pin commit {commit} cannot be read back: Git does not know it. "
+            "Commit the pin fix in the target, then pass its SHA."
+        )
     ancestry = git([*base, "merge-base", "--is-ancestor", commit, "HEAD"])
     if ancestry.returncode != 0:
         raise PinPreflightError(
-            f"Pin commit {commit} is not in the target's history."
+            f"Pin commit {commit} is not in the target's history: HEAD "
+            "does not contain it. Check out the branch with the pin fix."
         )
     text = _git_text(
         git,
@@ -709,7 +739,7 @@ def _read_back_decision(
         raise PinPreflightError(
             f"Pin commit {commit} does not pin {decision['action']}@"
             f"{decision['new_sha']} at {decision['file']}:"
-            f"{decision['line']}."
+            f"{decision['line']}: the line differs. {NEW_PIN}."
         )
 
 
@@ -728,31 +758,37 @@ def validate_pin_decisions(
     """
     expected = {_item_key(item) for item in items}
     if len(expected) != len(items):
-        raise PinPreflightError("Preflight items must be unique.")
+        raise PinPreflightError(
+            f"Preflight items are invalid: an item repeats. {CHECK_AGAIN}."
+        )
     accepted: dict[tuple[object, ...], dict[str, object]] = {}
     for decision in decisions:
         if set(decision) != set(DECISION_KEYS):
             raise PinPreflightError(
-                "A pin decision must carry exactly "
+                "Pin decision is invalid: it must carry exactly "
                 + ", ".join(DECISION_KEYS)
-                + "."
+                + f". {CHECK_AGAIN}."
             )
         key = _item_key(decision)
         where = f"{decision.get('file')}:{decision.get('line')}"
         if key not in expected:
             raise PinPreflightError(
-                f"Pin decision for {where} is not a preflight item."
+                f"Pin decision for {where} is not a preflight item: the "
+                f"stage-1 plan does not list it. {CHECK_AGAIN}."
             )
         if key in accepted:
-            raise PinPreflightError(f"Pin decision for {where} is duplicated.")
+            raise PinPreflightError(
+                f"Pin decision for {where} is duplicated: a line takes one "
+                f"decision. {CHECK_AGAIN}."
+            )
         _read_back_decision(decision, git, target)
         accepted[key] = {name: decision[name] for name in DECISION_KEYS}
     missing = [key for key in expected if key not in accepted]
     if missing:
         raise PinPreflightError(
-            "Every preflight item needs a committed pin decision; missing "
+            "Pin decisions are incomplete: missing "
             + ", ".join(sorted(f"{key[1]}:{key[2]}" for key in missing))
-            + "."
+            + f". {NEW_PIN}."
         )
     return [accepted[_item_key(item)] for item in items]
 
@@ -846,7 +882,10 @@ def unlisted_pin_changes(
     proves the commit modified nothing beyond the preflight items.
     """
     if FULL_SHA.fullmatch(commit) is None:
-        raise PinPreflightError("A pin commit must be a full commit SHA.")
+        raise PinPreflightError(
+            "Pin commit is invalid: it is not a full commit SHA. Pass the "
+            "40-character SHA with '--pin-commit'."
+        )
     allowed = {
         (str(item["file"]), int(str(item["line"]))): item for item in items
     }
