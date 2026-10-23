@@ -5,11 +5,11 @@
 Closes #N
 
 <!-- Work PRs use type/N-short-slug and target the configured integration branch. -->
-<!-- A CSARC-owned Milestone promotion bridge (promote/m<N>-<slug>) replaces the line above with Refs #N so release.yml closes the tracker only after publication succeeds. -->
+<!-- In a CSARC-owned Milestone promotion bridge (promote/m<N>-<slug>), replace the line above with Refs #N. Then release.yml closes the tracker only after publication succeeds. -->
 
 ## 完成清單
 
-<!-- Closing keywords require every task here and in the linked Issue to be checked. -->
+<!-- Before you use a closing keyword, check every task here and in the linked Issue. -->
 
 - [ ] 已完成變更 owner 的 focused checks；hosted `verify` 會依風險在 exact candidate 執行 fast／full 並提供 required merge evidence，不因選到 full 就在本機重跑同一套 `./scripts/verify-template.sh`（文件明定的 fallback／診斷除外，見 `docs/ci-policy.md`）；PR assignee／label／Milestone 與 linked Issue 一致；work branch 已顯示於 Issue Development；未超出原 Issue 範圍
 - [ ] 已測試新專案產生並評估既有專案更新影響；第三方 Actions 固定完整 commit SHA
