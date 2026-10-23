@@ -73,7 +73,7 @@ def test_local_render_fails_closed_without_the_hosted_paths(
         repo="owner/repo", pr_number=44, head_sha="a" * 40
     )
     with pytest.raises(
-        RuntimeError, match="close_work_issue needs verification_mode: hosted"
+        RuntimeError, match="close_work_issue: needs verification_mode: hosted"
     ):
         local["close_work_issue"](arguments, object())
     # Read through the module as review_gate does: absent, not a crash.
