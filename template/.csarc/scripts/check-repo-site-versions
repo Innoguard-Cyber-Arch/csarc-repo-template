@@ -72,12 +72,10 @@ def main() -> int:
     try:
         data = json.loads(VERSION_FILE.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
-            raise ValueError("Bad file: not a JSON object. Fix it.")
+            raise ValueError(f"Bad {VERSION_FILE}: not a JSON object. Fix it.")
         status = check(data)
     except (OSError, KeyError, ValueError, json.JSONDecodeError) as error:
-        sys.stderr.write(
-            f"ERROR: {VERSION_FILE}: {error}\n"
-        )
+        sys.stderr.write(f"ERROR: {error}\n")
         return 1
     sys.stdout.write(status)
     return 0

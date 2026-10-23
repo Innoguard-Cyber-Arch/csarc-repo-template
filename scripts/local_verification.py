@@ -266,15 +266,15 @@ def record(
         )
     if not is_git_repository():
         sys.stdout.write(
-            "Local verification passed; evidence was not recorded because "
+            "NOTICE: Local verification passed; evidence is not recorded: "
             "the candidate has no Git commit.\n"
         )
         return None
     if git("status", "--porcelain"):
         sys.stdout.write(
-            "Local verification passed; evidence was not recorded because "
-            "the worktree is not clean. Commit the exact candidate and run "
-            "the suite once more.\n"
+            "NOTICE: Local verification passed; evidence is not recorded: "
+            "the worktree is not clean. Commit the candidate and run the "
+            "suite again.\n"
         )
         return None
     head_sha = git("rev-parse", "HEAD")
@@ -319,8 +319,8 @@ def record(
     )
     temporary.replace(path)
     sys.stdout.write(
-        "Recorded self-attested local verification for "
-        f"{head_sha} ({tier}; {','.join(normalized_scopes)}).\n"
+        "OK: Recorded self-attested local verification for "
+        f"'{head_sha}' ({tier}; {','.join(normalized_scopes)}).\n"
     )
     return payload
 
@@ -419,7 +419,7 @@ def main() -> None:
             args.base_sha,
         )
     except (RuntimeError, subprocess.CalledProcessError) as error:
-        sys.stderr.write(f"Local verification evidence blocked: {error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         raise SystemExit(1) from error
 
 

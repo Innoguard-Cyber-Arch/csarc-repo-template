@@ -198,9 +198,9 @@ done
 
 if $apply; then
   git worktree prune
-  printf 'Removed %d of %d candidate worktree(s).\n' \
+  printf 'OK: Removed %d of %d candidate worktrees.\n' \
     "$removed_count" "$candidate_count"
 else
-  printf 'Dry run: %d candidate worktree(s); rerun with --apply to remove.\n' \
+  printf "NOTICE: Dry run: %d candidate worktrees. Run again with '--apply' to remove them.\n" \
     "$candidate_count"
 fi

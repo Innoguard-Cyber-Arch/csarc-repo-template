@@ -696,9 +696,7 @@ def _route_command(args: argparse.Namespace) -> int:
         base = read_config(args.base_config)
         candidate = read_config(args.candidate_config)
     except (OSError, ValueError) as error:
-        sys.stderr.write(
-            f"ERROR: Trusted base cannot read the configuration: {error}\n"
-        )
+        sys.stderr.write(f"ERROR: {error}\n")
         return 1
     changed: list[str] | None = []
     if args.pull_files is not None:
@@ -710,9 +708,10 @@ def _route_command(args: argparse.Namespace) -> int:
             changed = None
     decision = classify_route(changed, base, candidate)
     if args.json:
+        # message-pattern: allow X1 JSON route decision
         sys.stdout.write(json.dumps(decision.as_json(), sort_keys=True) + "\n")
     else:
-        sys.stdout.write(f"Merge route: {decision.route}\n")
+        sys.stdout.write(f"NOTICE: Merge route is '{decision.route}'.\n")
         sys.stdout.writelines(f"- {reason}\n" for reason in decision.reasons)
     if args.enforce:
         try:
@@ -737,12 +736,16 @@ def policy_main(args: argparse.Namespace) -> int:
             sys.stderr.write(f"ERROR: {error}\n")
             return 1
         if isinstance(value, dict):
+            # message-pattern: allow X1 value for shell callers
             sys.stdout.write(json.dumps(value, sort_keys=True) + "\n")
         elif isinstance(value, list):
+            # message-pattern: allow X1 value for shell callers
             sys.stdout.write(",".join(str(item) for item in value) + "\n")
         elif isinstance(value, bool):
+            # message-pattern: allow X1 value for shell callers
             sys.stdout.write(f"{str(value).lower()}\n")
         elif value is not None:
+            # message-pattern: allow X1 value for shell callers
             sys.stdout.write(f"{value}\n")
         return 0
     if args.command == "channel-floor":
@@ -753,6 +756,7 @@ def policy_main(args: argparse.Namespace) -> int:
         except ValueError as error:
             sys.stderr.write(f"ERROR: {error}\n")
             return 2
+        # message-pattern: allow X1 key=value plan
         sys.stdout.write(f"level={level} floor={floor} suite={suite}\n")
         return 0
     return 2
@@ -813,7 +817,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         count = len(files)
         sys.stdout.write(
-            f"Staged {count} trusted control files in {args.destination}\n"
+            f"OK: Staged {count} trusted control files in "
+            f"'{args.destination}'.\n"
         )
         return 0
     if args.command == "verify":
@@ -843,6 +848,7 @@ def main(argv: list[str] | None = None) -> int:
         changed_files=read_changed_files(args.changed_files),
     )
     for line in lines:
+        # message-pattern: allow X1 workflow annotation
         sys.stdout.write(f"::notice title=Candidate gate self-test::{line}\n")
     if args.summary is not None:
         with args.summary.open("a", encoding="utf-8") as summary:

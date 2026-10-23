@@ -146,20 +146,22 @@ def main() -> int:
         problems = check(args.inventory, args.content_dir, args.candidate)
         count = len(load_inventory(args.inventory))
     except (OSError, UnicodeError, ValueError) as error:
-        sys.stderr.write(f"repo-site inventory check failed: {error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         return 1
     if problems:
         sys.stderr.write(
-            "Repo-site slides drifted from site/data/slide_inventory.json; "
-            "update the inventory in the same change if this is intended:\n"
+            "ERROR: Repo-site slides drifted: they differ from "
+            "'site/data/slide_inventory.json'. Fix the slides or update the "
+            "inventory in the same change.\n"
         )
+        # message-pattern: allow X5 list of drift findings
         sys.stderr.write(
             "\n".join(f"- {problem}" for problem in problems) + "\n"
         )
         return 1
     sys.stdout.write(
-        f"Repo-site inventory: {count} slides match in "
-        f"{len(LANGUAGE_FILES)} sources and {len(args.candidate)} pages\n"
+        f"OK: Repo-site inventory: {count} slides match in "
+        f"{len(LANGUAGE_FILES)} sources and {len(args.candidate)} pages.\n"
     )
     return 0
 

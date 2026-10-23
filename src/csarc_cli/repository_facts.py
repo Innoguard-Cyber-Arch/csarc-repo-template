@@ -491,6 +491,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     root = args.path.resolve()
     payload = detect(root, offline=args.offline)
+    # message-pattern: allow X1 JSON facts
     sys.stdout.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return 0
 

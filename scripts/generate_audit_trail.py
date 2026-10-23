@@ -537,9 +537,9 @@ def main(argv: list[str] | None = None) -> int:
         encoding="utf-8",
     )
 
-    sys.stderr.write(
-        f"Wrote {len(records)} pull request rows to {pr_audit_path} and "
-        f"{rule_change_path}\n"
+    sys.stdout.write(
+        f"OK: Wrote {len(records)} pull request rows to '{pr_audit_path}' "
+        f"and '{rule_change_path}'.\n"
     )
     return 0
 

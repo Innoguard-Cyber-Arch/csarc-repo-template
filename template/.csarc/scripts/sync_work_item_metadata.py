@@ -434,6 +434,7 @@ def main() -> int:
             args.head_repository,
             args.head_branch,
         )
+        # message-pattern: allow X1 pull request number
         sys.stdout.write(f"{number}\n")
         return 0
 

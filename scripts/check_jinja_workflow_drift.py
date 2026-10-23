@@ -463,19 +463,20 @@ def main(argv: list[str] | None = None) -> int:
     errors = check(args.root)
     if errors:
         for error in errors:
-            sys.stderr.write(f"jinja workflow drift: {error}\n")
+            # message-pattern: allow X5 one drift finding per line
+            sys.stderr.write(f"- {error}\n")
         sys.stderr.write(
-            "Undeclared difference between a root workflow and its "
-            "rendered template/ counterpart (or an unproven "
-            "REPRESENTATIVE_LANGUAGES coverage gap). Fix root or the "
-            ".jinja template so they agree, or add an explicit, reasoned "
-            "(root_line, rendered_line) entry to ALLOWED_LINE_DIFFERENCES "
-            "in scripts/check_jinja_workflow_drift.py.\n"
+            "ERROR: Jinja workflow drift: a root workflow and its rendered "
+            "template/ copy differ without a declared reason, or "
+            "'REPRESENTATIVE_LANGUAGES' leaves a coverage gap. Make them "
+            "agree, or add a reasoned (root_line, rendered_line) entry to "
+            "'ALLOWED_LINE_DIFFERENCES' in "
+            "'scripts/check_jinja_workflow_drift.py'.\n"
         )
         return 1
     pairs = len(paired_workflow_files(args.root))
     sys.stdout.write(
-        f"{pairs} paired jinja workflow(s) match root after rendering.\n"
+        f"OK: {pairs} paired Jinja workflows match root after rendering.\n"
     )
     return 0
 

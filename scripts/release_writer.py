@@ -570,6 +570,7 @@ def main(arguments: list[str] | None = None) -> int:
             decision = preflight(
                 args.root, github, args.sha, args.tag, args.purpose
             )
+            # message-pattern: allow X1 JSON decision
             sys.stdout.write(json.dumps(decision, sort_keys=True) + "\n")
             return 0 if decision["writer"] == "csarc" else NOT_WRITER_EXIT
         if args.action == "acquire":
@@ -584,6 +585,7 @@ def main(arguments: list[str] | None = None) -> int:
                 holder=lease_holder(github),
                 ttl=args.ttl,
             )
+            # message-pattern: allow X1 commit SHA
             sys.stdout.write(commit + "\n")
             return 0
         if not args.lease:

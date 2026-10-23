@@ -18,9 +18,7 @@ export PYTHONDONTWRITEBYTECODE=1
 # docs/site/content/_index.zh-tw.md / _index.en.md (see .csarc/site/README.md), then
 # remove docs/site-content.md once its content has a new home.
 if [[ -f "$repo_root/docs/site-content.md" ]]; then
-  printf 'Notice: docs/site-content.md is no longer used by the repo-site build.\n' >&2
-  printf '  Port anything worth keeping into docs/site/content/_index.zh-tw.md / _index.en.md,\n' >&2
-  printf '  then remove docs/site-content.md.\n' >&2
+  printf "WARNING: 'docs/site-content.md' is unused: the repo-site build ignores it. Move its content to 'docs/site/content/', then remove it.\n" >&2
 fi
 
 python3 "$repo_root/.csarc/scripts/check-repo-site-navigation"
@@ -79,7 +77,7 @@ for alternative in docs/index.en.html docs/index.zh-tw.html; do
   done
   if [[ "$keep" == "false" && -f "$repo_root/$alternative" ]]; then
     if (($# == 1)); then
-      printf '%s is stale for the selected documentation languages; rebuild the repo site.\n' \
+      printf "ERROR: '%s' is stale: the documentation languages changed. Run '.csarc/scripts/build-repo-site'.\n" \
         "$alternative" >&2
       exit 1
     fi
@@ -87,8 +85,8 @@ for alternative in docs/index.en.html docs/index.zh-tw.html; do
   fi
 done
 
-printf 'Repo site:'
+printf 'OK: Repo site:'
 for output in "${outputs[@]}"; do
-  printf ' %s' "$repo_root/$output"
+  printf " '%s'" "$repo_root/$output"
 done
-printf '\n'
+printf '.\n'

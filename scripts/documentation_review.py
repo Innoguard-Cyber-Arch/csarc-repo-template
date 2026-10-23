@@ -79,9 +79,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         message = validate_review(args.body, args.head, args.mode)
-        sys.stdout.write(message + "\n")
+        if args.mode == "off":
+            sys.stdout.write(f"NOTICE: {message}\n")
+        else:
+            sys.stdout.write(f"OK: {message}\n")
     except ValueError as error:
-        sys.stderr.write(f"{error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         return 1
     return 0
 

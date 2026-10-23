@@ -1898,7 +1898,7 @@ def main() -> int:
         sys.stderr.write(f"ERROR: {error}\n")
         return 1
     for name, path in outputs.items():
-        sys.stdout.write(f"{name}: {path}\n")
+        sys.stdout.write(f"OK: Wrote {name} to '{path}'.\n")
     return 0
 
 

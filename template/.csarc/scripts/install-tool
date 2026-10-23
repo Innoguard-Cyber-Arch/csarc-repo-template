@@ -94,7 +94,7 @@ case "$tool" in
     ;;
 esac
 if [[ -z "$arch" ]]; then
-  printf 'Unsupported platform. Install %s %s and place it on PATH.\n' "$label" "$version" >&2
+  printf 'ERROR: Platform is unsupported: no %s %s build. Install it on PATH.\n' "$label" "$version" >&2
   exit 1
 fi
 

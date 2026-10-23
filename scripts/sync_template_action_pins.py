@@ -163,9 +163,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         edited = sync(root, args.base_rev, args.head_rev)
     except (AmbiguousPinError, subprocess.CalledProcessError) as error:
-        sys.stderr.write(f"template action pin sync failed: {error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         return 1
     for path in edited:
+        # message-pattern: allow X1 one edited path per line
         sys.stdout.write(f"{path.relative_to(root)}\n")
     return 0
 

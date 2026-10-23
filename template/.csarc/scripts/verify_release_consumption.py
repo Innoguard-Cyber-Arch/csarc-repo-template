@@ -151,10 +151,11 @@ def main(argv: list[str] | None = None) -> int:
             commit=args.commit,
         )
     except (OSError, json.JSONDecodeError, VerificationError) as error:
-        sys.stderr.write(f"ERROR: Release consumption failed: {error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         return 1
     serialized = json.dumps(evidence, indent=2, sort_keys=True) + "\n"
     if args.output is None:
+        # message-pattern: allow X1 JSON evidence
         sys.stdout.write(serialized)
     else:
         args.output.parent.mkdir(parents=True, exist_ok=True)

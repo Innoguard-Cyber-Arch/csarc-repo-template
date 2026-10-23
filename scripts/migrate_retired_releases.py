@@ -696,9 +696,7 @@ def main(arguments: list[str] | None = None) -> int:
         subprocess.CalledProcessError,
         ValueError,
     ) as error:
-        sys.stderr.write(
-            f"ERROR: Historical release migration failed: {error}\n"
-        )
+        sys.stderr.write(f"ERROR: {error}\n")
         return 1
     return 0
 

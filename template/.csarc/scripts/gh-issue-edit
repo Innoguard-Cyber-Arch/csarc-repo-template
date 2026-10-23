@@ -130,6 +130,7 @@ def main(arguments: list[str] | None = None) -> int:
             if warning:
                 warnings.append(warning)
     if warnings:
+        # message-pattern: allow X5 multi-line approval warning report
         sys.stderr.write("\n".join(warnings) + "\n")
         if sys.stdin.isatty():
             reply = input("Continue with the Issue body edit? [y/N] ")

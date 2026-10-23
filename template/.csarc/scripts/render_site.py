@@ -476,14 +476,14 @@ def main() -> int:
     try:
         bundled = render(source, root=root)
     except (BundleError, OSError, UnicodeError) as error:
-        sys.stderr.write(f"ERROR: Site bundle failed: {error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         return 1
 
     if args.check:
         try:
             current = output.read_text(encoding="utf-8")
         except OSError as error:
-            sys.stderr.write(f"ERROR: Site bundle is missing: {error}\n")
+            sys.stderr.write(f"ERROR: {error}\n")
             return 1
         if current != bundled:
             sys.stderr.write(

@@ -120,7 +120,8 @@ def test_inventory_rejects_duplicate_and_unknown_fields(tmp_path: Path) -> None:
             check=False,
         )
         assert result.returncode == 1
-        assert "repo-site inventory check failed" in result.stderr
+        assert result.stderr.startswith("ERROR: ")
+        assert "is invalid" in result.stderr
 
 
 def test_cli_passes_on_real_sources() -> None:

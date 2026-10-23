@@ -251,6 +251,7 @@ def main() -> None:
             github, args.github_repo, args.commit, args.merge_branch
         )
         write_outputs(args.github_output, {"sha": source_sha})
+        # message-pattern: allow X1 JSON output
         sys.stdout.write(json.dumps({"sha": source_sha}) + "\n")
         return
     head_sha = (
@@ -288,6 +289,7 @@ def main() -> None:
         )
         if evidence is None:
             write_outputs(args.github_output, {"reuse": False})
+            # message-pattern: allow X1 JSON output
             sys.stdout.write(json.dumps({"reuse": False}) + "\n")
             return
         outputs = {
@@ -298,6 +300,7 @@ def main() -> None:
         }
         write_outputs(args.github_output, outputs)
         payload = json.dumps({**outputs, "evidence": evidence}, sort_keys=True)
+        # message-pattern: allow X1 JSON output
         sys.stdout.write(payload + "\n")
         return
     evidence = require_trusted_verification(
@@ -314,6 +317,7 @@ def main() -> None:
             f"Evidence base is wrong: {evidence.get('base')!r} is not "
             f"{args.merge_branch!r}. Verify again."
         )
+    # message-pattern: allow X1 JSON output
     sys.stdout.write(json.dumps(evidence, sort_keys=True) + "\n")
 
 

@@ -170,12 +170,15 @@ def resolve_main(argv: list[str]) -> int:
     except (OSError, json.JSONDecodeError, MergeCandidateError) as error:
         outcome, reason, status = MERGE_CANDIDATE_REJECTED, str(error), 1
     if outcome == MERGE_CANDIDATE_NO_OP:
+        # message-pattern: allow X1 workflow annotation
         sys.stderr.write(f"::notice::Dependabot exact merge no-op: {reason}\n")
     elif outcome == MERGE_CANDIDATE_REJECTED:
+        # message-pattern: allow X1 workflow annotation
         sys.stderr.write(
             f"::error::Dependabot exact merge failed closed: {reason}\n"
         )
     else:
+        # message-pattern: allow X1 reason that the step output repeats
         sys.stderr.write(reason + "\n")
     matched = outcome == MERGE_CANDIDATE_MATCH
     with open(args.github_output, "a", encoding="utf-8") as handle:
@@ -262,6 +265,7 @@ def main(argv: list[str] | None = None) -> int:
             args.expected_base_sha,
         )
         reason = f"{reason}; {child_reason}"
+    # message-pattern: allow X1 reason that the step output repeats
     sys.stderr.write(reason + "\n")
     with open(args.github_output, "a", encoding="utf-8") as handle:
         handle.write(

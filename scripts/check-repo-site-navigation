@@ -41,17 +41,18 @@ def main() -> int:
 
     if violations:
         sys.stderr.write(
-            "Repo-site navigation labels must be rewritten to fit "
-            "the sidebar:\n"
+            "ERROR: Navigation labels are too wide: they do not fit the "
+            "sidebar. Shorten each listed label.\n"
         )
+        # message-pattern: allow X5 list of label findings
         sys.stderr.write(
             "\n".join(f"- {violation}" for violation in violations) + "\n"
         )
         return 1
 
     sys.stdout.write(
-        f"Repo-site navigation: {count} labels fit within five "
-        "full-width characters\n"
+        f"OK: Repo-site navigation: {count} labels fit within five "
+        "full-width characters.\n"
     )
     return 0
 

@@ -121,7 +121,7 @@ verify_go_formatting() {
   local unformatted
   unformatted="$(go list -f '{% raw %}{{.Dir}}{% endraw %}' ./... | xargs gofmt -l)"
   if [[ -n "$unformatted" ]]; then
-    printf 'Go files need gofmt:\n%s\n' "$unformatted" >&2
+    printf "ERROR: Go files are not formatted: gofmt lists them below. Run 'gofmt -w'.\n%s\n" "$unformatted" >&2
     return 1
   fi
 }

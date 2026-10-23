@@ -915,8 +915,9 @@ def main(arguments: list[str] | None = None) -> int:
             strict=args.strict,
         )
     except EvidenceError as error:
-        sys.stderr.write(f"merge_trace: {error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         return 2
+    # message-pattern: allow X1 JSON result
     sys.stdout.write(json.dumps(result, sort_keys=True) + "\n")
     return 1 if result["blocking"] else 0
 

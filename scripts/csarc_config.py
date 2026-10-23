@@ -495,6 +495,7 @@ def main(argv: list[str] | None = None) -> int:
     """Print one configuration value for shell callers."""
     arguments = sys.argv[1:] if argv is None else argv
     if len(arguments) != 1:
+        # message-pattern: allow X3 usage
         sys.stderr.write("Usage: csarc_config.py <key>\n")
         return 2
     key = arguments[0]
@@ -514,10 +515,13 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"ERROR: {message}\n")
         return 1
     if isinstance(value, list):
+        # message-pattern: allow X1 value for shell callers
         sys.stdout.write(",".join(str(item) for item in value) + "\n")
     elif isinstance(value, bool):
+        # message-pattern: allow X1 value for shell callers
         sys.stdout.write(f"{str(value).lower()}\n")
     elif value is not None:
+        # message-pattern: allow X1 value for shell callers
         sys.stdout.write(f"{value}\n")
     return 0
 
