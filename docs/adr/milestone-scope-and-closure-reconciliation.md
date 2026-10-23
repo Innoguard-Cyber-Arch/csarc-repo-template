@@ -190,7 +190,7 @@ Reconciliation 段落反映關閉當下的即時狀態；`closure_decision()` �
 | Reconciliation 完全自動化語意比對（acceptance criteria 文字 vs 交付內容） | 不採用；`#552` 已判斷目前不現實，改採結構化逐行表格＋人工簽核 |
 | Reconciliation 內嵌進既有 `Promotion` 段落，而非獨立段落 | 不採用；分開段落讓「自動生成內容」與「人工勾選內容」的邊界清楚，staleness 偵測也不必和人工 checkbox 混在同一段落判斷 |
 | Staleness 判定同時綁定 Milestone description（Acceptance criteria／Plan）編輯 | 不採用（本次範圍內）；那是不同的 GitHub 物件，且每次 regenerate 都重新抓即時資料，真正需要攔截的只有「regenerate 之後、關閉之前，tracker body 本身又被動過」這個時間窗口 |
-| 立刻把 scope-gate／reconciliation 自動觸發寫進 `.github/workflows/milestone-lifecycle.yml` | 延後；本次先落地 `sync_milestone_state.py` 的機制本身並補齊測試，觸發時機留給後續 Issue 決定，避免這次治理變更的 diff 範圍失控 |
+| 立刻把 scope-gate／reconciliation 自動觸發寫進 `.github/workflows/milestone-lifecycle.yml` | 延後；本次先實作 `sync_milestone_state.py` 的機制本身並補齊測試，觸發時機留給後續 Issue 決定，避免這次治理變更的 diff 範圍失控 |
 
 ## `#743`：沒有 Milestone 的 Issue 本身需要核可
 
@@ -199,11 +199,11 @@ Reconciliation 段落反映關閉當下的即時狀態；`closure_decision()` �
 - **來源 Issue：**[#743](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/743)（Milestone 14 的一條 critical-path 起點；不推翻本 ADR 任何既有決定，只補上第 2 節從未涵蓋的另一半情境）
 
 **問題：**上方「決定」第 2 節（`work PR 核可：明確決定「不加」native required
-review`）與維護者的完整核准模型之間，一直存在一個未落地的落差。維護者實際期待的模型
+review`）與維護者的完整核准模型之間，一直存在一個未實作的落差。維護者實際期待的模型
 分兩點：(1) 有 Milestone 的 Issue，tracker 核准後底下 Issue 視為已核准，這正是本 ADR
 第 2 節與 `approval_decision()` 描述、且已經實作的行為；(2) **沒有 Milestone 的
 Issue**（standalone、hotfix、release recovery）本身需要核可，工作 PR 才能合併——這一
-點在 `#552`／`#632` 落地時從未實作：`_pull_decision()` 在 PR 沒有 Milestone 時直接放
+點在 `#552`／`#632` 上線時從未實作：`_pull_decision()` 在 PR 沒有 Milestone 時直接放
 行，`check-scope-gate` 對沒有 `Tracker scope: expanded` 的 Issue 也直接放行。結果是
 同一件工作，留在 Milestone 裡要先經非提案者核准，拆成 standalone 或標成 hotfix 反而
 完全不需要核可，讓 standalone／hotfix 路徑變成繞過批次治理的捷徑，與
@@ -247,7 +247,7 @@ self-lock 疑慮（單一真人帳號時代遺留、`#512`／`#518`／`#546`／`
 Issue-level 核可加上 admin self-approval 例外之後同樣不會重演，因為例外機制的判斷
 精神（非提案者要求、collaborator permission 查核、理由必填）原封不動沿用，只是換一
 套獨立語彙、獨立函式實作。`#745`（後續 Issue，尚未實作）會依發布層級（alpha／beta
-以上）進一步限縮 admin self-approval 是否允許；`#743` 落地的是現行「非提案者核准或
+以上）進一步限縮 admin self-approval 是否允許；`#743` 實作的是現行「非提案者核准或
 admin 自核」規則，不預先實作 `#745` 的分層邏輯。
 
 完整說明見 `docs/ci-policy.md`「Standalone／hotfix／release recovery Issue 核可

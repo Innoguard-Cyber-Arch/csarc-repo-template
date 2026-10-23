@@ -8,7 +8,7 @@
       "descriptionColumn": "內容",
       "columnsColumn": "欄位",
       "freshnessLabel": "資料新鮮度與觸發機制",
-      "freshnessNote": "這個 repo-site 是逐位元組重建、可用 `file://` 離線開啟的靜態單檔，不會、也不能嵌入即時查詢到的 GitHub 資料——下表只說明兩份輸出檔案各自的欄位結構，不是任何時間點的實際內容。比照 `scripts/check-governance-drift` 的既有先例（腳本保留供本機／CI 驗證，不另外啟用排程），這裡同樣不設定排程或 on-merge 自動產生並提交快照。維護者需在本機或 CI 執行下列指令，自行產生當下的稽核快照。",
+      "freshnessNote": "這個 repo-site 是逐位元組重建、可用 `file://` 離線開啟的靜態單檔，不會、也不能嵌入即時查詢到的 GitHub 資料；下表只說明兩份輸出檔案各自的欄位結構，不是任何時間點的實際內容。比照 `scripts/check-governance-drift` 的既有先例（腳本保留供本機／CI 驗證，不另外啟用排程），這裡同樣不設定排程或 on-merge 自動產生並提交快照。維護者需在本機或 CI 執行下列指令，自行產生當下的稽核快照。",
       "commandIntro": "重新產生：",
       "commandOutro": "（省略 `--repo` 會自動偵測目前 repository；預設寫入 `docs/audit-trail/`，不會自動提交）",
       "evidenceIntro": "延伸閱讀：呈現與觸發機制的決策記錄於"

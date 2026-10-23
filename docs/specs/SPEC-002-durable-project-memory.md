@@ -10,7 +10,7 @@ tracking: issue
 
 ## Problem
 
-專案已有 spec、Issue、PR、測試、決策文件與可攜式網站，重要理由卻仍大量散落在時間線中。人或 agent 在換 session、換工具或隔一段時間後，無法只從 repository 快速分辨目前契約、決策理由、尚未落地的提案與可執行證據。
+專案已有 spec、Issue、PR、測試、決策文件與可攜式網站，重要理由卻仍大量散落在時間線中。人或 agent 在換 session、換工具或隔一段時間後，無法只從 repository 快速分辨目前契約、決策理由、尚未實作的提案與可執行證據。
 
 ## Outcome
 
@@ -18,7 +18,7 @@ Repository 提供一套 **Durable Project Memory（持久化專案記憶）**：
 
 ## Context
 
-`durable project memory` 是 OpenAI 在 2026 年長任務實務中明確使用的名稱；spec、plan、decision log、狀態與驗證也廣泛出現在其他 spec-driven／RFC 流程。外部實務對「保存意圖、理由、歷史與證據」已收斂，但沒有共同強制的資料夾名稱或單一工具。本專案因此沿用既有 Markdown、GitHub 與測試管線，不導入第二套 SDD CLI 或資料庫。
+`durable project memory` 是 OpenAI 在 2026 年長任務實務中使用的名稱；spec、plan、decision log、狀態與驗證也廣泛出現在其他 spec-driven／RFC 流程。外部實務對「保存意圖、理由、歷史與證據」已收斂，但沒有共同強制的資料夾名稱或單一工具。本專案因此沿用既有 Markdown、GitHub 與測試管線，不導入第二套 SDD CLI 或資料庫。
 
 ### Canonical layers
 
@@ -44,7 +44,7 @@ Repository 提供一套 **Durable Project Memory（持久化專案記憶）**：
 
 **When** 它依 `AGENTS.md` 先讀 `docs/README.md`，再查相關 spec、decision record 與來源 Issue／PR，
 
-**Then** 它能分辨目前契約、被取代或駁回的選項、尚未落地的 open work，以及應執行的驗證，而不需要重建原始對話。
+**Then** 它能分辨目前契約、被取代或駁回的選項、尚未實作的 open work，以及應執行的驗證，而不需要重建原始對話。
 
 ## Traceability examples
 

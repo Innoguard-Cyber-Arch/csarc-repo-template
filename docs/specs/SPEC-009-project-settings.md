@@ -273,11 +273,11 @@ WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup
 
 `github_project_url` 是唯一的 Project 設定（#1058 決定 23）。它只保存完整的 organization 或 user ProjectV2 URL（`https://github.com/orgs/<org>/projects/<n>` 或 `https://github.com/users/<user>/projects/<n>`），預設空字串；不保存 project、field 或 item ID，也沒有其他 Project 鍵。init／adopt 不提問（題數不變），以 `--data github_project_url=<URL>` 設定，`csarc update --data github_project_url=` 清空。它是唯一的選用 intent：檔案沒有這個鍵時等於 `''`（停用），因為較早的 current-only reader 會拒絕未知鍵；新 render 會寫出它，本 repository 的 root 設定在 trusted base 認得它之前不寫。
 
-- 空值：`csarc issue create` 與 `csarc issue sync-project` 完全不呼叫 Project API；repository 的 `has_projects` 維持 `false`，不新增 workflow 或 check。
+- 空值：`csarc issue create` 與 `csarc issue sync-project` 不呼叫 Project API；repository 的 `has_projects` 維持 `false`，不新增 workflow 或 check。
 - 有值：受管入口在任何寫入前即時解析 URL，讀回 owner、project URL、`closed`、`viewerCanUpdate`，以及唯一、型別為 DATE 的 `Project start`／`Project target` 欄位；token 能回報 scopes 時要求 `project`，否則明示 `unknown`。
 - 上看板的範圍（#1186，固定規則）：只有 Milestone tracker（Milestone 描述 `Lifecycle Issue: #N` 指向的 Issue）與 standalone Issue（沒有 parent，也不屬於有 tracker 的 Milestone）加入 Project。Milestone work issue 與 sub-issue 不加入：`csarc issue create`／`csarc issue sync-project` 對它們不呼叫任何 Project 寫入，逐張輸出略過原因；已在 Project 上的既有 item 也不改動。
 - `Project start` 是 Issue 建立日的台北日期（Asia/Taipei，UTC+8）；`Project target` 是目前 Milestone `due_on` 的日期（GitHub 以固定時刻的 UTC 時間戳保存只有日期的 due date，取其 UTC 日期即為設定的日期）；沒有 due date 時用明確傳入的 `--target-date YYYY-MM-DD`，沒有傳入時固定為開始日後 14 個曆日（#1186）。
-- 為何固定採台北日期（#1186）：Project 看板由在台灣工作的團隊閱讀，一天的界線是台北的日曆日；以 UTC 計算時，台北 00:00–08:00 建立或完成的 Issue 會落在前一天。Taiwan 沒有日光節約時間，所以固定 +08:00 與 Asia/Taipei 相同。時區與 14 天預設都不提供設定，`github_project_url` 仍是唯一的 Project 設定。
+- 為何固定採台北日期（#1186）：Project 看板由在台灣工作的團隊閱讀，一天的界線是台北的日曆日；以 UTC 計算時，台北 00:00–08:00 建立或完成的 Issue 會落在前一天。台灣沒有日光節約時間，所以固定 +08:00 與 Asia/Taipei 相同。時區與 14 天預設都不提供設定，`github_project_url` 仍是唯一的 Project 設定。
 - 完成後的 target（#1179）：Issue 已關閉，或它在 Project 的 `Status` 為 `Done` 時，`Project target` 改為實際完成日的台北日期，取代 Milestone due date，也不使用 `--target-date`。完成日優先取 `Status` 改成 `Done` 的日期（該欄位值的 `updatedAt`），沒有時取 Issue 的 `closed_at`；兩者都有且不同時以 Done 日期為準，因為 Done 是擁有者驗收後的完成。未關閉、也不是 Done 的 Issue（包括重新開啟的 Issue）規則不變。
 - `csarc issue sync-project --issue <N>`／`--milestone <M>` 依目前的 Milestone 冪等同步；空欄直接寫入，既有值不同時先列 diff，經確認（互動確認或 `--yes`）才覆寫。只同步 Issue，不同步 PR。
 - Issue 已建立但 Project 寫入失敗時保留 Issue，輸出單一可重跑的修復指令；加入 item 以 Issue 與 Project 的 identity upsert，重跑不產生重複 item。
@@ -313,10 +313,10 @@ WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup
 - [SPEC-008 lifecycle report format](SPEC-008-lifecycle-report-format.md)
 - [Simplified project configuration ADR](../adr/simplified-project-configuration.md)
 - [Issue #1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)
-- [Issue #1072](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1072) — repository detector 與唯一推導
-- [Issue #1078](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1078) — 設定問卷、工作模式與 approval route preflight
-- [Issue #1080](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1080) — GitHub Project Roadmap 同步
-- [Issue #1186](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1186) — 看板範圍、台北日期與 14 天預設 target
-- [Issue #1058](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1058) — 決定 3、8、14–17、23、25
-- [Issue #900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900) — 平面、最少的設定
-- [Issue #919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919) — 文件模式與語言
+- [Issue #1072](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1072)：repository detector 與唯一推導
+- [Issue #1078](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1078)：設定問卷、工作模式與 approval route preflight
+- [Issue #1080](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1080)：GitHub Project Roadmap 同步
+- [Issue #1186](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1186)：看板範圍、台北日期與 14 天預設 target
+- [Issue #1058](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1058)：決定 3、8、14–17、23、25
+- [Issue #900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900)：平面、最少的設定
+- [Issue #919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919)：文件模式與語言

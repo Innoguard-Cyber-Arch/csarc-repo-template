@@ -18,7 +18,7 @@ README、agent instructions、深入決策與簡報若各自重述同一件事�
 
 ## Context
 
-目前 root presentation 由 `site/` 維護，生成專案則由 template renderer 與 project-owned content／theme 組合。Hugo 已由 Issue #524（Milestone 13）完全取代為本機 Python 渲染引擎，不再是候選或 open work；雙語與 `llms.txt` 已隨同一批改動落地。
+目前 root presentation 由 `site/` 維護，生成專案則由 template renderer 與 project-owned content／theme 組合。Hugo 已由 Issue #524（Milestone 13）取代為本機 Python 渲染引擎，不再是候選或 open work；雙語與 `llms.txt` 已隨同一批改動實作。
 
 ## Acceptance criteria
 
@@ -28,7 +28,7 @@ README、agent instructions、深入決策與簡報若各自重述同一件事�
 - [x] Root 保存自身真實內容；Copier template 保存 renderer／結構，並保留 consuming project 的內容與 theme overrides。
 - [x] `noindex`／`robots.txt` 只標示資料邊界，不被描述成 access control。
 - [x] 聊天只在使用者確認後摘要進 work item／decision record；不保存完整逐字稿、敏感資訊或模型 chain-of-thought。
-- [x] Hugo 已由 Issue #524（Milestone 13）正式 cutover 為本機 Python 渲染引擎；i18n（雙語）與 `llms.txt`（AI-readable output）已隨同一批改動落地，不再是候選狀態。
+- [x] Hugo 已由 Issue #524（Milestone 13）正式 cutover 為本機 Python 渲染引擎；i18n（雙語）與 `llms.txt`（AI-readable output）已隨同一批改動實作，不再是候選狀態。
 - [x] `documentation_mode` 是文件能力的唯一控制面；舊 `features: repo-site` 更新時遷移，不形成平行開關。
 - [x] `documentation_languages`（Issue #1071 合併原本的 `primary_language` 與 `i18n`）控制主要入口與英文／繁體中文 README，且不要求 README 與深度文件逐字一致。
 - [x] 本機 AI review 以四態結果綁定 exact PR head，`drift`／`inconclusive` 阻擋交付，不新增 hosted AI job。

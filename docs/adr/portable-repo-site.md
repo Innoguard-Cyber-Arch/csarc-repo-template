@@ -71,7 +71,7 @@ Issue #527 要求：在 #524 讓渲染引擎與排版模板各自獨立版本、
 
 ## 2026-09-03 稽核軌跡呈現與資料新鮮度（Issue #559）
 
-Issue #535 已完成稽核軌跡的資料自動產生機制：`scripts/generate_audit_trail.py` 即時查詢 GitHub GraphQL API，輸出 PR 稽核表與規則變更（`policies/` 路徑）maker/checker 紀錄兩份 Markdown。呈現層當時留待 #524 的 Python 渲染引擎落地後才處理，因此拆成獨立的 #559；#524 已合併，本節記錄呈現機制與資料新鮮度的實際決定。
+Issue #535 已完成稽核軌跡的資料自動產生機制：`scripts/generate_audit_trail.py` 即時查詢 GitHub GraphQL API，輸出 PR 稽核表與規則變更（`policies/` 路徑）maker/checker 紀錄兩份 Markdown。呈現層當時留待 #524 的 Python 渲染引擎上線後才處理，因此拆成獨立的 #559；#524 已合併，本節記錄呈現機制與資料新鮮度的實際決定。
 
 **決定**：這個 repo-site 是「重建後逐位元組相同、可用 `file://` 離線開啟」的靜態單檔（見本 ADR 最上方「決定」第 1 點），架構上不可能顯示即時查詢的結果，也不為了呈現這個模組破例。#535 的證據已建議比照 `scripts/check-governance-drift` 的既有先例——本模板 source repo 只保留腳本供本機／CI 驗證，不另外啟用排程；本 Issue 採用同一先例並延伸到「不提交快照」：既不加即時查詢（架構上做不到），也不加排程或 on-merge job 產生後提交進 repo（需要持續維護，且會讓使用者誤以為頁面上的資料是某個時間點的真實快照而非結構說明）。網站只呈現兩份輸出檔案各自的路徑與欄位結構，以及重新產生的確切指令，並在文案中明講「不嵌入即時或先前產生的資料列，也沒有排程」。
 
@@ -132,7 +132,7 @@ Issue #681/#682 為英文首頁引入的解法——把版本號搬出表格、�
 
 ## 2026-09-03 GitHub Pages 宣告式政策（#571）
 
-Repo 由 private 轉 public 後，維護者直接對 live GitHub 啟用了 GitHub Pages（`source.branch=main`、`source.path=/docs`，classic「deploy from branch」，`main` 有新 push 時自動重建）。Issue #571 把這個決定落地成 `policies/pages.json`（含可關閉的 `enabled` 欄位）與 `scripts/apply-repository-settings.sh` 的對應 apply／check 區塊，比照 `policies/rulesets.json` 既有的 plan-aware `DEGRADED` 偵測：GitHub Pages 對 private repository 需要 GitHub Enterprise Cloud，Free／Pro／Team 都無法在 private 啟用；public repository 則所有方案皆可免費使用。這正是上方「GitHub capability matrix」表格「核准的 Pages／內部 host 與寫入權限 allowed」一列描述的情境，本次只是把該能力從『可能可用』變成有實際宣告式政策與 live 驗證的具體案例。
+Repo 由 private 轉 public 後，維護者直接對 live GitHub 啟用了 GitHub Pages（`source.branch=main`、`source.path=/docs`，classic「deploy from branch」，`main` 有新 push 時自動重建）。Issue #571 把這個決定實作成 `policies/pages.json`（含可關閉的 `enabled` 欄位）與 `scripts/apply-repository-settings.sh` 的對應 apply／check 區塊，比照 `policies/rulesets.json` 既有的 plan-aware `DEGRADED` 偵測：GitHub Pages 對 private repository 需要 GitHub Enterprise Cloud，Free／Pro／Team 都無法在 private 啟用；public repository 則所有方案皆可免費使用。這正是上方「GitHub capability matrix」表格「核准的 Pages／內部 host 與寫入權限 allowed」一列描述的情境，本次只是把該能力從「可能可用」變成有實際宣告式政策與 live 驗證的具體案例。
 
 這個變更只是在既有 committed bundle 之上「新增」一種發布管道，不改變本 ADR 的核心保證：`docs/index.html`／`docs/index.en.html` 仍是完整內嵌、可 `file://` 直接開啟的單檔交付物；`docs/.nojekyll` 只是避免 GitHub Pages 對這個純靜態、已建置完成的 bundle 執行不必要的 Jekyll 處理，不引入任何 runtime 依賴或外部資產。Pages 發布失敗或不可用時，repository 內已提交的 bundle 仍是不下降的最低交付保證，與「發布失敗時回退 artifact／committed bundle，不降低內容驗證」的既有承諾一致。
 
