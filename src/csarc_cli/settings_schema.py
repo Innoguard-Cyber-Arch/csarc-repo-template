@@ -92,16 +92,22 @@ INTENT_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
     "container": (BOOL, ()),
     "project_verification_hook": (TEXT, ()),
     "github_project_url": (TEXT, ()),
+    "single_writer_merger": (TEXT, ()),
 }
 # Optional intent and its default when absent: #1080 added it after older
 # readers, which reject unknown keys, so a schema 2 file may omit it.
-OPTIONAL_DEFAULTS: dict[str, object] = {"github_project_url": ""}
+OPTIONAL_DEFAULTS: dict[str, object] = {
+    "github_project_url": "",
+    "single_writer_merger": "",
+}
 # K2 (#1080): only the full organization or user ProjectV2 URL is saved;
 # project, field, and item IDs are always resolved live.
 PROJECT_URL = re.compile(
     r"^https://github\.com/(?P<kind>orgs|users)/(?P<login>[A-Za-z0-9-]+)"
     r"/projects/(?P<number>[1-9][0-9]*)$"
 )
+# Issue #1233: the opted-in single-writer merger is one GitHub user login.
+GITHUB_LOGIN = re.compile(r"^(?=.{1,39}$)[A-Za-z0-9](?:-?[A-Za-z0-9])*$")
 DECISION_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
     "package_name": (TEXT, ()),
     "project_run_command": (TEXT, ()),
@@ -279,10 +285,12 @@ def _validate_value(key: str, value: object) -> None:
     elif kind == INT:
         valid = type(value) is int and 1 <= value <= 100
     else:
+        pattern = {
+            "github_project_url": PROJECT_URL,
+            "single_writer_merger": GITHUB_LOGIN,
+        }.get(key)
         valid = isinstance(value, str) and (
-            key != "github_project_url"
-            or not value
-            or PROJECT_URL.fullmatch(value) is not None
+            pattern is None or not value or pattern.fullmatch(value) is not None
         )
     if not valid:
         expected = ", ".join(allowed) if allowed else kind

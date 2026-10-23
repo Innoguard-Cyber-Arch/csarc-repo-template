@@ -522,6 +522,16 @@ github_project_url:
   when: false
   validator: "{% if github_project_url and not github_project_url | regex_search('^https://github\\.com/(orgs|users)/[A-Za-z0-9-]+/projects/[1-9][0-9]*$') %}Use https://github.com/orgs/<org>/projects/<n> or https://github.com/users/<user>/projects/<n>, or leave it empty.{% endif %}"
 
+# Issue #1233: owner opt-in to the single-writer merge route for one named
+# merger when other writers exist. Empty keeps writer auto-detection; set it
+# once with --data. Never asked.
+single_writer_merger:
+  type: str
+  help: Optional GitHub login allowed to merge by lifecycle while other writers exist
+  default: ""
+  when: false
+  validator: "{% if single_writer_merger and not single_writer_merger | regex_search('^(?=.{1,39}$)[A-Za-z0-9](?:-?[A-Za-z0-9])*$') %}Use one GitHub login, or leave it empty.{% endif %}"
+
 repository_url:
   type: str
   help: Canonical GitHub repository URL used by badges and package metadata

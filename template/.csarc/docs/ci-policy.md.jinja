@@ -80,8 +80,9 @@ Agent 以 `.csarc/scripts/pr_lifecycle.py create` 從已 push、乾淨的 exact 
 | --- | --- | --- |
 | Ruleset 完整讀回且形狀相符 | allowed | `server_enforcement=ruleset` |
 | 沒有 Ruleset（含 Free private 的「方案不支援」403），API 完整讀回只有一個寫入者，就是合併者 | allowed | `server_enforcement=none`；summary 加 `single-writer-trace` |
+| 沒有 Ruleset、另有寫入者，合併者是 `.csarc/config.yml` 的 `single_writer_merger` 且即時角色至少 `write` | allowed | 擁有者以 `csarc update --data single_writer_merger=<login>` 主動開啟並接受風險：其他寫入者仍可直接修改 repository；trace 記下當下所有寫入者 |
 | 沒有 Ruleset、另有寫入者，且有 exact head 的獨立核准 | allowed | `server_enforcement=none`；summary 加 `independent-approval-trace` |
-| 沒有 Ruleset 且另有寫入者，沒有獨立核准 | manual-only | 人工合併並記為 `untraced`{% if owned %}；CSARC 發版 fail closed{% endif %} |
+| 沒有 Ruleset 且另有寫入者，沒有獨立核准或設定開啟的合併者 | manual-only | 人工合併並記為 `untraced`{% if owned %}；CSARC 發版 fail closed{% endif %} |
 | 讀取失敗（「方案不支援」以外的 403、404、5xx）、分頁不完整或角色不明 | manual-only | 判為 `inconclusive`／`unknown`，不猜測 |
 | Ruleset 不符或 `mergeable_state` 不是 `clean` | blocked | 先修正條件 |
 

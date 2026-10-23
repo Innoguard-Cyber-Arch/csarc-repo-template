@@ -1105,8 +1105,9 @@ fail closed（接入 publisher 由 #1074 負責）。本機證據的 `completed_
 | --- | --- | --- | --- |
 | A（hosted）、E1（local＋`beta-only`／`always`）、C（local＋`off`）的 Ruleset 完整讀回且相符 | `enforced` | allowed | `server_enforcement=ruleset`；合併者身分見下方 |
 | 沒有任何 `pull_request`／`required_status_checks` 規則（含 Free private 的「方案不支援」403，#1210），API 完整讀回恰好一個寫入者，而且就是合併者 | `single-writer` | allowed | `server_enforcement=none`；agent 以唯一維護者身分執行，不另建 write 帳號 |
+| 沒有 Ruleset，另有寫入者，`.csarc/config.yml` 設定 `single_writer_merger: <login>`（#1233），合併者就是該帳號且即時角色至少 `write`，寫入者讀回完整 | `single-writer` | allowed | `server_enforcement=none`；擁有者主動開啟，見下方風險；記為 `configured-merger` |
 | 沒有 Ruleset，另有寫入者，且有對 exact head 的獨立 maintainer approval（#1211） | `independent-approval` | allowed | `server_enforcement=none`；寫入者讀回仍須完整、`mergeable_state` 仍須 `clean`；summary 加 `independent-approval-trace` |
-| 沒有 Ruleset，另有寫入者（collaborator、可寫 team 成員或可寫 deploy key），沒有獨立 approval | `multiple-writers` | manual-only | 人工在 GitHub 合併，記為 `untraced`，`csarc-owned` 發版 fail closed |
+| 沒有 Ruleset，另有寫入者（collaborator、可寫 team 成員或可寫 deploy key），沒有獨立 approval，也不是設定開啟的合併者 | `multiple-writers` | manual-only | 人工在 GitHub 合併，記為 `untraced`，`csarc-owned` 發版 fail closed |
 | Ruleset 或寫入者讀取失敗（「方案不支援」403 以外的 403、404、5xx 或無法辨識的回應）、分頁不完整、team 成員不可見、缺 `role_name` 或未知角色 | `inconclusive`／`unknown` | manual-only | 同上；不猜測、不讀 legacy `permission` |
 | Ruleset 形狀不符、未生效、未驗證的 bypass，或沒有 Ruleset 時 `mergeable_state` 不是 `clean`（含 `unstable`） | `blocked` | blocked | 先修正條件，lifecycle 不合併 |
 
@@ -1118,9 +1119,9 @@ push 者，不再排除合併者本人（見「Exact-head review 即為合併授
 讀不到都改判 `blocked`，不合併。GitHub App
 合併者（例如 `github-actions[bot]`）只有 installation 權限、沒有 repository role，記為 `app`。admin bypass 與
 emergency hotfix route 的合併者就是 live admin 授權者本人（#918／#1064），照常允許並記為
-`admin-authorizer`，表示這不是獨立 agent 身分路線；single-writer route 記為 `sole-maintainer`，
-independent-approval route 記為 `independent-approval`。`check` 輸出 `merge_identity`，`merge-trace` 帶
-`identity=<agent-write|approver|app|admin-authorizer|sole-maintainer|independent-approval>`；
+`admin-authorizer`，表示這不是獨立 agent 身分路線；single-writer route 記為 `sole-maintainer`（設定開啟時為
+`configured-merger`），independent-approval route 記為 `independent-approval`。`check` 輸出 `merge_identity`，`merge-trace` 帶
+`identity=<agent-write|approver|app|admin-authorizer|sole-maintainer|configured-merger|independent-approval>`；
 independent-approval route 另加一行 `independent-approval-trace: approver=<login> merger=<login>
 server_enforcement=none ...`，同時記錄核准者與合併者。
 
@@ -1137,6 +1138,17 @@ repository 另讀 repository teams：每個可寫 team 的成員都必須讀得�
 並加一行 `single-writer-trace: writer=<login> server_enforcement=none ...`，明記沒有 Ruleset 參與，不宣稱
 伺服器曾經阻擋。`admin_bypass: off` 的 single-writer repository 沒有獨立 reviewer，lifecycle 會拒絕；改用
 `beta-only`／`always` 或人工合併。限制：GitHub App 安裝不在讀回範圍。
+
+**設定開啟的 single-writer（#1233）**：組織 repository 常有不能降權的其他 admin，但實際只有一位維護者。
+擁有者可用 `csarc update --data single_writer_merger=<login>` 開啟：沒有 Ruleset 且寫入者讀回完整時，只有
+這個帳號、且即時 `role_name` 為 `write`／`maintain`／`admin`，才在另有寫入者時走 single-writer。其他合併者、
+較低或讀不到的角色、讀回不完整都維持 manual-only；未設定（空值或省略）時照舊只認恰好一個寫入者。設定值
+不是合法 GitHub 帳號時 lifecycle 直接失敗；帳號不存在時即時角色讀不到，同樣 manual-only。新增或改成另一個
+帳號屬於 governance relaxation，PR 須走 `governance-switch` route。required checks、exact-head 授權、lease、
+admin bypass marker 與 merge trace 都不放寬；#1211 的獨立核准優先適用。`single-writer-trace` 另加
+`enabled_by=config:single_writer_merger writers=<帳號> write_deploy_keys=<key id>`，記下合併當下完整的寫入者
+清單。風險：其他寫入者仍可在 agent 合併的同時直接修改 repository，伺服器端沒有任何強制；開啟即表示擁有者
+明示接受這個風險。
 
 Free private（#1210）：GitHub Free 的 private repository 不能使用 Ruleset，`rules/branches/<branch>` 回
 `Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)`。lifecycle 只把

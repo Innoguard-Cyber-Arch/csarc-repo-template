@@ -374,6 +374,8 @@ GOVERNANCE_ORDER: dict[str, tuple[str, ...]] = {
 GOVERNANCE_FLAGS = ("enable_codeql",)
 GOVERNANCE_LISTS = ("lifecycle", "scheduled_checks")
 GOVERNANCE_MINIMUMS = ("coverage_threshold",)
+# Issue #1233: naming a new single-writer merger widens who may merge.
+GOVERNANCE_GRANTS = ("single_writer_merger",)
 
 SUITE_RANK = {"fast": 0, "full": 1}
 FULL_FLOOR_LABELS = frozenset({"hotfix", "promotion", "release-recovery"})
@@ -442,6 +444,10 @@ def governance_relaxations(  # noqa: C901
         before, after = base.get(key), candidate.get(key)
         if type(before) is int and (type(after) is not int or after < before):
             relaxed.append(f"{key}: {before} -> {after}")
+    for key in GOVERNANCE_GRANTS:
+        before, after = base.get(key, ""), candidate.get(key, "")
+        if after and after != before:
+            relaxed.append(f"{key}: {before or '-'} -> {after}")
     return relaxed
 
 

@@ -24,6 +24,9 @@
   "security_reporting_channel": security_reporting_channel,
   "verification_mode": verification_mode,
 } %}
+{%- if single_writer_merger | default('') %}
+{%- set _ = saved.update({"single_writer_merger": single_writer_merger}) %}
+{%- endif %}
 {%- for key in ["_commit", "_src_path"] if key in _copier_answers %}
 {%- set _ = saved.update({key: _copier_answers[key]}) %}
 {%- endfor %}
