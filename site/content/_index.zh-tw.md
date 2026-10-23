@@ -656,8 +656,6 @@ Adoption 與 update 不從 workflow 檔名推測 ownership。`.csarc/config.yml`
 
 `release_ownership: csarc-owned` 的生成 repo（含本模板 root 自己）由 hosted `release.yml` 與 Actions 不健康時的維護者／agent 本機路徑，共用同一份 `scripts/publish-release`。每張 release-worthy 變更都已在原交付 PR 物化並審查 beta 或 stable 候選；切換 publisher 不會另開版本 PR，也不能省略 hosted `verify`／`title`／`review`。發布時會下載重驗成品與 GitHub 簽發的 immutable-release attestation；細節見 [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md) 與 [release-security-and-dependencies ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md)。
 
-`release_ownership: csarc-owned` 的生成 repo（含本模板 root 自己）由 hosted `release.yml` 與 Actions 不健康時的維護者／agent 本機路徑，共用同一份 `scripts/publish-release`。每張 release-worthy 變更都已在原交付 PR 物化並審查 beta 或 stable 候選；切換 publisher 不會另開版本 PR，也不能省略 hosted `verify`／`title`／`review`。發布時會下載重驗成品與 GitHub 簽發的 immutable-release attestation；細節見 [ci-policy.md](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md) 與 [release-security-and-dependencies ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md)。
-
 Milestone promotion 發版成功後由 hosted／本機共用的 publisher 回填交付與 Release 證據，再自動關 tracker 與 Milestone；失敗時維持 open。工作分支合併後清理，里程碑 delivery branch 則等結案與未完成工作處置完成後才清理。
 {{< /disclosure >}}
 

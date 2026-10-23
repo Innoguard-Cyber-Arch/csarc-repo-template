@@ -1734,7 +1734,7 @@ collaborator 自核例外）才算通過，判斷邏輯與 tracker 層級的 `/m
 staleness 邊界（含 60 秒緩衝窗、跨過緩衝窗即過期、過期後重新核可即恢復通過）；
 `scripts/test-check-scope-gate` 對 `check-scope-gate` 本身做端到端回歸測試
 （無連結 Issue、無 sentinel、有 sentinel 未核可、有 sentinel 已核可、核可過期
-四種結果，掛在 `scripts/verify-stage-regression-tests`）。routine fast 由同一 Python suite
+五種結果，掛在 `scripts/verify-stage-regression-tests`）。routine fast 由同一 Python suite
 裡的窄版 policy 測試負責，避免再串行重跑完整 shell fixture。這次變更不重新設計
 `has_scope_sentinel()` 的偵測邏輯，也不擴大 `/milestone approve`／
 `admin-approve` 留言語彙本身，只在既有機制上補上 CI 接線與版本綁定這兩層。
@@ -1844,7 +1844,7 @@ create／adopt／update 矩陣）的階段沒有可查證據，只能自己跑�
 
 量測日期：2026-09-02；環境：本機（不是 hosted runner），與上方 full/fast 實測欄位
 同一台機器。本次量測**不是**獨占環境：同一次任務裡先後跑了三次
-`./scripts/verify-template.sh`，前兩次都不能當作乾淨樣本。第一次在 Repository
+`./scripts/verify-template.sh`，三次都不能當作乾淨的獨占樣本。第一次在 Repository
 contracts 階段因暫時性網路錯誤（`curl: (92) HTTP/2 stream 1 was not closed
 cleanly: PROTOCOL_ERROR`）於 212 秒處中止；第三次（跑之前已確認沒有其他
 pytest／verify／copier 程序在跑）前四個階段各只花 5s／5s／0s／1s，但 Regression
