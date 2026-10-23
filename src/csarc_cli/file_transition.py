@@ -647,6 +647,8 @@ def apply_transaction(
                 raise TransitionError(
                     "Applied content differs from the approved candidate: "
                     + ", ".join(mismatched)
+                    + " changed during the write. All writes were rolled "
+                    "back; run the command again."
                 )
         except BaseException:
             transaction.rollback()

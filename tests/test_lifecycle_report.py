@@ -769,7 +769,7 @@ def test_writer_replaces_regular_legacy_report_and_keeps_symlink(
     assert not (regular / cli.LEGACY_ADOPTION_REPORT_NAME).exists()
     assert (linked / cli.LEGACY_ADOPTION_REPORT_NAME).is_symlink()
     assert outside.read_text(encoding="utf-8") == "keep\n"
-    assert "kept non-regular legacy report" in capsys.readouterr().err
+    assert "Legacy report was kept" in capsys.readouterr().err
 
 
 def test_spec_documents_the_closed_contract() -> None:

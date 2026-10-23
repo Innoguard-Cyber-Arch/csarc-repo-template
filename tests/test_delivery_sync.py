@@ -835,7 +835,9 @@ def test_conflict_stops_before_opening_a_pull_request() -> None:
             (409, {"message": "Merge conflict"}),
         ]
     )
-    with pytest.raises(RuntimeError, match="Resolve it on sync/main-to-m7-ci"):
+    with pytest.raises(
+        RuntimeError, match="Resolve the conflicts on 'sync/main-to-m7-ci"
+    ):
         create_sync_pr(
             api,
             "acme/repo",

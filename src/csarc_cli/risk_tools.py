@@ -141,7 +141,10 @@ def gh_runner(command: list[str]) -> str:
     )
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip()
-        raise RiskToolError(f"gh {command[0]} failed: {detail}")
+        raise RiskToolError(
+            f"gh {command[0]} failed: {detail.rstrip('.')}. Run 'gh auth "
+            "status', then run the command again."
+        )
     return result.stdout
 
 
@@ -204,8 +207,8 @@ def split_body_argument(arguments: list[str]) -> tuple[int, str, bool]:
             found.append((index, argument, arguments[index + 1] == "-"))
     if len(found) != 1:
         raise RiskToolError(
-            "Pass exactly one --body or --body-file argument after `--`; "
-            "the author writes every part of the Issue outside the block."
+            "Issue body is ambiguous: the command needs exactly one body "
+            "argument. Pass one '--body' or '--body-file' after '--'."
         )
     return found[0]
 
@@ -247,7 +250,8 @@ def interactive_block(
         )
     if not rows:
         raise RiskToolError(
-            "Every suggestion was dropped; add at least one risk"
+            "Risk block is empty: every suggestion was dropped. Keep or "
+            "edit at least one suggested risk."
         )
     return "\n".join((risk_controls.LABEL, "", *HEADER_LINES, *rows))
 
@@ -265,6 +269,7 @@ class Hooks:
         if self.before is not None:
             self.before(command)
         output = self.run(["issue", "create", *command])
+        # message-pattern: allow X2 gh issue create output
         sys.stdout.write(output)
         return self.after(output) if self.after is not None else 0
 
@@ -320,16 +325,22 @@ def issue_create(
             " ".join(titles) + "\n" + body, labels, owner or "@", ask
         )
         candidate = append_block(body, block)
+        # message-pattern: allow X5 suggested Markdown block
         sys.stdout.write(block + "\n")
         if ask("Add this block to 補充? [y/N] ").strip().casefold() != "y":
-            raise RiskToolError("Issue creation cancelled; nothing was created")
+            raise RiskToolError(
+                "Issue creation cancelled: the block was not accepted. Run "
+                "'csarc issue create' again and answer 'y'."
+            )
         body, problems = candidate, create_problems(candidate)
     if problems:
+        # message-pattern: allow-begin X5 requirement-trace report
         for line in problems:
             sys.stderr.write(f"requirement-trace: {line}\n")
         sys.stderr.write("Suggested block (replace every TODO):\n")
         text = " ".join(titles) + "\n" + body
         sys.stderr.write(skeleton(suggest_categories(text, labels)) + "\n")
+        # message-pattern: allow-end
         return 1
     rest = [
         item
@@ -341,6 +352,7 @@ def issue_create(
         wrapper = Path("scripts/gh-issue-create")
         entry = str(wrapper) if wrapper.is_file() else "gh issue create"
         command = [entry, *rest, "--body-file", str(body_out)]
+        # message-pattern: allow X1 command line for the caller
         sys.stdout.write(" ".join(command) + "\n")
         return 0
     with tempfile.NamedTemporaryFile(

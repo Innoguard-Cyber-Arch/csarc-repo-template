@@ -386,7 +386,7 @@ def test_check_decide_apply_replays_one_final_plan(
         )
         == 2
     )
-    assert "remove --data" in capsys.readouterr().err
+    assert "Remove --data" in capsys.readouterr().err
 
     # R1: a tampered plan never reaches the target.
     original = plan_path.read_bytes()
@@ -422,7 +422,7 @@ def test_check_decide_apply_replays_one_final_plan(
 
     monkeypatch.setattr(cli, "repository_context", public_context)
     assert apply(project, plan_path) == 2
-    assert "Live facts differ from the final plan (repository)" in (
+    assert "Live facts differ from the final plan: repository." in (
         capsys.readouterr().err
     )
     monkeypatch.setattr(cli, "repository_context", real_context)
@@ -432,7 +432,7 @@ def test_check_decide_apply_replays_one_final_plan(
         cli, "repository_permissions", lambda _repository: {"push": False}
     )
     assert apply(project, plan_path) == 2
-    assert "(permissions)" in capsys.readouterr().err
+    assert "final plan: permissions." in capsys.readouterr().err
     monkeypatch.undo()
     assert target_state(project) == before
 
@@ -449,7 +449,7 @@ def test_check_decide_apply_replays_one_final_plan(
         lambda git_version: dict(real_toolchain(git_version), git="git 0.0"),
     )
     assert apply(project, plan_path) == 2
-    assert "toolchain differs from the final plan (git)" in (
+    assert "toolchain differs from the final plan: git." in (
         capsys.readouterr().err
     )
     monkeypatch.undo()

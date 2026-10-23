@@ -611,11 +611,11 @@ def test_settings_plan_names_its_real_failure(
 
     cli.settings_plan(target)
     output = capsys.readouterr()
-    assert "needs a GitHub" not in output.out
+    assert "needs a GitHub" not in output.err
     assert (
-        "Repository settings plan failed (exit 1): CODEOWNERS validation "
-        "failed: @org/team lacks access; no settings were applied."
-    ) in output.out
+        "WARNING: Repository settings plan failed (exit 1): CODEOWNERS "
+        "validation failed: @org/team lacks access; no settings were applied."
+    ) in output.err
     assert "CODEOWNERS validation failed" in output.err
 
 
@@ -630,9 +630,9 @@ def test_settings_plan_without_origin_says_so(
 
     cli.settings_plan(target)
     assert (
-        "Repository settings plan needs a GitHub origin remote; no settings "
-        "were applied."
-    ) in capsys.readouterr().out
+        "WARNING: Repository settings plan needs a GitHub origin remote: no "
+        "settings were applied."
+    ) in capsys.readouterr().err
 
 
 # --- Issue #1153 AC1: a kept product Release writer loses moved files -------

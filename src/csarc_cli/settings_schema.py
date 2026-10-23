@@ -242,10 +242,9 @@ def canonical_digest(value: object) -> str:
 def settings_error(detail: str) -> SettingsSchemaError:
     """Return one stable fail-closed error with the recovery path."""
     return SettingsSchemaError(
-        f"{SETTINGS_ERROR_PREFIX}: {detail}. No file was changed. Restore "
-        "the committed .csarc/config.yml and .csarc/provenance.json "
-        "(`git checkout -- .csarc/config.yml .csarc/provenance.json`), then "
-        "change settings only with `csarc update --data KEY=VALUE`."
+        f"{SETTINGS_ERROR_PREFIX}: {detail}. No file was changed. Run 'git "
+        "checkout -- .csarc/config.yml .csarc/provenance.json', then change "
+        "settings only with 'csarc update --data KEY=VALUE'."
     )
 
 
@@ -262,9 +261,9 @@ def declared_schema(raw: Mapping[str, object]) -> int:
         return SCHEMA_VERSION
     raise SettingsSchemaError(
         f"{SETTINGS_ERROR_PREFIX}: .csarc/config.yml declares "
-        f"{SCHEMA_KEY} {value!r}; this CLI reads only legacy answers and "
-        f"schema {SCHEMA_VERSION}. No file was changed; use the CLI release "
-        "that wrote this schema."
+        f"{SCHEMA_KEY} {value!r}: this CLI reads only legacy answers and "
+        f"schema {SCHEMA_VERSION}. No file was changed. Install the CLI "
+        "release that wrote this schema."
     )
 
 
@@ -514,7 +513,7 @@ def legacy_python_floor(answers: Mapping[str, object]) -> str:
     raise MigrationDecisionError(
         f"{SETTINGS_ERROR_PREFIX}: python_support_mode {mode!r} with "
         f"python_min_version {version!r} has no exact python_floor. Pass "
-        "`--data python_floor=<latest|3.12|3.13|3.14>`."
+        "'--data python_floor=<latest|3.12|3.13|3.14>'."
     )
 
 
@@ -529,7 +528,7 @@ def legacy_documentation_languages(answers: Mapping[str, object]) -> str:
         raise MigrationDecisionError(
             f"{SETTINGS_ERROR_PREFIX}: primary_language {primary!r} with "
             f"i18n {i18n!r} has no exact documentation_languages. Pass "
-            "`--data documentation_languages=<zh-tw|en|zh-tw+en|en+zh-tw>`."
+            "'--data documentation_languages=<zh-tw|en|zh-tw+en|en+zh-tw>'."
         )
     return value
 
@@ -622,5 +621,6 @@ def reject_retired_data(explicit: Mapping[str, object]) -> None:
         raise SettingsSchemaError(
             f"{SETTINGS_ERROR_PREFIX}: --data names retired settings: "
             + ", ".join(hints)
-            + ". No file was changed."
+            + ". No file was changed. Remove them, or pass the listed "
+            "successor with '--data'."
         )

@@ -514,7 +514,7 @@ def test_non_interactive_init_fails_before_lookup_render_or_write(
     assert not target.exists()
     error = capsys.readouterr().err.strip()
     assert error.count("\n") == 0
-    assert error.startswith("csarc: Missing required setup input")
+    assert error.startswith("ERROR: Missing required setup input")
     assert "--data project_description=" in error
 
 
