@@ -195,14 +195,14 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | [#373](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/373) Document the development loop design contradictions | superseded | 指出的分支／流程矛盾已由 #426（分支生命週期）與 #429（standalone 路由）解決，現行「現行交付路徑」章節即是矛盾解決後的單一敘述，不再有並存的舊路徑文件。 |
 | [#399](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/399) Separate work definition from merge guidance | preserved | 其責任分界（工作 PR 只關閉單項工作；版本／交付批次負責進入 `main`、正式版本與 Milestone 結案）直接寫入 `docs/ci-policy.md`「現行交付路徑」一節，是現行敘述的來源，不是待整合的舊決策。 |
 | [#403](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/403) Make staged verification sets responsibility complete | preserved | 「交付驗證是 Issue／PR 驗證的超集合」原則仍是現行驗證分級（見「驗證分級與實測成本」章節）與 #458 精簡設計的共同前提，未被取代。 |
-| [#406](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/406) Rewrite dependency security guidance and checks | preserved | 是 Dependency vulnerability 能力現行 owner；`scripts/verify-dependencies`、`tests/test_dependency_security.py` 與 `osv.yml` 都由其確立。狀態受限於 #407 同一則說明：候選尚未落地 `main`。 |
-| [#407](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407) Restore minimal dependency update and vulnerability automation | preserved | `osv.yml`＋`.github/dependabot.yml` 是其直接成果，見「Current automation」表；本 repository 因候選尚未落地 `main` 而標 candidate，新生成 repo 因 Copier 初始 commit 即落地而標 active——並非能力本身失效。 |
+| [#406](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/406) Rewrite dependency security guidance and checks | preserved | 是 Dependency vulnerability 能力現行 owner；`scripts/verify-dependencies`、`tests/test_dependency_security.py` 與 `osv.yml` 都由其確立。狀態受限於 #407 同一則說明：候選尚未進入 `main`。 |
+| [#407](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407) Restore minimal dependency update and vulnerability automation | preserved | `osv.yml`＋`.github/dependabot.yml` 是其直接成果，見「Current automation」表；本 repository 因候選尚未進入 `main` 而標 candidate，新生成 repo 因 Copier 初始 commit 即生效而標 active——並非能力本身失效。 |
 | [#426](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/426) Define branch lifecycle and cleanup rules | preserved | 直接對應 `docs/ci-policy.md`「現行交付路徑」與 `scripts/cleanup-worktrees`；固定 `dev/next`／`promote/next` 退役即是其規則的現行結果。 |
 
 ## Dependabot 自動合併取代 #322 cooldown 半部結論（#557，2026-09-03）
 
 [#322](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/322) 上方列為 superseded（部分）：「dependency cooldown」半部（發行後延遲才開 PR）已由 #341 的 SBOM 與 #407 的
-`.github/dependabot.yml` `cooldown.default-days: 3` 落地保留；但「cooldown 滿足後、checks 通過即可自動合併」這一段，
+`.github/dependabot.yml` `cooldown.default-days: 3` 實作保留；但「cooldown 滿足後、checks 通過即可自動合併」這一段，
 #322 當時判定維持 not planned——理由明列為「從未實作且目前沒有 owner 認領，也沒有已知事故證明其必要性」。本節不改寫、不刪除上方那一列，
 只記錄取代其中這一段門檻：[#557](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/557) 提供 #322 當時缺的兩個前提——
 明確 owner（維護者 matheme-justyn，同時是 Issue assignee）與明確事故（#543／#544／#545 三張 Dependabot PR 開出 2 小時仍無人處理的真實 backlog，
@@ -219,7 +219,7 @@ promotion route classifier 併入 `title`，移除沒有獨立證據邊界的 `p
 範圍邊界：本節只取代「PR 開出後如何自動合併」這一段判斷，不重新開放整個 #322，也不影響已經 preserved 的 cooldown／SBOM
 半部——`.github/dependabot.yml` 的 `cooldown.default-days: 3` 維持原樣，不因本節新增而重新設定或延長。同步下發 `template/`
 （新 workflow 與 `policies/labels.json` 的 `needs-manual-review` 標籤定義），下游生成專案取得同一份政策；`docs/ci-policy.md`
-沿用既有「Current automation」表的 candidate／active 判斷慣例，待落地 `main` 並有 live run 證據後再登錄，不在本節預先宣告 active。
+沿用既有「Current automation」表的 candidate／active 判斷慣例，待進入 `main` 並有 live run 證據後再登錄，不在本節預先宣告 active。
 
 ### Dependabot privileged sync 的 current-head trust boundary（#830，2026-09-20）
 
@@ -402,5 +402,5 @@ Release 收回 draft。
 
 - GitHub 的 merge、Ruleset 或 Actions 模型改變，使 exact-head、remote lease、同 PR 版本物化或 post-merge publisher 無法維持目前的 fail-closed 邊界。
 - 有消費端產品提出真實的 registry publishing 或 production-side attestation 需求，需要決定是否、以及如何在不違反「單一 tag／Release writer」原則下擴充 `release.yml` 或另開專用 workflow。
-- `release.yml` 的候選驗證（`scripts/verify-release-candidate`）或 bundle 驗證（`scripts/release_bundle.py`）在 default branch 首次 live run 後發現與本 ADR 假設不符的落地行為，需要更新 Current-state 契約或決定本身。
+- `release.yml` 的候選驗證（`scripts/verify-release-candidate`）或 bundle 驗證（`scripts/release_bundle.py`）在 default branch 首次 live run 後發現與本 ADR 假設不符的實作行為，需要更新 Current-state 契約或決定本身。
 - 既有 repo 保留的 product-owned release workflow 出現與本 ADR 的 ownership 邊界（#369）衝突的新情境，例如 product workflow 本身改變 trigger 或 input contract，需要重新檢視 #369 的 ownership schema 是否仍夠用。
