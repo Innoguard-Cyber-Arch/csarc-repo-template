@@ -1043,6 +1043,12 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
   legacy 設定只由外部 pinned CLI 的 migration registry 讀取。它只讀不寫；新的 schema 必須先由 trusted base
   的 reader 支援，writer 才切換（#1058 決定 8）。candidate 自己的 parser 與 route 只在 lifecycle 的
   `policy_self_test` 以 non-authoritative 方式重播，差異只列在輸出，不改變 base 的決定。
+- **升級帶來的新設定（#1239）**：candidate 設定含 base 不認得的鍵時，只有 PR 帶 `governance-switch`
+  label，且經 GitHub API 確認 `.csarc/provenance.json` 所記 tag 是已發布、immutable 的正式版（非 draft、
+  非 prerelease）並指向 `.csarc/config.yml` 的 `_commit`，才改用該 commit 上的 `csarc_config.py` 判讀；
+  schema 從不取自 PR 檔案，schema 版本也不能改變。採用時 route 輸出與 merge trace 記錄
+  `schema_source=release:<tag>`；其餘情況 fail closed，訊息說明原因與下一步（加 label、確認升級目標是
+  已發布正式版，或人工合併）。這個例外只在 base 已含此 reader 後生效。
 - **Release channel floor**：delivery branch（`dev/m*`、`dev/i*`）是 beta，floor 為 fast；其他 base
   （standalone、hotfix、release recovery 指向 `main`）是 stable，floor 為 full；`hotfix`、`release-recovery`、
   `promotion` label 也要求 full。`verify-fast` 取 floor 與 path tier 中較強者；`verification_mode: local`

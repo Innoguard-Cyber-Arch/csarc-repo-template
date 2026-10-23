@@ -2610,7 +2610,15 @@ def base_policy_decision(
             run([*git, "show", f"{head_sha}:.csarc/config.yml"]) + "\n",
             encoding="utf-8",
         )
+        provenance = Path(scratch) / "candidate-provenance.json"
+        with contextlib.suppress(RuntimeError):
+            provenance.write_text(
+                run([*git, "show", f"{head_sha}:.csarc/provenance.json"])
+            )
         try:
+            candidate, schema_source = executor.read_candidate_config(
+                candidate_config, labels, executor.saved_release_tag(provenance)
+            )
             decision = executor.classify_route(
                 [
                     item.decode("utf-8", "surrogateescape")
@@ -2618,7 +2626,7 @@ def base_policy_decision(
                     if item
                 ],
                 executor.read_config(base_config),
-                executor.read_config(candidate_config),
+                candidate,
             )
         except (OSError, ValueError) as error:
             raise RuntimeError(
@@ -2667,6 +2675,7 @@ def base_policy_decision(
     return {
         "route": decision.route,
         "reasons": list(decision.reasons),
+        "schema_source": schema_source,
         "path_tier": path_tier,
         "self_test": self_test,
     }
@@ -3312,6 +3321,7 @@ def merge_snapshot(  # noqa: C901
         ),
         "merge_route": policy["route"],
         "merge_route_reasons": policy["reasons"],
+        "schema_source": policy.get("schema_source", "base"),
         "required_tier": required_tier,
         "policy_self_test": policy["self_test"],
         "admin_bypass": admin_bypass,
@@ -3847,6 +3857,11 @@ def trace_lines(
 ) -> list[str]:
     """Return the audit trace lines recorded in the summary status."""
     lines: list[str] = []
+    # Issue #1239: new settings judged by a release schema stay visible.
+    if str(snapshot.get("schema_source") or "base") != "base":
+        lines.append(
+            f"schema-trace: schema_source={snapshot['schema_source']} {suffix}"
+        )
     if snapshot.get("reviewed_bypass") is True:
         reason = (
             "exact-head-copilot-review"

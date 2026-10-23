@@ -37,6 +37,7 @@ with that copy, and candidate code never runs in the step that holds a token.
 from __future__ import annotations
 
 import argparse
+import base64
 import contextlib
 import hashlib
 import importlib
@@ -48,9 +49,11 @@ import stat
 import subprocess
 import sys
 import tempfile
-from collections.abc import Generator
+import types
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -409,6 +412,92 @@ def read_config(path: Path) -> dict[str, object]:
     return csarc_config.load_config(path)
 
 
+# Issue #1239: a template upgrade can add settings this base cannot read.
+RELEASES = "repos/Innoguard-Cyber-Arch/csarc-repo-template"
+RELEASE_SCHEMA = "template/.csarc/scripts/csarc_config.py"
+
+
+def gh_api(endpoint: str) -> dict[str, Any]:
+    """Read one GitHub REST object, failing closed."""
+    result = subprocess.run(  # noqa: S603 - fixed gh arguments
+        ["gh", "api", endpoint],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    with contextlib.suppress(ValueError):
+        if not result.returncode and isinstance(
+            payload := json.loads(result.stdout), dict
+        ):
+            return payload
+    raise RuntimeError(f"GitHub cannot read {endpoint}")
+
+
+def saved_release_tag(path: Path | None) -> object:
+    """Return the release tag the candidate's provenance names, if any."""
+    with contextlib.suppress(OSError, ValueError, AttributeError):
+        return json.loads(path.read_text("utf-8") if path else "{}").get(
+            "release_tag"
+        )
+    return None
+
+
+def release_schema(
+    tag: object, commit: object, api: Callable[[str], Any]
+) -> types.ModuleType:
+    """Load the settings reader of one immutable stable CSARC release."""
+    if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", str(tag)):
+        raise RuntimeError(f"{tag!r} is not a stable CSARC release tag")
+    release = api(f"{RELEASES}/releases/tags/{tag}")
+    if [release.get(key) for key in ("tag_name", "draft", "prerelease")] != [
+        tag,
+        False,
+        False,
+    ] or not (release.get("published_at") and release.get("immutable")):
+        raise RuntimeError(f"{tag} is not a published immutable stable release")
+    target = api(f"{RELEASES}/git/ref/tags/{tag}")["object"]
+    while target.get("type") == "tag":
+        target = api(f"{RELEASES}/git/tags/{target['sha']}")["object"]
+    if SHA.fullmatch(str(commit)) is None or target.get("sha") != commit:
+        raise RuntimeError(f"{tag} does not point to _commit {commit}")
+    source = api(f"{RELEASES}/contents/{RELEASE_SCHEMA}?ref={commit}")
+    module = types.ModuleType("csarc_release_config")
+    # The code comes from the immutable stable release, never the PR.
+    exec(base64.b64decode(source["content"]), vars(module))  # noqa: S102
+    if module.SCHEMA_VERSION != CURRENT_SCHEMA:
+        raise RuntimeError(f"{tag} writes another schema")
+    return module
+
+
+def read_candidate_config(
+    path: Path,
+    labels: set[str],
+    tag: object = None,
+    api: Callable[[str], Any] = gh_api,
+) -> tuple[dict[str, object], str]:
+    """Read the candidate settings and name the schema that judged them."""
+    try:
+        return read_config(path), "base"
+    except csarc_config.SettingsError:
+        values = csarc_config.parse_settings_text(path.read_text("utf-8"), path)
+        new = ", ".join(sorted(set(values) - csarc_config.ALLOWED_KEYS))
+        if not new:
+            raise
+    try:
+        if GOVERNANCE_SWITCH_LABEL not in labels:
+            raise RuntimeError(f"the PR has no {GOVERNANCE_SWITCH_LABEL} label")
+        module = release_schema(tag, values.get("_commit"), api)
+        return module.load_config(path), f"release:{tag}"
+    except Exception as error:  # every failure stays closed
+        raise ValueError(
+            f"settings {new} come from a newer CSARC template release than "
+            f"this base reads, and the release schema cannot verify them: "
+            f"{error}. Add the {GOVERNANCE_SWITCH_LABEL} label, confirm the "
+            "upgrade targets a published stable CSARC release, or merge by "
+            "hand."
+        ) from error
+
+
 def governance_relaxations(  # noqa: C901
     base: dict[str, object], candidate: dict[str, object]
 ) -> list[str]:
@@ -692,12 +781,17 @@ def policy_self_test(
 
 def _route_command(args: argparse.Namespace) -> int:
     """Print or enforce one base-policy route."""
+    labels = {label for label in args.labels.split(",") if label}
     try:
         base = read_config(args.base_config)
-        candidate = read_config(args.candidate_config)
+        candidate, source = read_candidate_config(
+            args.candidate_config,
+            labels,
+            saved_release_tag(args.candidate_provenance),
+        )
     except (OSError, ValueError) as error:
         sys.stderr.write(
-            f"Trusted base cannot read the configuration: {error}\n"
+            f"ERROR: Trusted base cannot read the configuration: {error}\n"
         )
         return 1
     changed: list[str] | None = []
@@ -712,13 +806,12 @@ def _route_command(args: argparse.Namespace) -> int:
     if args.json:
         sys.stdout.write(json.dumps(decision.as_json(), sort_keys=True) + "\n")
     else:
-        sys.stdout.write(f"Merge route: {decision.route}\n")
+        shown = "" if source == "base" else f" schema_source={source}"
+        sys.stdout.write(f"Merge route: {decision.route}{shown}\n")
         sys.stdout.writelines(f"- {reason}\n" for reason in decision.reasons)
     if args.enforce:
         try:
-            require_route(
-                decision, {label for label in args.labels.split(",") if label}
-            )
+            require_route(decision, labels)
         except RuntimeError as error:
             sys.stderr.write(f"{error}\n")
             return 1
@@ -787,6 +880,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     route = commands.add_parser("route", help="select the base-policy route")
     route.add_argument("--base-config", type=Path, required=True)
     route.add_argument("--candidate-config", type=Path, required=True)
+    route.add_argument("--candidate-provenance", type=Path)
     changed = route.add_mutually_exclusive_group()
     changed.add_argument("--changed-files", type=Path)
     changed.add_argument("--pull-files", type=Path)
