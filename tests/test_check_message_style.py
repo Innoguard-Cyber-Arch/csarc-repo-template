@@ -226,6 +226,13 @@ def test_checker_messages_follow_the_patterns() -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_every_repository_message_conforms() -> None:
+    """#1221 AC1/AC6: scripts, template scripts and the CLI all conform."""
+    result = run(ROOT, "--all")
+    assert result.returncode == 0, result.stderr[-4000:]
+    assert result.stdout.startswith("OK: Message pattern check passed")
+
+
 def test_root_defaults_cover_the_cli(tmp_path: Path) -> None:
     """#1221 AC6: the root check also reads `src/csarc_cli` messages."""
     (tmp_path / "scripts").mkdir()
