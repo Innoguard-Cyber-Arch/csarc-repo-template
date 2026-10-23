@@ -218,7 +218,7 @@ def logging_gh(tmp_path: Path) -> tuple[Path, Path]:
             settings_support.settings_text(governance_mode="shared"),
             "governance_mode is 'shared'",
         ),
-        (None, "CSARC settings error: .csarc/config.yml is missing"),
+        (None, ".csarc/config.yml is missing. Run 'csarc update'."),
     ],
 )
 def test_settings_script_stops_before_any_github_call(

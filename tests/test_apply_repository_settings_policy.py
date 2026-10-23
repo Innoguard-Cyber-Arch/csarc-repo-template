@@ -262,21 +262,23 @@ def test_disabled_policies_are_skipped_in_check_and_apply(
     check_output = check_result.stdout + check_result.stderr
     assert check_result.returncode == 0, check_output
     assert (
-        "SKIPPED policies/repository.json (governance_mode=observe"
+        "NOTICE: Skipped policies/repository.json (governance_mode=observe"
         in check_output
     )
     assert (
-        "SKIPPED policies/releases.json (release_immutable_releases="
+        "NOTICE: Skipped policies/releases.json (release_immutable_releases="
         "not-required" in check_output
     )
     assert (
-        "SKIPPED policies/actions.json (governance_mode=observe" in check_output
+        "NOTICE: Skipped policies/actions.json (governance_mode=observe"
+        in check_output
     )
     assert (
-        "SKIPPED policies/labels.json (governance_mode=observe" in check_output
+        "NOTICE: Skipped policies/labels.json (governance_mode=observe"
+        in check_output
     )
     assert (
-        "SKIPPED policies/rulesets.json (governance_mode=observe"
+        "NOTICE: Skipped policies/rulesets.json (governance_mode=observe"
         in check_output
     )
     # issue_creation_policy, security_and_analysis, and GitHub Pages (Issues

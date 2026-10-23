@@ -7,6 +7,7 @@ prune_labels=false
 allow_unprotected=false
 
 if [[ "$mode" != "plan" && "$mode" != "apply" && "$mode" != "check" ]]; then
+  # message-pattern: allow X3 usage
   echo "Usage: $0 [plan|apply|check] [--prune-labels] [--allow-unprotected]"
   exit 2
 fi
@@ -20,19 +21,19 @@ for option in "$@"; do
       allow_unprotected=true
       ;;
     *)
+      # message-pattern: allow X3 usage
       echo "Usage: $0 [plan|apply|check] [--prune-labels] [--allow-unprotected]"
       exit 2
       ;;
   esac
 done
 
-command -v gh >/dev/null || { echo "Install and authenticate GitHub CLI first."; exit 1; }
+command -v gh >/dev/null || { echo "ERROR: GitHub CLI is missing: 'gh' is not on PATH. Install and authenticate 'gh'." >&2; exit 1; }
 repo="${GH_REPO:-}"
 if [[ -z "$repo" ]]; then
   if ! repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>&1)"; then
-    echo "Cannot identify the GitHub repository."
-    echo "Run inside a Git repository with a GitHub remote, or set GH_REPO=owner/repo."
-    echo "GitHub CLI: $repo"
+    echo "ERROR: Cannot identify the GitHub repository: 'gh repo view' failed. Set GH_REPO=owner/repo." >&2
+    echo "$repo" >&2
     exit 1
   fi
 fi
@@ -52,7 +53,7 @@ required_checks_ruleset_payload="$repo_root/.csarc/policies/rulesets-required-ch
 effective_ruleset_payload="$ruleset_payload"
 effective_required_checks_ruleset_payload="$required_checks_ruleset_payload"
 if [[ ! -f "$required_checks_ruleset_payload" ]]; then
-  echo "Missing .csarc/policies/rulesets-required-checks.json." >&2
+  echo "ERROR: Missing .csarc/policies/rulesets-required-checks.json: the file is absent. Run 'csarc update'." >&2
   exit 1
 fi
 # check_desired_rules_payload_extra is only used by the check-mode drift
@@ -83,12 +84,12 @@ config_reader="$repo_root/.csarc/scripts/csarc_config.py"
 policy_config_value() {
   local key="$1" value
   if [[ ! -f "$repo_root/.csarc/config.yml" ]]; then
-    echo "CSARC settings error: .csarc/config.yml is missing; run csarc update before reading $key." >&2
+    echo "ERROR: Cannot read '$key': .csarc/config.yml is missing. Run 'csarc update'." >&2
     return 1
   fi
   value="$(python3 "$config_reader" "$key")" || return 1
   if [[ -z "$value" ]]; then
-    echo "CSARC settings error: $key in .csarc/config.yml is empty." >&2
+    echo "ERROR: Cannot read '$key': it is empty in .csarc/config.yml. Set it." >&2
     return 1
   fi
   printf '%s' "$value"
@@ -96,7 +97,7 @@ policy_config_value() {
 governance_mode="$(policy_config_value governance_mode)" || exit 1
 release_ownership="$(policy_config_value release_ownership)" || exit 1
 if [[ "$governance_mode" != "managed" && "$governance_mode" != "observe" ]]; then
-  echo "Invalid governance_mode in .csarc/config.yml: $governance_mode (expected managed or observe)." >&2
+  echo "ERROR: Invalid governance_mode '$governance_mode': use managed or observe. Fix .csarc/config.yml." >&2
   exit 1
 fi
 policy_enabled=false
@@ -118,17 +119,21 @@ if [[ "$release_immutable_releases" == "required" ]]; then
   apply_release_policy=true
 fi
 
+# Report a failed gh call and its output on standard error.
+gh_error() {
+  echo "ERROR: Cannot $1 for '$repo': gh failed. See below." >&2
+  echo "$2" >&2
+}
 if ! repo_context="$({
   gh api "repos/$repo" \
     --jq '[.owner.login, .owner.type, (.visibility // (if .private then "private" else "public" end)), .permissions.admin, .default_branch] | @tsv'
 } 2>&1)"; then
-  echo "Cannot read repository metadata for $repo."
-  echo "$repo_context"
+  gh_error "read metadata" "$repo_context"
   exit 1
 fi
 IFS=$'\t' read -r owner owner_type repo_visibility repo_admin default_branch <<<"$repo_context"
 if [[ "$mode" != "check" && "$repo_admin" != "true" ]]; then
-  echo "Repository administrator permission is required before any settings can be applied."
+  echo "ERROR: Cannot apply settings: administrator permission is missing. Ask an administrator." >&2
   exit 1
 fi
 
@@ -152,7 +157,7 @@ esac
 pages_policy="$repo_root/.csarc/policies/pages.json"
 pages_policy_enabled="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["enabled"]))' "$pages_policy")"
 if [[ "$pages_policy_enabled" != "true" && "$pages_policy_enabled" != "false" ]]; then
-  echo "Invalid enabled in .csarc/policies/pages.json: $pages_policy_enabled (expected true or false)." >&2
+  echo "ERROR: Invalid enabled '$pages_policy_enabled': use true or false. Fix .csarc/policies/pages.json." >&2
   exit 1
 fi
 # GitHub Pages is free for public repositories on every plan; a private
@@ -230,21 +235,21 @@ fi
 
 if [[ "$mode" != "check" ]]; then
   if [[ -n "$codeowners_validation" ]]; then
-    echo "CODEOWNERS validation failed: $codeowners_validation" >&2
+    echo "ERROR: CODEOWNERS validation failed: $codeowners_validation Fix the owner. Rerun." >&2
     exit 1
   fi
   if [[ "$codeowners_inspection_available" != true ]]; then
-    echo "Cannot inspect CODEOWNERS for $repo." >&2
-    echo "$codeowners_inspection_error" >&2
+    gh_error "inspect CODEOWNERS" "$codeowners_inspection_error"
     exit 1
   fi
 fi
 
 print_ruleset_guidance() {
+  # message-pattern: allow-begin X5 Ruleset guidance report
   echo "- DEGRADED required governance: $default_branch is not protected on this private repository."
-  echo "- PRESERVED desired Ruleset: .csarc/policies/rulesets.json keeps main branch governance ready for a supported plan or public repository."
-  echo "- API LIMIT: GitHub REST and GraphQL reject Ruleset creation and updates on this plan, even with enforcement disabled."
-  echo "- OPTIONAL: an administrator may preconfigure a disabled Ruleset in the GitHub web UI; this script can detect but cannot create it."
+  echo "- PRESERVED desired Ruleset: .csarc/policies/rulesets.json stays ready for a supported plan or public repository."
+  echo "- API LIMIT: GitHub APIs reject Ruleset writes on this plan, even with enforcement disabled."
+  echo "- OPTIONAL: an administrator may stage a disabled Ruleset in the web UI; this script detects it."
   echo "  https://github.com/$repo/settings/rules"
   echo "- NEXT STEP keep it private: ask the owner to upgrade to $private_ruleset_plan."
   echo "  $billing_url"
@@ -253,6 +258,17 @@ print_ruleset_guidance() {
   [[ -n "$code_owner" ]] && echo "- THEN create or confirm the CODEOWNERS owner $code_owner and rerun:"
   echo "  GH_REPO=$repo ./.csarc/scripts/apply-repository-settings.sh plan"
   echo "  GH_REPO=$repo ./.csarc/scripts/apply-repository-settings.sh apply"
+  # message-pattern: allow-end
+}
+
+# Report a plan or permission limit that does not fail closed.
+degraded() {
+  if [[ -n "$2" && "${GITHUB_ACTIONS:-}" == "true" ]]; then
+    # message-pattern: allow X1 workflow annotation
+    echo "::warning title=$1 degraded::$2"
+  fi
+  # message-pattern: allow X1 DEGRADED token for check-governance-drift
+  echo "DEGRADED $3"
 }
 
 load_graphql_ruleset() {
@@ -351,8 +367,7 @@ if ! ruleset_access="$(gh api "repos/$repo/rulesets" 2>&1)"; then
       ruleset_inventory_available=false
     fi
   else
-    echo "Cannot determine Ruleset capability for $repo."
-    echo "$ruleset_access"
+    gh_error "determine Ruleset capability" "$ruleset_access"
     exit 1
   fi
 else
@@ -395,6 +410,7 @@ PY
 }
 
 pages_reconcile_action() {
+  # message-pattern: allow-begin X5 action tokens read by the caller
   local enabled="$1" available="$2" live_state="$3" drift="$4"
   if [[ "$available" != true ]]; then
     if [[ "$enabled" == "true" ]]; then
@@ -417,6 +433,7 @@ pages_reconcile_action() {
   else
     echo noop
   fi
+  # message-pattern: allow-end
 }
 
 pages_state=""
@@ -441,33 +458,30 @@ if [[ "$mode" == "check" ]]; then
   repository_state_available=false
 
   if [[ "$policy_branch_ruleset" == "true" && "$legacy_ruleset_id" != "-" ]]; then
-    echo "Stale Ruleset must be removed: $legacy_ruleset_name ($legacy_ruleset_id)." >&2
+    echo "ERROR: Stale Ruleset '$legacy_ruleset_name' ($legacy_ruleset_id) exists: policy retired it. Run 'apply'." >&2
     check_errors=$((check_errors + 1))
   fi
 
   if [[ -n "$codeowners_validation" ]]; then
-    echo "CODEOWNERS validation failed: $codeowners_validation" >&2
+    echo "ERROR: CODEOWNERS validation failed: $codeowners_validation Fix the owner. Rerun." >&2
     check_errors=$((check_errors + 1))
   elif [[ "$codeowners_inspection_available" != true ]]; then
     if [[ "$repo_admin" == "true" ]]; then
-      echo "Cannot inspect CODEOWNERS for $repo." >&2
-      echo "$codeowners_inspection_error" >&2
+      gh_error "inspect CODEOWNERS" "$codeowners_inspection_error"
       check_errors=$((check_errors + 1))
     else
-      [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
-        echo "::warning title=CODEOWNERS inspection degraded::The token cannot validate configured owners."
-      echo "DEGRADED CODEOWNERS inspection: token cannot validate configured owners."
+      degraded "CODEOWNERS inspection" "The token cannot validate configured owners." \
+        "CODEOWNERS inspection: token cannot validate configured owners."
       check_degraded=$((check_degraded + 1))
     fi
   else
-    echo "CODEOWNERS owners are valid and have repository write access."
+    echo "OK: CODEOWNERS owners are valid and have repository write access."
   fi
 
   if [[ "$policy_repository_settings" != "true" ]]; then
-    echo "SKIPPED .csarc/policies/repository.json (governance_mode=observe in .csarc/config.yml)."
+    echo "NOTICE: Skipped .csarc/policies/repository.json (governance_mode=observe)."
   elif ! repository_state="$(gh api "repos/$repo" 2>&1)"; then
-    echo "Cannot inspect repository settings for $repo." >&2
-    echo "$repository_state" >&2
+    gh_error "inspect settings" "$repository_state"
     check_errors=$((check_errors + 1))
   else
     repository_state_available=true
@@ -486,7 +500,7 @@ if drift:
     raise SystemExit("; ".join(drift))
 PY
     )"; then
-      echo "Repository settings drift: $repository_drift" >&2
+      echo "ERROR: Repository settings drift: $repository_drift. Run 'apply'." >&2
       check_errors=$((check_errors + 1))
     fi
   fi
@@ -502,29 +516,27 @@ PY
     )"
     if [[ -n "$repository_missing" ]]; then
       if [[ "$repo_admin" == "true" ]]; then
-        echo "Cannot observe repository setting fields despite administrator access: $repository_missing" >&2
+        echo "ERROR: Cannot observe fields '$repository_missing': GitHub hid them from an admin. Check the token." >&2
         check_errors=$((check_errors + 1))
       else
-        [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
-          echo "::warning title=Settings inspection degraded::The token cannot read administrator-only repository fields."
-        echo "DEGRADED repository inspection: token cannot read administrator-only fields: $repository_missing"
+        degraded "Settings inspection" "The token cannot read administrator-only repository fields." \
+          "repository inspection: token cannot read administrator-only fields: $repository_missing"
         check_degraded=$((check_degraded + 1))
       fi
     elif [[ -z "$repository_drift" ]]; then
-      echo "Repository settings match .csarc/policies/repository.json."
+      echo "OK: Repository settings match .csarc/policies/repository.json."
     fi
   fi
 
   issue_creation_policy_error=""
   if ! load_issue_creation_policy; then
-    echo "Cannot inspect issue creation policy for $repo." >&2
-    echo "$issue_creation_policy_error" >&2
+    gh_error "inspect issue creation policy" "$issue_creation_policy_error"
     check_errors=$((check_errors + 1))
   elif [[ "$issue_creation_policy_live" != "$desired_issue_creation_policy" ]]; then
-    echo "Issue creation policy drift: desired $desired_issue_creation_policy, live $issue_creation_policy_live." >&2
+    echo "ERROR: Issue creation policy drift: desired $desired_issue_creation_policy, live $issue_creation_policy_live. Run 'apply'." >&2
     check_errors=$((check_errors + 1))
   else
-    echo "Issue creation policy matches .csarc/policies/issue-creation.json."
+    echo "OK: Issue creation policy matches .csarc/policies/issue-creation.json."
   fi
 
   # security_and_analysis is compared per field, desired "enabled" but live
@@ -536,8 +548,7 @@ PY
   # field-drift comparison below, so this fetches repository state on its
   # own rather than depending on the toggle-gated $repository_state there.
   if ! security_and_analysis_repository_state="$(gh api "repos/$repo" 2>&1)"; then
-    echo "Cannot inspect security_and_analysis for $repo." >&2
-    echo "$security_and_analysis_repository_state" >&2
+    gh_error "inspect security_and_analysis" "$security_and_analysis_repository_state"
     check_errors=$((check_errors + 1))
   elif ! security_and_analysis_status="$(python3 - "$security_scanning_payload" "$security_and_analysis_repository_state" 2>&1 <<'PY'
 import json
@@ -556,7 +567,7 @@ for field, expected in desired.items():
         print(f"DRIFT|{field}|{observed}")
 PY
   )"; then
-    echo "Cannot compare security_and_analysis for $repo." >&2
+    echo "ERROR: Cannot compare security_and_analysis for '$repo': comparison failed. See below." >&2
     echo "$security_and_analysis_status" >&2
     check_errors=$((check_errors + 1))
   else
@@ -564,16 +575,15 @@ PY
       [[ -z "$security_field_kind" ]] && continue
       case "$security_field_kind" in
         MATCH)
-          echo "security_and_analysis.$security_field_name matches .csarc/policies/security-scanning.json (enabled)."
+          echo "OK: security_and_analysis.$security_field_name matches .csarc/policies/security-scanning.json (enabled)."
           ;;
         DEGRADED)
-          [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
-            echo "::warning title=Security scanning degraded::security_and_analysis.$security_field_name is disabled although policy requests it."
-          echo "DEGRADED security_and_analysis.$security_field_name: desired enabled, live ${security_field_value:-disabled}; GitHub Advanced Security or an organization/plan policy may block this capability on this repository."
+          degraded "Security scanning" "security_and_analysis.$security_field_name is disabled against policy." \
+            "security_and_analysis.$security_field_name: desired enabled, live ${security_field_value:-disabled}; GitHub Advanced Security or an organization/plan policy may block it."
           check_degraded=$((check_degraded + 1))
           ;;
         DRIFT)
-          echo "security_and_analysis drift: $security_field_name desired enabled, live ${security_field_value:-unknown}." >&2
+          echo "ERROR: security_and_analysis drift: $security_field_name desired enabled, live ${security_field_value:-unknown}. Run 'apply'." >&2
           check_errors=$((check_errors + 1))
           ;;
       esac
@@ -581,16 +591,14 @@ PY
   fi
 
   if [[ "$apply_release_policy" != "true" ]]; then
-    echo "SKIPPED .csarc/policies/releases.json (release_immutable_releases=$release_immutable_releases; not required by this release ownership)."
+    echo "NOTICE: Skipped .csarc/policies/releases.json (release_immutable_releases=$release_immutable_releases)."
   elif ! release_state="$(gh api "repos/$repo/immutable-releases" 2>&1)"; then
     if [[ "$repo_admin" != "true" && "$release_state" == *"Resource not accessible by integration"* ]]; then
-      [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
-        echo "::warning title=Immutable Releases inspection degraded::The token cannot read the administrator-only immutable Releases setting."
-      echo "DEGRADED immutable Releases inspection: token cannot read the administrator-only setting."
+      degraded "Immutable Releases inspection" "The token cannot read the immutable Releases setting." \
+        "immutable Releases inspection: token cannot read the administrator-only setting."
       check_degraded=$((check_degraded + 1))
     else
-      echo "Cannot inspect the required immutable Releases setting for $repo." >&2
-      echo "$release_state" >&2
+      gh_error "inspect immutable Releases" "$release_state"
       check_errors=$((check_errors + 1))
     fi
   elif ! release_drift="$(python3 - "$release_policy" "$release_state" 2>&1 <<'PY'
@@ -606,59 +614,54 @@ if actual.get("enabled") is not desired["enabled"]:
     )
 PY
   )"; then
-    echo "Release settings drift: $release_drift" >&2
-    echo "Immutable Releases are required before the release workflow can publish." >&2
+    echo "ERROR: Release settings drift: $release_drift; releases need immutable Releases. Run 'apply'." >&2
     check_errors=$((check_errors + 1))
   else
-    echo "Immutable Releases match .csarc/policies/releases.json."
+    echo "OK: Immutable Releases match .csarc/policies/releases.json."
   fi
 
   case "$pages_action" in
     noop)
       if [[ "$pages_policy_enabled" == "true" ]]; then
-        echo "Pages settings match .csarc/policies/pages.json."
+        echo "OK: Pages settings match .csarc/policies/pages.json."
       elif [[ "$pages_live_state" == "unpublished" ]]; then
-        echo "Pages opt-out matches .csarc/policies/pages.json: enabled=false and GitHub Pages is not published for $repo."
+        echo "OK: Pages opt-out matches .csarc/policies/pages.json: enabled=false and GitHub Pages is not published for $repo."
       else
-        echo "Pages opt-out matches .csarc/policies/pages.json: enabled=false and $plan_label cannot publish GitHub Pages while $repo is private."
+        echo "OK: Pages opt-out matches .csarc/policies/pages.json: enabled=false and $plan_label cannot publish GitHub Pages while $repo is private."
       fi
       ;;
     degraded)
-      [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
-        echo "::warning title=GitHub Pages degraded::GitHub Pages is unavailable for this private repository on $plan_label."
-      echo "DEGRADED GitHub Pages: private repositories require GitHub Enterprise Cloud; $plan_label cannot enable Pages while $repo is private. .csarc/policies/pages.json stays enabled=true for when this repository is public or the account upgrades; the template must keep working on every GitHub plan and visibility, so this account-plan and visibility limitation does not fail closed."
+      degraded "GitHub Pages" "GitHub Pages is unavailable for this private repository on $plan_label." \
+        "GitHub Pages: private repositories require GitHub Enterprise Cloud; $plan_label cannot enable Pages while $repo is private. .csarc/policies/pages.json stays enabled=true; this plan limit does not fail closed."
       check_degraded=$((check_degraded + 1))
       ;;
     enable)
-      echo "Pages settings drift: GitHub Pages is not enabled for $repo; .csarc/policies/pages.json requests enabled=true." >&2
+      echo "ERROR: Pages settings drift: GitHub Pages is not enabled for $repo; .csarc/policies/pages.json requests enabled=true. Run 'apply'." >&2
       check_errors=$((check_errors + 1))
       ;;
     update)
-      echo "Pages settings drift: $pages_drift" >&2
+      echo "ERROR: Pages settings drift: $pages_drift. Run 'apply'." >&2
       check_errors=$((check_errors + 1))
       ;;
     disable)
-      echo "Pages settings drift: GitHub Pages is published for $repo; .csarc/policies/pages.json requests enabled=false (explicit opt-out)." >&2
+      echo "ERROR: Pages settings drift: GitHub Pages is published for $repo; .csarc/policies/pages.json requests enabled=false (explicit opt-out). Run 'apply'." >&2
       check_errors=$((check_errors + 1))
       ;;
     *)
-      echo "Cannot inspect GitHub Pages settings for $repo." >&2
-      echo "$pages_state" >&2
+      gh_error "inspect GitHub Pages settings" "$pages_state"
       check_errors=$((check_errors + 1))
       ;;
   esac
 
   if [[ "$policy_actions_permissions" != "true" ]]; then
-    echo "SKIPPED .csarc/policies/actions.json (governance_mode=observe in .csarc/config.yml)."
+    echo "NOTICE: Skipped .csarc/policies/actions.json (governance_mode=observe)."
   elif ! actions_state="$(gh api "repos/$repo/actions/permissions/workflow" 2>&1)"; then
     if [[ "$repo_admin" != "true" && "$actions_state" == *"Resource not accessible by integration"* ]]; then
-      [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
-        echo "::warning title=Actions inspection degraded::The token cannot read administrator-only Actions settings."
-      echo "DEGRADED Actions inspection: token cannot read administrator-only workflow permissions."
+      degraded "Actions inspection" "The token cannot read administrator-only Actions settings." \
+        "Actions inspection: token cannot read administrator-only workflow permissions."
       check_degraded=$((check_degraded + 1))
     else
-      echo "Cannot inspect Actions workflow permissions for $repo." >&2
-      echo "$actions_state" >&2
+      gh_error "inspect Actions workflow permissions" "$actions_state"
       check_errors=$((check_errors + 1))
     fi
   elif ! actions_comparison="$(python3 - "$repo_root/.csarc/policies/actions.json" "$actions_state" 2>&1 <<'PY'
@@ -678,35 +681,33 @@ print(
 )
 PY
   )"; then
-    echo "Cannot compare Actions workflow permissions for $repo." >&2
+    echo "ERROR: Cannot compare Actions workflow permissions for '$repo': comparison failed. See below." >&2
     echo "$actions_comparison" >&2
     check_errors=$((check_errors + 1))
   else
     IFS='|' read -r actions_default_drift actions_pr_degraded actions_pr_drift \
       <<<"$actions_comparison"
     if [[ "$actions_default_drift" == "true" ]]; then
-      echo "Actions settings drift: default_workflow_permissions differs from .csarc/policies/actions.json." >&2
+      echo "ERROR: Actions settings drift: default_workflow_permissions differs from .csarc/policies/actions.json. Run 'apply'." >&2
       check_errors=$((check_errors + 1))
     fi
     if [[ "$actions_pr_drift" == "true" ]]; then
-      echo "Actions settings drift: can_approve_pull_request_reviews differs from .csarc/policies/actions.json." >&2
+      echo "ERROR: Actions settings drift: can_approve_pull_request_reviews differs from .csarc/policies/actions.json. Run 'apply'." >&2
       check_errors=$((check_errors + 1))
     elif [[ "$actions_pr_degraded" == "true" ]]; then
-      [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
-        echo "::warning title=Actions policy degraded::Actions cannot approve pull requests although .csarc/policies/actions.json requests it."
-      echo "DEGRADED Actions PR policy: desired true, live false; an organization policy may block this capability. No release workflow is enabled by this script."
+      degraded "Actions policy" "Actions cannot approve pull requests against policy." \
+        "Actions PR policy: desired true, live false; an organization policy may block this capability. No release workflow is enabled by this script."
       check_degraded=$((check_degraded + 1))
     fi
     if [[ "$actions_default_drift" != "true" && "$actions_pr_degraded" != "true" && "$actions_pr_drift" != "true" ]]; then
-      echo "Actions workflow permissions match .csarc/policies/actions.json."
+      echo "OK: Actions workflow permissions match .csarc/policies/actions.json."
     fi
   fi
 
   if [[ "$policy_labels" != "true" ]]; then
-    echo "SKIPPED .csarc/policies/labels.json (governance_mode=observe in .csarc/config.yml)."
+    echo "NOTICE: Skipped .csarc/policies/labels.json (governance_mode=observe)."
   elif ! labels_state="$(gh label list --repo "$repo" --limit 1000 --json name,color,description 2>&1)"; then
-    echo "Cannot inspect labels for $repo." >&2
-    echo "$labels_state" >&2
+    gh_error "inspect labels" "$labels_state"
     check_errors=$((check_errors + 1))
   elif ! labels_drift="$(python3 - "$repo_root/.csarc/policies/labels.json" "$labels_state" 2>&1 <<'PY'
 import json
@@ -728,15 +729,16 @@ if drift:
     raise SystemExit("; ".join(drift))
 PY
   )"; then
-    echo "Label settings drift: $labels_drift" >&2
+    echo "ERROR: Label settings drift: $labels_drift. Run 'apply'." >&2
     check_errors=$((check_errors + 1))
   else
-    echo "Policy labels match .csarc/policies/labels.json; extra labels are allowed."
+    echo "OK: Policy labels match .csarc/policies/labels.json; extra labels are allowed."
   fi
 
   if [[ "$policy_branch_ruleset" != "true" ]]; then
-    echo "SKIPPED .csarc/policies/rulesets.json (governance_mode=observe in .csarc/config.yml)."
+    echo "NOTICE: Skipped .csarc/policies/rulesets.json (governance_mode=observe)."
   elif [[ "$ruleset_enforcement_available" != true ]]; then
+    # message-pattern: allow-begin X5 degraded governance report
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
       echo "::warning title=Repository governance degraded::Required branch protection is unavailable for this private repository; continuing without it."
     if [[ "$ruleset_inventory_available" != true ]]; then
@@ -749,11 +751,11 @@ PY
       echo "STAGED manually configured Ruleset: $ruleset_name is $ruleset_enforcement but is not enforced on this plan."
     fi
     print_ruleset_guidance
-    echo "DEGRADED required governance: $ruleset_skip_reason The template must keep working on every GitHub plan and visibility, so this account-plan limitation does not fail closed; a capable plan with rules that do not match policy still does."
+    echo "DEGRADED required governance: $ruleset_skip_reason This plan limit does not fail closed; rule drift on a capable plan still does."
+    # message-pattern: allow-end
     check_degraded=$((check_degraded + 1))
   elif ! branch_rules="$(gh api "repos/$repo/rules/branches/$default_branch" 2>&1)"; then
-    echo "Cannot inspect effective rules for $repo:$default_branch." >&2
-    echo "$branch_rules" >&2
+    gh_error "inspect effective rules of $default_branch" "$branch_rules"
     check_errors=$((check_errors + 1))
   elif ! ruleset_drift="$(python3 - "$ruleset_payload" "$branch_rules" "$check_desired_rules_payload_extra" 2>&1 <<'PY'
 import json
@@ -867,24 +869,25 @@ if errors:
     raise SystemExit("; ".join(errors))
 PY
   )"; then
-    echo "Ruleset settings drift: $ruleset_drift" >&2
+    echo "ERROR: Ruleset settings drift: $ruleset_drift. Run 'apply'." >&2
     check_errors=$((check_errors + 1))
   else
-    echo "Repository governance ready: $default_branch has the required effective rules."
+    echo "OK: Repository governance ready: $default_branch has the required effective rules."
   fi
 
   if (( check_errors > 0 )); then
-    echo "Repository settings check failed with $check_errors actionable difference(s)." >&2
+    echo "ERROR: Repository settings check failed with $check_errors actionable difference(s): policy drift. Fix the lines above." >&2
     exit 1
   fi
   if (( check_degraded > 0 )); then
-    echo "Repository settings check completed with $check_degraded degraded capability difference(s)."
+    echo "NOTICE: Repository settings check completed with $check_degraded degraded capability difference(s)."
   else
-    echo "All observable repository settings match policy."
+    echo "OK: All observable repository settings match policy."
   fi
   exit 0
 fi
 
+# message-pattern: allow-begin X5 deployment plan report
 echo "Repository: $repo"
 echo "Mode: $mode"
 echo "Account plan: $plan_label"
@@ -899,12 +902,12 @@ echo "- APPLY .csarc/policies/issue-creation.json (issue_creation_policy via Gra
 if [[ "$apply_release_policy" == "true" ]]; then
   echo "- APPLY .csarc/policies/releases.json (immutable Releases)"
 else
-  echo "- SKIP .csarc/policies/releases.json (release_immutable_releases=$release_immutable_releases; not required by this release ownership)"
+  echo "- SKIP .csarc/policies/releases.json (release_immutable_releases=$release_immutable_releases)"
 fi
 case "$pages_action" in
   noop)
     if [[ "$pages_policy_enabled" == "true" ]]; then
-      echo "- NO-OP .csarc/policies/pages.json (enabled=true; GitHub Pages already published and matching)"
+      echo "- NO-OP .csarc/policies/pages.json (enabled=true; already published and matching)"
     else
       echo "- NO-OP .csarc/policies/pages.json (enabled=false; GitHub Pages is not published)"
     fi
@@ -913,14 +916,14 @@ case "$pages_action" in
   update) echo "- UPDATE .csarc/policies/pages.json (enabled=true; $pages_drift)" ;;
   disable) echo "- DISABLE .csarc/policies/pages.json (enabled=false; unpublish the live GitHub Pages site)" ;;
   degraded) echo "- DEGRADED .csarc/policies/pages.json: GitHub Pages requires GitHub Enterprise Cloud for a private repository on $plan_label" ;;
-  *) echo "- BLOCKED .csarc/policies/pages.json: cannot inspect live GitHub Pages state; apply fails closed before any change" ;;
+  *) echo "- BLOCKED .csarc/policies/pages.json: cannot inspect live GitHub Pages state; apply fails closed" ;;
 esac
 if [[ "$policy_actions_permissions" == "true" ]]; then
   echo "- APPLY .csarc/policies/actions.json when account policy permits it"
 else
   echo "- SKIP .csarc/policies/actions.json (governance_mode=observe)"
 fi
-echo "- APPLY .csarc/policies/security-scanning.json (security_and_analysis) when GitHub Advanced Security or repository visibility permits it"
+echo "- APPLY .csarc/policies/security-scanning.json (security_and_analysis) when GitHub Advanced Security or visibility permits it"
 if [[ "$policy_labels" == "true" ]]; then
   echo "- APPLY .csarc/policies/labels.json (create or update policy labels)"
 else
@@ -970,15 +973,16 @@ else
   print_ruleset_guidance
 fi
 if [[ "$plan_label" == "GitHub Enterprise" ]]; then
-  echo "- INFO Enterprise-wide identity, audit, network, and organization Rulesets are outside this repository script."
+  echo "- INFO Enterprise identity, audit, network, and organization Rulesets are out of scope."
 fi
+# message-pattern: allow-end
 
 if [[ "$mode" == "plan" ]]; then
-  echo "No changes applied. Re-run with 'apply' after review."
+  echo "NOTICE: No changes applied. Re-run with 'apply' after review."
   exit 0
 fi
 if [[ "$pages_action" == "unknown" ]]; then
-  echo "Cannot inspect GitHub Pages settings for $repo; refusing to apply repository settings." >&2
+  echo "ERROR: Cannot apply settings: GitHub Pages settings for '$repo' are unreadable. Fix the gh error below." >&2
   echo "$pages_state" >&2
   exit 1
 fi
@@ -1002,16 +1006,14 @@ if ! issue_creation_policy_apply_error="$(
     -f id="$repository_node_id" \
     -f policy="$desired_issue_creation_policy" 2>&1
 )"; then
-  echo "Cannot apply issue creation policy for $repo." >&2
-  echo "$issue_creation_policy_apply_error" >&2
+  gh_error "apply issue creation policy" "$issue_creation_policy_apply_error"
   exit 1
 fi
 if [[ "$apply_release_policy" == "true" ]]; then
   if ! release_policy_error="$(
     gh api --method PUT "repos/$repo/immutable-releases" 2>&1
   )"; then
-    echo "Cannot enable required immutable Releases for $repo." >&2
-    echo "$release_policy_error" >&2
+    gh_error "enable immutable Releases" "$release_policy_error"
     exit 1
   fi
 fi
@@ -1019,7 +1021,7 @@ pages_policy_applied=true
 case "$pages_action" in
   degraded)
     pages_policy_applied=false
-    echo "DEGRADED GitHub Pages: private repositories require GitHub Enterprise Cloud; $plan_label cannot enable Pages while $repo is private. .csarc/policies/pages.json stays enabled=true for when this repository is public or the account upgrades."
+    degraded "" "" "GitHub Pages: private repositories require GitHub Enterprise Cloud; $plan_label cannot enable Pages while $repo is private. .csarc/policies/pages.json stays enabled=true."
     ;;
   enable | update)
     pages_apply_payload="$(python3 -c 'import json,sys; policy=json.load(open(sys.argv[1], encoding="utf-8")); policy.pop("enabled", None); print(json.dumps(policy))' "$pages_policy")"
@@ -1030,15 +1032,13 @@ case "$pages_action" in
       pages_apply_verb=enable
     fi
     if ! pages_policy_error="$(echo "$pages_apply_payload" | gh api --method "$pages_apply_method" "repos/$repo/pages" --input - 2>&1)"; then
-      echo "Cannot $pages_apply_verb GitHub Pages for $repo." >&2
-      echo "$pages_policy_error" >&2
+      gh_error "$pages_apply_verb GitHub Pages" "$pages_policy_error"
       exit 1
     fi
     ;;
   disable)
     if ! pages_policy_error="$(gh api --method DELETE "repos/$repo/pages" 2>&1)"; then
-      echo "Cannot disable GitHub Pages for $repo." >&2
-      echo "$pages_policy_error" >&2
+      gh_error "disable GitHub Pages" "$pages_policy_error"
       exit 1
     fi
     ;;
@@ -1051,11 +1051,10 @@ if [[ "$policy_actions_permissions" == "true" ]]; then
   )"; then
     if [[ "$actions_policy_error" =~ (403|409|not\ permitted) ]]; then
       actions_policy_applied=false
-      echo "DEGRADED Actions PR policy: $actions_policy_error"
-      echo "No release workflow is enabled; record this degraded capability before designing one."
+      degraded "" "" "Actions PR policy: $actions_policy_error"
+      echo "NOTICE: No release workflow is enabled; record this degraded capability before designing one."
     else
-      echo "Cannot apply Actions workflow permissions for $repo." >&2
-      echo "$actions_policy_error" >&2
+      gh_error "apply Actions workflow permissions" "$actions_policy_error"
       exit 1
     fi
   fi
@@ -1070,11 +1069,10 @@ if ! security_and_analysis_error="$(
 )"; then
   if [[ "$security_and_analysis_error" =~ (403|422|Advanced\ Security|not\ permitted) ]]; then
     security_and_analysis_applied=false
-    echo "DEGRADED security_and_analysis: $security_and_analysis_error"
-    echo "GitHub Advanced Security or an organization/plan policy may block secret scanning, push protection, or Dependabot security updates on this repository."
+    degraded "" "" "security_and_analysis: $security_and_analysis_error"
+    echo "NOTICE: GitHub Advanced Security or an organization/plan policy may block secret scanning, push protection, or Dependabot security updates."
   else
-    echo "Cannot apply security_and_analysis settings for $repo." >&2
-    echo "$security_and_analysis_error" >&2
+    gh_error "apply security_and_analysis" "$security_and_analysis_error"
     exit 1
   fi
 fi
@@ -1136,9 +1134,9 @@ fi
 GH_REPO="$repo" "$0" check
 if [[ "$policy_branch_ruleset" == "true" && "$ruleset_enforcement_available" == true && "$actions_policy_applied" == true &&
   "$pages_policy_applied" == true && "$security_and_analysis_applied" == true ]]; then
-  echo "Required repository settings applied, including branch protection."
+  echo "OK: Required repository settings applied, including branch protection."
 elif [[ "$policy_branch_ruleset" != "true" ]]; then
-  echo "Repository settings observed only; governance_mode=observe leaves live policies unchanged."
+  echo "OK: Repository settings observed only; governance_mode=observe leaves live policies unchanged."
 else
-  echo "DEGRADED repository settings applied; unavailable policy remains declarative and runtime workflows adapt."
+  degraded "" "" "repository settings applied; unavailable policy remains declarative and runtime workflows adapt."
 fi

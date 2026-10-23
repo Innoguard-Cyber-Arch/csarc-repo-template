@@ -371,7 +371,7 @@ def test_cli_exits_2_with_a_clear_message_on_malformed_facts(
     result = _run_cli("check", "--facts", str(facts_path))
 
     assert result.returncode == 2
-    assert "repo_capabilities" in result.stderr
+    assert "ERROR: Cannot load capability data:" in result.stderr
 
 
 def test_cli_default_matrix_path_is_the_real_shipped_file(

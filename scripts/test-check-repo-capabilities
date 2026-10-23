@@ -161,4 +161,4 @@ for invalid_owner in '@bad_user' '@bad.user' '@bad--user' '@bad-'; do
   echo "$out_json" | jq -e '.capabilities[] | select(.id == "codeowners_enforcement") | .status == "blocked"' >/dev/null
 done
 
-echo "test-check-repo-capabilities: all permission-combination cases passed."
+echo "OK: test-check-repo-capabilities: all permission-combination cases passed."

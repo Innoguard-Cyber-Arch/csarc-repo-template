@@ -174,8 +174,8 @@ run_check() {
 case_count=$((case_count + 1))
 run_check
 if [[ "$status" != 0 ]]; then
-  echo "check failed on a fully matching fixture (exit $status):"
-  printf '%s\n' "$output"
+  echo "ERROR: Self-test failed: check exited $status on a fully matching fixture. See below." >&2
+  printf '%s\n' "$output" >&2
   exit 1
 fi
 grep -qF "Issue creation policy matches .csarc/policies/issue-creation.json." <<<"$output"
@@ -194,7 +194,7 @@ fi
 case_count=$((case_count + 1))
 LIVE_ISSUE_CREATION_POLICY="ALL" run_check
 if [[ "$status" == 0 ]]; then
-  echo "check passed despite issue_creation_policy drift."
+  echo "ERROR: Self-test failed: check passed despite issue_creation_policy drift. Fix apply-repository-settings.sh." >&2
   exit 1
 fi
 grep -qF "Issue creation policy drift: desired COLLABORATORS_ONLY, live ALL." <<<"$output"
@@ -204,7 +204,7 @@ grep -qF "Issue creation policy drift: desired COLLABORATORS_ONLY, live ALL." <<
 case_count=$((case_count + 1))
 LIVE_PR_CREATION_POLICY="all" run_check
 if [[ "$status" == 0 ]]; then
-  echo "check passed despite pull_request_creation_policy drift."
+  echo "ERROR: Self-test failed: check passed despite pull_request_creation_policy drift. Fix apply-repository-settings.sh." >&2
   exit 1
 fi
 grep -qF "pull_request_creation_policy: desired 'collaborators_only', live 'all'" <<<"$output"
@@ -221,7 +221,7 @@ grep -qF "pull_request_creation_policy: desired 'collaborators_only', live 'all'
 case_count=$((case_count + 1))
 LIVE_DELETE_BRANCH_ON_MERGE="false" run_check
 if [[ "$status" == 0 ]]; then
-  echo "check passed despite delete_branch_on_merge drift."
+  echo "ERROR: Self-test failed: check passed despite delete_branch_on_merge drift. Fix apply-repository-settings.sh." >&2
   exit 1
 fi
 grep -qF "delete_branch_on_merge: desired True, live False" <<<"$output"
@@ -233,11 +233,11 @@ case_count=$((case_count + 1))
 LIVE_SECRET_SCANNING="disabled" LIVE_PUSH_PROTECTION="disabled" \
   LIVE_DEPENDABOT_SECURITY="disabled" run_check
 if [[ "$status" != 0 ]]; then
-  echo "check exited non-zero on an all-disabled DEGRADED security_and_analysis fixture (exit $status):"
-  printf '%s\n' "$output"
+  echo "ERROR: Self-test failed: check exited $status on an all-disabled DEGRADED security_and_analysis fixture. See below." >&2
+  printf '%s\n' "$output" >&2
   exit 1
 fi
-grep -qF "DEGRADED security_and_analysis.secret_scanning: desired enabled, live disabled; GitHub Advanced Security or an organization/plan policy may block this capability on this repository." <<<"$output"
+grep -qF "DEGRADED security_and_analysis.secret_scanning: desired enabled, live disabled; GitHub Advanced Security or an organization/plan policy may block it." <<<"$output"
 grep -qF "DEGRADED security_and_analysis.secret_scanning_push_protection: desired enabled, live disabled;" <<<"$output"
 grep -qF "DEGRADED security_and_analysis.dependabot_security_updates: desired enabled, live disabled;" <<<"$output"
 grep -qF "degraded capability difference(s)." <<<"$output"
@@ -248,7 +248,7 @@ grep -qF "degraded capability difference(s)." <<<"$output"
 case_count=$((case_count + 1))
 LIVE_DEPENDABOT_SECURITY="restricted" run_check
 if [[ "$status" == 0 ]]; then
-  echo "check passed despite an unrecognized security_and_analysis status."
+  echo "ERROR: Self-test failed: check passed despite an unrecognized security_and_analysis status. Fix apply-repository-settings.sh." >&2
   exit 1
 fi
 grep -qF "security_and_analysis drift: dependabot_security_updates desired enabled, live restricted." <<<"$output"
@@ -266,7 +266,7 @@ printf '* @Other-Org/arch\n' >"$mismatch_root/.github/CODEOWNERS"
 status=0
 output="$(PATH="$fixture_root/bin:$PATH" GH_REPO="$test_repo" "$mismatch_root/.csarc/scripts/apply-repository-settings.sh" plan 2>&1)" || status=$?
 if [[ "$status" == 0 ]]; then
-  echo "plan accepted a CODEOWNERS team from another organization."
+  echo "ERROR: Self-test failed: plan accepted a CODEOWNERS team from another organization. Fix apply-repository-settings.sh." >&2
   exit 1
 fi
 grep -qF "CODEOWNER organization @Other-Org does not match repository owner @$test_owner." <<<"$output"
@@ -284,14 +284,14 @@ printf '* @outside-user\n' >"$personal_root/.github/CODEOWNERS"
 status=0
 output="$(PATH="$fixture_root/bin:$PATH" GH_REPO="$test_repo" USER_PERMISSION=write "$personal_root/.csarc/scripts/apply-repository-settings.sh" plan 2>&1)" || status=$?
 if [[ "$status" != 0 ]]; then
-  echo "plan rejected a personal CODEOWNER with write access."
-  printf '%s\n' "$output"
+  echo "ERROR: Self-test failed: plan rejected a personal CODEOWNER with write access. See below." >&2
+  printf '%s\n' "$output" >&2
   exit 1
 fi
 status=0
 output="$(PATH="$fixture_root/bin:$PATH" GH_REPO="$test_repo" USER_PERMISSION=read "$personal_root/.csarc/scripts/apply-repository-settings.sh" plan 2>&1)" || status=$?
 if [[ "$status" == 0 ]]; then
-  echo "plan accepted a read-only personal CODEOWNER."
+  echo "ERROR: Self-test failed: plan accepted a read-only personal CODEOWNER. Fix apply-repository-settings.sh." >&2
   exit 1
 fi
 grep -qF "@outside-user lacks repository write access." <<<"$output"
@@ -308,7 +308,7 @@ else
   expected_pages_drift="Pages settings drift: GitHub Pages is published for $test_repo; .csarc/policies/pages.json requests enabled=false (explicit opt-out)."
 fi
 if [[ "$status" == 0 ]]; then
-  echo "check passed despite GitHub Pages desired/live drift."
+  echo "ERROR: Self-test failed: check passed despite GitHub Pages desired/live drift. Fix apply-repository-settings.sh." >&2
   exit 1
 fi
 grep -qF "$expected_pages_drift" <<<"$output"
@@ -318,10 +318,10 @@ grep -qF "$expected_pages_drift" <<<"$output"
 case_count=$((case_count + 1))
 LIVE_PAGES="error" run_check
 if [[ "$status" == 0 ]]; then
-  echo "check passed despite an uninspectable GitHub Pages state."
+  echo "ERROR: Self-test failed: check passed despite an uninspectable GitHub Pages state. Fix apply-repository-settings.sh." >&2
   exit 1
 fi
-grep -qF "Cannot inspect GitHub Pages settings for $test_repo." <<<"$output"
+grep -qF "Cannot inspect GitHub Pages settings for '$test_repo'" <<<"$output"
 grep -qF "gh: Server Error (HTTP 500)" <<<"$output"
 
 # Case 10 (#1061): owner matrix. Every legal owner shape -- a personal
@@ -343,12 +343,12 @@ expect_owner() {
   make_owner_root "$root" "$codeowners"
   run_owner_plan "$root" GH_REPO="$repo" STUB_REPO="$repo" STUB_OWNER="$owner" USER_PERMISSION=write
   if [[ "$expected" == accept && "$status" != 0 ]]; then
-    echo "plan rejected a legal owner for $repo: ${codeowners:-<empty>}"
-    printf '%s\n' "$output"
+    echo "ERROR: Self-test failed: plan rejected the legal owner '${codeowners:-<empty>}' for '$repo'. See below." >&2
+    printf '%s\n' "$output" >&2
     exit 1
   fi
   if [[ "$expected" == reject && "$status" == 0 ]]; then
-    echo "plan accepted an invalid or contradictory owner for $repo: $codeowners"
+    echo "ERROR: Self-test failed: plan accepted the invalid owner '$codeowners' for '$repo'. Fix apply-repository-settings.sh." >&2
     exit 1
   fi
   if [[ "$expected" == reject ]]; then
@@ -375,4 +375,4 @@ expect_owner reject "another-org/product" "another-org" "* @$test_owner/arch
 expect_owner reject "$test_repo" "$test_owner" "* @$test_owner/missing-team
 "
 
-echo "apply-repository-settings check cases passed: $case_count"
+echo "OK: apply-repository-settings check cases passed: $case_count."
