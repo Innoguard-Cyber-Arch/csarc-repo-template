@@ -33,16 +33,19 @@ def git(root: Path, *args: str) -> str:
 
 
 def run(
-    root: Path, *args: str, checker: Path = CHECKERS[0]
+    root: Path, *args: str, checker: Path = CHECKERS[0], ci_base: str = ""
 ) -> subprocess.CompletedProcess[str]:
     """Run the checker in a fixture repository."""
+    env = {k: v for k, v in os.environ.items() if k != "CSARC_CI_BASE"}
+    if ci_base:
+        env["CSARC_CI_BASE"] = ci_base
     return subprocess.run(  # noqa: S603 - the checker under test
         [str(checker), *args],
         cwd=root,
         capture_output=True,
         text=True,
         check=False,
-        env={k: v for k, v in os.environ.items() if k != "CSARC_CI_BASE"},
+        env=env,
     )
 
 
@@ -174,15 +177,47 @@ def test_data_output_is_not_a_message(repo: Path) -> None:
     assert "passed for 0 messages" in result.stdout
 
 
-def test_missing_base_is_a_notice_and_bad_base_fails(tmp_path: Path) -> None:
-    """Without Git there is nothing to diff; an unknown base stops the run."""
+@pytest.mark.parametrize("checker", CHECKERS, ids=["root", "template"])
+def test_missing_base_is_a_notice_and_bad_base_fails(
+    tmp_path: Path, checker: Path
+) -> None:
+    """Without Git there is nothing to diff; an unknown --base stops the run."""
     (tmp_path / ".csarc" / "scripts").mkdir(parents=True)
-    result = run(tmp_path)
+    result = run(tmp_path, checker=checker, ci_base="dev/m1-x")
     assert result.returncode == 0
     assert result.stdout.startswith("NOTICE: ")
-    failed = run(tmp_path, "--base", "missing")
+    failed = run(tmp_path, "--base", "missing", checker=checker)
     assert failed.returncode == 1
     assert failed.stderr.startswith("ERROR: Base 'missing' is unknown")
+
+
+@pytest.mark.parametrize("checker", CHECKERS, ids=["root", "template"])
+def test_unresolvable_environment_base_falls_through(
+    repo: Path, checker: Path
+) -> None:
+    """A CSARC_CI_BASE absent from the repository falls back to main."""
+    append(repo, "tool", 'echo "not a pattern" >&2\n')
+    result = run(repo, checker=checker, ci_base="dev/m20-absent")
+    assert result.returncode == 1
+    assert ".csarc/scripts/tool:4: missing ERROR" in result.stderr
+    fresh = repo / "fresh"
+    (fresh / ".csarc" / "scripts").mkdir(parents=True)
+    git(fresh, "init", "-q", "-b", "trunk")
+    git(
+        fresh,
+        "-c",
+        "user.email=f@example.invalid",
+        "-c",
+        "user.name=F",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "init",
+    )
+    single = run(fresh, checker=checker, ci_base="dev/m20-absent")
+    assert single.returncode == 0, single.stderr
+    assert single.stdout.startswith("NOTICE: ")
 
 
 def test_checker_messages_follow_the_patterns() -> None:

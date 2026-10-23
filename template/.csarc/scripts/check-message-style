@@ -192,24 +192,24 @@ def changed_lines(base: str, paths: list[str]) -> dict[str, set[int] | None]:
 
 def resolve_base(explicit: str | None) -> str | None:
     """Return the merge base with HEAD, or None."""
-    wanted = explicit or os.environ.get("CSARC_CI_BASE", "")
-    candidates = [wanted] if wanted else []
-    if not candidates:
+    candidates = [explicit or ""]
+    if not explicit:
         branch = run_git("symbolic-ref", "--quiet", "--short", "HEAD") or ""
         config = run_git(
             "config", "--get", f"branch.{branch.strip()}.gh-merge-base"
         )
-        candidates = [x.strip() for x in (config, "main") if x and x.strip()]
-    for name in candidates:
+        env = os.environ.get("CSARC_CI_BASE")
+        candidates = [x.strip() for x in (env, config, "main") if x]
+    for name in filter(None, candidates):
         name = name.removeprefix("refs/heads/").removeprefix("origin/")
         for ref in (f"refs/remotes/origin/{name}", f"refs/heads/{name}", name):
             if run_git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"):
                 merge_base = run_git("merge-base", ref, "HEAD")
                 if merge_base:
                     return merge_base.strip()
-    if wanted:
+    if explicit:
         sys.exit(
-            f"ERROR: Base '{wanted}' is unknown: Git cannot resolve it. "
+            f"ERROR: Base '{explicit}' is unknown: Git cannot resolve it. "
             "Run 'git fetch origin'."
         )
     return None
