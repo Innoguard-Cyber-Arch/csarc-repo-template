@@ -110,7 +110,7 @@ _exclude:
   - "{% if 'milestones' in lifecycle %}__keep_milestone_tracker_form__{% else %}.github/ISSUE_TEMPLATE/milestone-tracker.yml{% endif %}"
   - "{% if documentation_mode != 'off' %}__keep_documentation_policy__{% else %}.csarc/docs/documentation-policy.md{% endif %}"
   # The Chinese writing guide renders only for a Traditional Chinese project.
-  - "{% if 'zh-tw' in (documentation_languages | default('')) %}__keep_chinese_writing_guide__{% else %}.csarc/docs/writing-guide.md{% endif %}"
+  - "{% if 'zh-tw' in documentation_languages %}__keep_chinese_writing_guide__{% else %}.csarc/docs/writing-guide.md{% endif %}"
   - "{% if release_ownership == 'csarc-owned' %}__keep_publish_release__{% else %}.csarc/scripts/publish-release{% endif %}"
   - "{% if release_ownership == 'csarc-owned' %}__keep_release_writer__{% else %}.csarc/scripts/release_writer.py{% endif %}"
   - "{% if release_ownership == 'csarc-owned' %}__keep_release_bundle__{% else %}.csarc/scripts/release_bundle.py{% endif %}"
