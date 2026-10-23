@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.39.1] - 2026-10-23
+
+### Bug Fixes
+
+* fix(lifecycle): treat Free private rules 403 as no Ruleset (147663f)
+
 ## [0.39.0] - 2026-10-23
 
 ### Included prereleases
