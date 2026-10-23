@@ -15,6 +15,14 @@ CHANGELOG 的 tag。
 * feat(payload): budget generated payload beyond total bytes (4999894)
 * feat(scripts): run the message check in generated verify and on the CLI (41258b2)
 
+## [0.41.1] - 2026-10-23
+
+### Bug Fixes
+
+* fix(lifecycle): read new settings with the released schema during upgrades (0b3a046)
+* fix(lifecycle): inventory new settings without running release code (13b01ef)
+* fix(lifecycle): show the accepted settings inventory (a6a78f9)
+
 ## [0.41.0] - 2026-10-23
 
 ### Features

@@ -40,6 +40,7 @@ Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─→ main
 - **Release recovery**：`main` 缺少一次應有的發版時，以 `fix/<Issue>-<slug>`、`release-recovery` label 直接對 `main` 提出修正，比照 hotfix 一律 full。
 - **Dependabot**：minor／patch 更新在 exact head 重新驗證後經 lifecycle 合併，major 保留人工審核。
 - **模板更新**：`csarc update` 產生的 PR 帶 `governance-switch` label；改動 `.csarc/scripts/` 或放寬治理設定（例如 `admin_bypass`、`verification_mode`、關閉 CodeQL、移除 `lifecycle` 項目、降低 coverage 門檻）的 PR 也一樣。
+- **升級帶來的新設定**：PR 帶 `governance-switch` label，且 `.csarc/provenance.json` 記錄的 tag 是指向 `_commit` 的已發布 immutable 正式版時，以 `ast` 盤點該版設定表（不執行）。全部相符才放行，並記錄 `schema_source=release:<tag>`；否則 fail closed 並列出盤點。
 
 ## Milestone 掛勾與持續同步
 
