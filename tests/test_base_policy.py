@@ -604,7 +604,7 @@ def test_local_merge_runs_the_trusted_base_not_the_candidate_gate(
     assert f"runs from trusted base {base_sha}" in result.stdout
     assert "CANDIDATE-MERGE-GATE" not in result.stdout
     assert result.returncode == 1
-    assert "PR lifecycle blocked" in result.stderr
+    assert "ERROR: " in result.stderr
     worktrees = git(repo, "worktree", "list", "--porcelain")
     assert worktrees.count("worktree ") == 1
 

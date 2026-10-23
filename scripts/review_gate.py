@@ -717,6 +717,7 @@ def main(argv: list[str] | None = None) -> int:
             decision["unresolved_threads"] = unresolved_threads(
                 args.repo, args.pr
             )
+            # message-pattern: allow X1 JSON output
             sys.stdout.write(json.dumps(decision, indent=2) + "\n")
             return 0
         if args.command == "publish":

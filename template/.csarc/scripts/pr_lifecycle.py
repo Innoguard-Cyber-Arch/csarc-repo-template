@@ -1751,7 +1751,7 @@ def require_default_branch_issue_route(
     ]
     if closing_issues != [issue_number]:
         raise RuntimeError(
-            "Stable route: does not close its matching Issue. Fix the body."
+            "Stable route: does not close its Issue. Fix the body."
         )
     issue = github.get(repo, f"issues/{issue_number}")
     if (
@@ -2464,7 +2464,7 @@ def run_from_trusted_base(args: argparse.Namespace) -> int | None:
                 "Trusted base: no PR lifecycle entry point. Update the base."
             )
         sys.stdout.write(
-            f"PR lifecycle {args.handler_name} runs from trusted base "
+            f"NOTICE: PR lifecycle {args.handler_name} runs from trusted base "
             f"{base_sha}.\n"
         )
         sys.stdout.flush()
@@ -3356,6 +3356,7 @@ def create_draft_pull(  # noqa: C901
         raise RuntimeError(
             "Created pull request: not Draft. Convert it to Draft."
         )
+    # message-pattern: allow X1 URL output for callers
     sys.stdout.write(url + "\n")
 
 
@@ -3480,6 +3481,7 @@ def check(args: argparse.Namespace, github: GitHub) -> None:
         getattr(args, "quota_fallback_note_url", ""),
         getattr(args, "require_dependabot_head", False),
     )
+    # message-pattern: allow X1 JSON output
     sys.stdout.write(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
 
 
@@ -3842,6 +3844,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         str(snapshot.get("release_level") or ""),
     )
     if candidate_evidence:
+        # message-pattern: allow X2 release_policy output without change
         sys.stdout.write(candidate_evidence.rstrip() + "\n")
     snapshot = merge_snapshot(
         github,
@@ -4083,8 +4086,8 @@ def close_work_issue(  # noqa: C901
         raise RuntimeError("Pull request: destination unavailable. Retry.")
     if base_ref == default_branch:
         sys.stdout.write(
-            f"PR #{args.pr_number}: default-branch closing remains "
-            "GitHub-native\n"
+            f"NOTICE: PR #{args.pr_number}: default-branch closing remains "
+            "GitHub-native.\n"
         )
         return
     delivery = DELIVERY_BRANCH.fullmatch(base_ref)
@@ -4148,7 +4151,8 @@ def close_work_issue(  # noqa: C901
                 "Work Issue: closed without matching evidence. Reopen it."
             )
         sys.stdout.write(
-            f"Issue #{issue_number}: already closed by PR #{args.pr_number}\n"
+            f"NOTICE: Issue #{issue_number} is already closed by PR "
+            f"#{args.pr_number}.\n"
         )
         return
     if state != "open":
@@ -4163,7 +4167,7 @@ def close_work_issue(  # noqa: C901
     ):
         raise RuntimeError("Issue closure: GitHub did not confirm it. Retry.")
     sys.stdout.write(
-        f"Issue #{issue_number}: closed by merged PR #{args.pr_number}\n"
+        f"OK: Issue #{issue_number} closed by merged PR #{args.pr_number}.\n"
     )
 
 

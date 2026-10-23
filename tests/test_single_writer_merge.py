@@ -608,8 +608,8 @@ def test_single_writer_merge_keeps_the_g4_trace(
 @pytest.mark.parametrize(
     ("permission", "message"),
     [
-        ("manual-only", "recorded as untraced"),
-        ("blocked", "fix the condition"),
+        ("manual-only", "merge it manually, untraced"),
+        ("blocked", "Fix the condition"),
     ],
 )
 def test_refused_routes_never_reach_the_merge_call(
@@ -726,15 +726,15 @@ def test_local_dependabot_route_keeps_source_scope_and_release_path(
                     update_type="version-update:semver-major"
                 ),
             ),
-            "manual review",
+            "Review and merge it manually",
         ),
         (
             lambda github: setattr(github, "message", "bump copier"),
-            "scope is missing",
+            "scope: missing",
         ),
         (
             lambda github: setattr(github, "head_ref", "fix/42-not-dependabot"),
-            "identity is invalid",
+            "identity: invalid",
         ),
     ],
 )
@@ -841,11 +841,11 @@ def test_marker_edit_uses_the_leased_writer_and_reads_back(
         return ""
 
     monkeypatch.setitem(edit_metadata.__globals__, "run", lossy)
-    with pytest.raises(RuntimeError, match="did not change as requested"):
+    with pytest.raises(RuntimeError, match="did not change"):
         edit_metadata(arguments, github)
 
     arguments.body_file = tmp_path / "body.md"
-    with pytest.raises(RuntimeError, match="not both"):
+    with pytest.raises(RuntimeError, match="conflict"):
         edit_metadata(arguments, github)
 
 

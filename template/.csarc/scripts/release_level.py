@@ -971,6 +971,7 @@ def main(argv: list[str] | None = None) -> int:
             _write_batch_outputs(
                 batch, args.markdown_output, args.github_output
             )
+            # message-pattern: allow X1 JSON output
             sys.stdout.write(json.dumps(batch, sort_keys=True) + "\n")
             return 0
         if args.command == "checkpoint-role":
@@ -978,6 +979,7 @@ def main(argv: list[str] | None = None) -> int:
                 github, args.repo, args.sha, args.base_branch
             )
             _write_role_output("role", role, args.github_output)
+            # message-pattern: allow X1 JSON output
             sys.stdout.write(json.dumps({"role": role}) + "\n")
             return 0
         if args.command == "annotate-pr":
@@ -988,6 +990,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.actor,
                 args.body_file.read_text(encoding="utf-8"),
             )
+            # message-pattern: allow X1 URL output for callers
             sys.stdout.write(url + "\n")
             return 0
         if args.command == "annotate-release":
@@ -1021,6 +1024,7 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
         sys.stderr.write(f"ERROR: {error}\n")
         return 1
+    # message-pattern: allow X1 JSON output
     sys.stdout.write(json.dumps(payload, sort_keys=True) + "\n")
     return 0
 

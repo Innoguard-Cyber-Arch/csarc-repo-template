@@ -894,7 +894,7 @@ def test_milestone_release_boundary_binds_issues_to_pull_requests() -> None:
         aggregate_release_boundaries([evidence], "main", "promotion")
     evidence = promotion_evidence("milestone", "patch", 10)
     evidence["included_issues"] = [{"number": 11, "title": "Invented"}]
-    with pytest.raises(ValueError, match="does not match its PRs"):
+    with pytest.raises(ValueError, match="differs from its PRs"):
         aggregate_release_boundaries([evidence], "main", "promotion")
 
 
@@ -916,7 +916,7 @@ def test_non_milestone_boundary_rejects_milestone_scope() -> None:
     """Standalone evidence cannot smuggle a milestone checkpoint."""
     evidence = promotion_evidence("isolated", "patch", 10)
     evidence["milestone_promotion"] = None
-    with pytest.raises(ValueError, match="non-milestone"):
+    with pytest.raises(ValueError, match="Non-Milestone"):
         aggregate_release_boundaries([evidence], "main", "promotion")
 
 
@@ -1219,7 +1219,7 @@ def test_delivery_version_requires_one_exact_final_release_commit(
     git(tmp_path, "commit", "-m", "feat: same pull request release")
     feature_sha = git(tmp_path, "rev-parse", "HEAD")
 
-    with pytest.raises(ValueError, match="materialization is not exact"):
+    with pytest.raises(ValueError, match="materialization: not exact"):
         verify_delivery_version(tmp_path, base_sha, feature_sha, phase="stable")
 
     prepare_release_candidate(tmp_path, feature_sha, phase="stable")
@@ -1553,7 +1553,7 @@ def test_delivery_version_rejects_a_stale_release_worthy_branch(
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-m", "fix: stale delivery")
 
-    with pytest.raises(ValueError, match="current destination base"):
+    with pytest.raises(ValueError, match="lacks the destination base"):
         verify_delivery_version(
             tmp_path,
             current_base,
@@ -1609,7 +1609,7 @@ def test_deferred_checkpoint_work_merges_without_a_version(
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-m", "chore: materialize beta")
     head_sha = git(tmp_path, "rev-parse", "HEAD")
-    with pytest.raises(ValueError, match="must not materialize a version"):
+    with pytest.raises(ValueError, match="Deferred checkpoint work"):
         verify_delivery_version(
             tmp_path,
             base_sha,
@@ -1617,7 +1617,7 @@ def test_deferred_checkpoint_work_merges_without_a_version(
             phase="beta",
             checkpoint_role="deferred",
         )
-    with pytest.raises(ValueError, match="must not materialize a version"):
+    with pytest.raises(ValueError, match="Deferred checkpoint work"):
         release_plan_report(
             tmp_path, head_sha, phase="beta", checkpoint_role="deferred"
         )
@@ -1697,7 +1697,7 @@ def test_squashed_promotion_is_planned_from_its_bridge(
     assert report["tag"] == prepared["tag"] == "v0.2.1"
     assert report["materialized"] is True
 
-    with pytest.raises(ValueError, match="source tree does not match"):
+    with pytest.raises(ValueError, match="source tree: differs"):
         release_plan_report(
             tmp_path, squash, phase="stable", source_sha=delivery
         )
@@ -1994,7 +1994,7 @@ def test_promotion_version_rejects_non_release_changes(tmp_path: Path) -> None:
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "--amend", "--no-edit")
 
-    with pytest.raises(ValueError, match="materialization is not exact"):
+    with pytest.raises(ValueError, match="materialization: not exact"):
         verify_promotion_version(
             tmp_path,
             source_sha,
@@ -2027,7 +2027,7 @@ def test_no_release_promotion_preserves_the_delivery_tree(
     (tmp_path / "unexpected").write_text("not allowed\n", encoding="utf-8")
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "--amend", "--no-edit")
-    with pytest.raises(ValueError, match="must preserve"):
+    with pytest.raises(ValueError, match="baseline tree changed"):
         verify_promotion_version(
             tmp_path,
             source_sha,
@@ -2222,7 +2222,7 @@ def test_candidate_freshness_follows_current_base_release_intent(
             ValueError,
             match=(
                 rf"candidate {candidate_sha} was built from {source_sha}, "
-                rf"but current base {current_base_sha} adds release-worthy"
+                rf"but base {current_base_sha} adds release-worthy"
             ),
         ):
             verify_candidate_version(tmp_path, current_base_sha)
@@ -2830,7 +2830,7 @@ def test_main_retention_plan_command_requires_a_token_and_never_deletes(
     """The `retention-plan` CLI subcommand fails closed without a token."""
     monkeypatch.delenv("GH_TOKEN", raising=False)
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-    with pytest.raises(SystemExit, match="requires GH_TOKEN"):
+    with pytest.raises(SystemExit, match="no token to list Releases"):
         main(["retention-plan", "--repo", "acme/demo"])
 
     monkeypatch.setenv("GH_TOKEN", "test-token")
@@ -3039,7 +3039,7 @@ def test_maturity_fails_closed_without_a_readable_main_policy(
     git(tmp_path, "checkout", "delivery")
     commit_change(tmp_path, "cli", "feat!: drop the legacy layout")
 
-    with pytest.raises(ValueError, match="authoritative project_maturity"):
+    with pytest.raises(ValueError, match="project_maturity: "):
         release_plan(tmp_path, "HEAD", phase="beta")
 
     git(tmp_path, "branch", "-D", "main")

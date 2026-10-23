@@ -619,7 +619,7 @@ def test_one_issue_milestone_uses_only_work_and_promotion_prs() -> None:
     assert "sync_milestone_state.py complete-release" in release
     assert "record-promotion-evidence" not in lifecycle
     assert "Refs #N" in policy
-    assert "must not close its tracker before release succeeds" in policy
+    assert "closes its tracker before release" in policy
     assert "verify-promotion-version" in publish
     assert 'sync_milestone_state.py" complete-release' in publish
 

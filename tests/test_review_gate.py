@@ -752,7 +752,7 @@ def test_admin_bypass_milestone_issue_does_not_apply(
     github.issue_comments = [alpha_authorization_comment()]
     result = review_gate.evaluate(github, "o/r", 7, copilot_config)
     assert not result["passed"]
-    assert "Milestone-less Issue" in result["reason"]
+    assert "Stable route Issue: has a Milestone" in result["reason"]
 
 
 def test_admin_bypass_closed_issue_does_not_apply(
@@ -773,7 +773,7 @@ def test_admin_bypass_closed_issue_does_not_apply(
     github.issue_comments = [alpha_authorization_comment()]
     result = review_gate.evaluate(github, "o/r", 7, copilot_config)
     assert not result["passed"]
-    assert "Issue is not open" in result["reason"]
+    assert "Issue: not open" in result["reason"]
 
 
 def test_admin_bypass_ignores_a_non_maintainer_comment(

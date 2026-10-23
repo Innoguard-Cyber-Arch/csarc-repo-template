@@ -1304,7 +1304,7 @@ def test_github_app_actor_must_come_from_trusted_caller_input(
     assert GitHub().viewer("csarc-version-bot[bot]") == (
         "csarc-version-bot[bot]"
     )
-    with pytest.raises(RuntimeError, match="must pass --actor"):
+    with pytest.raises(RuntimeError, match="callers pass --actor"):
         GitHub().viewer()
     assert calls == [["gh", "api", "user"]]
 
@@ -1549,7 +1549,7 @@ def test_lease_evidence_must_match_the_remote_commit(
     github = FakeGitHub("a" * 40)
     github.canonical_lease = canonical
     tampered = {**canonical, field: value}
-    with pytest.raises(RuntimeError, match="canonical evidence"):
+    with pytest.raises(RuntimeError, match="lease commit: not canonical"):
         require_lease(github, tampered, "owner/repo", 42, "a" * 40)
 
 
@@ -1575,7 +1575,7 @@ def test_remote_lease_must_reuse_the_exact_head_commit(
         return payload
 
     github.get = tampered_get  # ty: ignore[invalid-assignment]
-    with pytest.raises(RuntimeError, match="canonical evidence"):
+    with pytest.raises(RuntimeError, match="lease commit: not canonical"):
         require_lease(github, canonical, "owner/repo", 42, "a" * 40)
 
 
@@ -1589,7 +1589,7 @@ def test_retargeting_requires_the_destination_lane_lease(
     canonical["refs"] = ["refs/heads/csarc/leases/pr-42"]
     github = FakeGitHub("a" * 40)
     github.canonical_lease = canonical
-    with pytest.raises(RuntimeError, match="Lease refs are invalid"):
+    with pytest.raises(RuntimeError, match="Lease refs: invalid"):
         require_lease(github, canonical, "owner/repo", 42, "a" * 40)
 
 
@@ -1602,7 +1602,7 @@ def test_destination_branch_advance_invalidates_the_lease(
     github = FakeGitHub("a" * 40)
     github.canonical_lease = canonical
     github.destination_sha = "9" * 40
-    with pytest.raises(RuntimeError, match="destination branch advanced"):
+    with pytest.raises(RuntimeError, match="Destination branch: advanced"):
         require_lease(github, canonical, "owner/repo", 42, "a" * 40)
 
 
@@ -1769,7 +1769,7 @@ def test_renewal_refuses_another_owner_and_states_reauthorization(
     acquire(arguments, github)
     first = read_lease(arguments.output)
     publish_lease_commit(github, first)
-    with pytest.raises(RuntimeError, match="does not hold"):
+    with pytest.raises(RuntimeError, match="held by another owner"):
         acquire(
             SimpleNamespace(
                 **{
@@ -1782,7 +1782,7 @@ def test_renewal_refuses_another_owner_and_states_reauthorization(
             github,
         )
     github.destination_sha = "9" * 40
-    with pytest.raises(RuntimeError, match="new exact-head authorization"):
+    with pytest.raises(RuntimeError, match="reauthorize the exact head"):
         acquire(
             SimpleNamespace(
                 **{
@@ -1807,7 +1807,7 @@ def test_renewal_refuses_another_github_actor(
     first = read_lease(arguments.output)
     publish_lease_commit(github, first)
     github.authenticated_actor = "someone-else"
-    with pytest.raises(RuntimeError, match="actor changed"):
+    with pytest.raises(RuntimeError, match="actor: changed after the lease"):
         acquire(
             SimpleNamespace(
                 **{
@@ -1900,8 +1900,8 @@ def test_merge_accepts_an_authorization_across_an_explicit_renewal(
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
-        ("owner", "task/other", "changed head, base, owner"),
-        ("head_sha", "8" * 40, "changed head, base, owner"),
+        ("owner", "task/other", "Lease renewal chain: identity changed"),
+        ("head_sha", "8" * 40, "Lease renewal chain: identity changed"),
         ("expires_at", "2026-08-25T01:05:00Z", "not contiguous"),
     ],
 )
@@ -2049,7 +2049,7 @@ def test_authorization_requires_live_maintainer_permission() -> None:
     """A stale MEMBER association cannot replace live repository permission."""
     github = FakeGitHub("a" * 40)
     github.permission = "read"
-    with pytest.raises(RuntimeError, match="lacks maintainer permission"):
+    with pytest.raises(RuntimeError, match="no maintainer permission"):
         authorization(
             github,
             "owner/repo",
@@ -2643,7 +2643,7 @@ def test_pinned_check_rejects_malformed_github_app_id(app_id: object) -> None:
         raise AssertionError(path)
 
     github.collection = malformed_collection  # ty: ignore[invalid-assignment]
-    with pytest.raises(RuntimeError, match="Check run identity is malformed"):
+    with pytest.raises(RuntimeError, match="Check run: malformed identity"):
         require_successful_checks(
             github, "owner/repo", github.head, {("verify", 1)}
         )
@@ -2680,7 +2680,7 @@ def test_quota_fallback_rejects_malformed_github_app_id(
         raise AssertionError(path)
 
     github.collection = malformed_collection  # ty: ignore[invalid-assignment]
-    with pytest.raises(RuntimeError, match="Check run identity is malformed"):
+    with pytest.raises(RuntimeError, match="Check run: malformed identity"):
         require_successful_checks(
             github,
             "owner/repo",
@@ -2728,7 +2728,7 @@ def test_237_unresolved_blocker_survives_ready_and_authorization(
     github.timeline = [
         {"event": "ready_for_review", "created_at": "2026-08-25T01:04:00Z"}
     ]
-    with pytest.raises(RuntimeError, match="unresolved blocking comment"):
+    with pytest.raises(RuntimeError, match="blocked by an unresolved comment"):
         merge_snapshot(
             github,
             lease_fixture(),
@@ -2756,7 +2756,7 @@ def test_inline_and_commented_review_blockers_are_enforced(
         github.inline_comments = [blocker]
     else:
         github.reviews.append(blocker)
-    with pytest.raises(RuntimeError, match="unresolved blocking comment"):
+    with pytest.raises(RuntimeError, match="blocked by an unresolved comment"):
         merge_snapshot(
             github,
             lease_fixture(),
@@ -3076,13 +3076,13 @@ def test_alpha_sync_rejects_a_forged_deterministic_branch(
     github, lease, _note_url = alpha_quota_snapshot_fixture(sync=True)
     if invalid_sync == "missing-main":
         github.compare_status = "behind"
-        message = "does not contain current main"
+        message = "lacks current main"
     else:
         github.commit_payloads[f"git/commits/{github.head}"]["parents"] = [
             {"sha": github.base_sha},
             {"sha": "9" * 40},
         ]
-        message = "merge current main into the exact base"
+        message = "not main merged into the base"
     with pytest.raises(RuntimeError, match=message):
         merge_snapshot(
             github,
@@ -3173,7 +3173,7 @@ def test_default_branch_alpha_route_rejects_a_milestone_issue(
     github, _lease, _note_url = alpha_quota_snapshot_fixture()
     github.base_ref = "main"
     lease = lease_fixture()
-    with pytest.raises(RuntimeError, match="Milestone-less Issue"):
+    with pytest.raises(RuntimeError, match="route Issue: has a Milestone"):
         merge_snapshot(
             github,
             lease,
@@ -3305,7 +3305,7 @@ def test_alpha_release_rejects_a_fork(
             "repo": {"full_name": "fork/repo"},
         },
     }
-    with pytest.raises(RuntimeError, match="same-repository head"):
+    with pytest.raises(RuntimeError, match="in another repository"):
         merge_snapshot(
             github,
             lease_fixture(),
@@ -3393,10 +3393,10 @@ def test_default_branch_alpha_route_requires_a_live_matching_issue(
     lease = lease_fixture()
     if invalid_route == "multiple":
         github.body += "\n\nCloses #99"
-        message = "close its matching Issue exactly"
+        message = "does not close its Issue"
     elif invalid_route == "closed":
         github.issue_state = "closed"
-        message = "Issue is not open"
+        message = "Issue: not open"
     elif invalid_route == "wrong-prefix":
         github.head_ref = "promote/42-lifecycle"
         github.body = f"Closes #42\n\n{ADMIN_BYPASS_MARKER}"
@@ -3410,7 +3410,7 @@ def test_default_branch_alpha_route_requires_a_live_matching_issue(
                 "repo": None,
             },
         }
-        message = "same-repository head"
+        message = "in another repository"
     with pytest.raises(RuntimeError, match=message):
         merge_snapshot(
             github,
@@ -3426,7 +3426,7 @@ def test_alpha_work_branch_must_close_its_matching_issue(
     bind_remote_lease(monkeypatch)
     github, lease, _note_url = alpha_quota_snapshot_fixture()
     github.body = f"Ready for review.\n\n{ADMIN_BYPASS_MARKER}"
-    with pytest.raises(RuntimeError, match="close its matching Issue"):
+    with pytest.raises(RuntimeError, match="does not close its Issue"):
         merge_snapshot(
             github,
             lease,
@@ -3455,7 +3455,7 @@ def test_alpha_work_branch_rejects_false_closing_tokens(
     bind_remote_lease(monkeypatch)
     github, lease, _note_url = alpha_quota_snapshot_fixture()
     github.body = f"{body}\n\n{ADMIN_BYPASS_MARKER}"
-    with pytest.raises(RuntimeError, match="close its matching Issue"):
+    with pytest.raises(RuntimeError, match="does not close its Issue"):
         merge_snapshot(
             github,
             lease,
@@ -3482,7 +3482,7 @@ def test_alpha_work_branch_rejects_non_integer_issue_identity(
         return original_get(repo, path)
 
     monkeypatch.setattr(github, "get", malformed_issue)
-    with pytest.raises(RuntimeError, match="Issue is not open"):
+    with pytest.raises(RuntimeError, match="Issue: not open"):
         merge_snapshot(
             github,
             lease,
@@ -3500,10 +3500,10 @@ def test_alpha_work_branch_requires_one_live_matching_issue(
     github, lease, _note_url = alpha_quota_snapshot_fixture()
     if invalid_route == "multiple":
         github.body += "\n\nCloses #99"
-        message = "close its matching Issue exactly"
+        message = "does not close its Issue"
     elif invalid_route == "closed":
         github.issue_state = "closed"
-        message = "Issue is not open"
+        message = "Issue: not open"
     else:
         github.base_ref = "dev/m10-release-backed-adoption"
         github.issue_milestone_number = 9
@@ -3512,7 +3512,7 @@ def test_alpha_work_branch_requires_one_live_matching_issue(
             "refs/heads/csarc/leases/pr-42",
             base_lane_ref(github.base_ref),
         ]
-        message = "Milestone does not match"
+        message = "Milestone differs from the base"
     with pytest.raises(RuntimeError, match=message):
         merge_snapshot(
             github,
@@ -3765,7 +3765,7 @@ def test_alpha_changes_requested_remains_a_blocker(
             "submitted_at": "2026-08-25T01:00:30Z",
         }
     ]
-    with pytest.raises(RuntimeError, match="Changes are still requested"):
+    with pytest.raises(RuntimeError, match="Changes requested: by"):
         merge_snapshot(
             github,
             lease,
@@ -3779,7 +3779,7 @@ def test_routine_quota_fallback_is_retired(
     """SPEC-009 retired actions_fallback: a quota note never merges."""
     bind_remote_lease(monkeypatch)
     github, lease, note_url = quota_snapshot_fixture()
-    with pytest.raises(RuntimeError, match="quota fallback was retired"):
+    with pytest.raises(RuntimeError, match="Quota fallback: retired"):
         merge_snapshot(
             github,
             lease,
@@ -3920,7 +3920,7 @@ def test_merge_snapshot_revalidates_the_authenticated_actor(
     bind_remote_lease(monkeypatch)
     github = FakeGitHub("a" * 40)
     github.authenticated_actor = "different-agent"
-    with pytest.raises(RuntimeError, match="actor changed"):
+    with pytest.raises(RuntimeError, match="actor: changed after the lease"):
         merge_snapshot(
             github,
             lease_fixture(),
@@ -3948,7 +3948,7 @@ def test_untrusted_comment_cannot_resolve_a_maintainer_blocker(
             "author_association": "NONE",
         },
     ]
-    with pytest.raises(RuntimeError, match="unresolved blocking comment"):
+    with pytest.raises(RuntimeError, match="blocked by an unresolved comment"):
         merge_snapshot(
             github,
             lease_fixture(),
@@ -3985,7 +3985,7 @@ def test_tampered_lease_cannot_delete_an_arbitrary_ref(tmp_path: Path) -> None:
     payload["refs"] = ["refs/heads/main"]
     path = tmp_path / "lease.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
-    with pytest.raises(RuntimeError, match="refs are invalid"):
+    with pytest.raises(RuntimeError, match="refs: invalid"):
         read_lease(path)
 
 
@@ -4545,7 +4545,7 @@ def test_final_merge_snapshot_rejects_a_new_p1_blocker(
             }
         ],
     ]
-    with pytest.raises(RuntimeError, match="unresolved blocking comment"):
+    with pytest.raises(RuntimeError, match="blocked by an unresolved comment"):
         merge(
             SimpleNamespace(
                 repo="owner/repo",
@@ -4583,7 +4583,7 @@ def test_final_merge_snapshot_rejects_a_new_inline_p1_blocker(
             }
         ],
     ]
-    with pytest.raises(RuntimeError, match="unresolved blocking comment"):
+    with pytest.raises(RuntimeError, match="blocked by an unresolved comment"):
         merge(
             SimpleNamespace(
                 repo="owner/repo",
@@ -4618,7 +4618,7 @@ def test_merge_rejects_the_wrong_destination_parent(
     monkeypatch.setitem(merge.__globals__, "confirm_refs", lambda _lease: None)
     github = FakeGitHub("a" * 40)
     github.merge_parent = "9" * 40
-    with pytest.raises(RuntimeError, match="does not match"):
+    with pytest.raises(RuntimeError, match=r"requested repository|differs"):
         merge(
             SimpleNamespace(
                 repo="owner/repo",
@@ -4658,7 +4658,7 @@ def test_merge_does_not_release_a_lease_for_an_unconfirmed_result(
         "merged": False,
         "sha": None,
     }
-    with pytest.raises(RuntimeError, match="synchronously merge"):
+    with pytest.raises(RuntimeError, match="did not merge it synchronously"):
         merge(
             SimpleNamespace(
                 repo="owner/repo",
@@ -4955,7 +4955,7 @@ def test_beta_hotfix_merge_rejects_a_different_merge_actor(
     github.authenticated_actor = "agent"
     lease["actor"] = "agent"
 
-    with pytest.raises(RuntimeError, match="must be the merge actor"):
+    with pytest.raises(RuntimeError, match="not the merge actor"):
         merge_snapshot(
             github,
             lease,
@@ -5397,7 +5397,7 @@ def test_merge_rejects_head_behind_base_and_reports_tree_mismatch(
     patch_merge_boundary(monkeypatch, traced_snapshot())
     behind = FakeGitHub("a" * 40)
     behind.compare_status = "diverged"
-    with pytest.raises(RuntimeError, match="does not contain the current base"):
+    with pytest.raises(RuntimeError, match="Pull request head: lacks the base"):
         run_merge(tmp_path, behind)
     assert not behind.merged
     assert behind.audit_comments == []
@@ -5579,7 +5579,7 @@ def test_single_summary_is_replaced_before_and_frozen_after_merge(
     monkeypatch.setattr(
         github, "merge", lambda *_: {"merged": False, "sha": None}
     )
-    with pytest.raises(RuntimeError, match="synchronously merge"):
+    with pytest.raises(RuntimeError, match="did not merge it synchronously"):
         run_merge(tmp_path, github)
     assert len(github.audit_comments) == 1
     first = github.audit_comments[0]
@@ -5589,7 +5589,7 @@ def test_single_summary_is_replaced_before_and_frozen_after_merge(
     ]
 
     # Retrying the same attempt reuses the summary without rewriting it.
-    with pytest.raises(RuntimeError, match="synchronously merge"):
+    with pytest.raises(RuntimeError, match="did not merge it synchronously"):
         run_merge(tmp_path, github)
     assert github.audit_comments == [first]
     assert github.comment_edits == []
@@ -5600,7 +5600,7 @@ def test_single_summary_is_replaced_before_and_frozen_after_merge(
     patch_merge_boundary(
         monkeypatch, traced_snapshot(hosted_verification=newer)
     )
-    with pytest.raises(RuntimeError, match="synchronously merge"):
+    with pytest.raises(RuntimeError, match="did not merge it synchronously"):
         run_merge(tmp_path, github)
     assert github.audit_comments == [first]
     replaced = merge_trace.parse_summary(github.comment_edits[-1][1])
@@ -5612,7 +5612,7 @@ def test_single_summary_is_replaced_before_and_frozen_after_merge(
     github.comments[0]["body"] = merge_trace.summary_comment(
         record.record, record.data, "merged", ["merge-trace: result=traced"]
     )
-    with pytest.raises(RuntimeError, match="immutable"):
+    with pytest.raises(RuntimeError, match="Do not change it"):
         run_merge(tmp_path, github)
 
     github.comments.append(dict(github.comments[0]))
@@ -6048,7 +6048,7 @@ def test_untraced_routes_and_body_without_issue_skip_the_trace() -> None:
     pull["body"] = "No closing keyword"
     assert trace(github, "owner/repo", pull, "a" * 40, None) is None
     pull["body"] = "Closes #42\nCloses #43"
-    with pytest.raises(RuntimeError, match="exactly one Issue"):
+    with pytest.raises(RuntimeError, match="must close one Issue"):
         trace(github, "owner/repo", pull, "a" * 40, None)
 
 
