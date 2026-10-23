@@ -26,14 +26,14 @@ tracking: none
 - [x] Tagged source、版本欄位、CHANGELOG、prompt 與 provenance 指向同一版本與 commit。
 - [x] Root GitHub Release 從已驗證 tagged source 建置 wheel／sdist；沒有實際 root registry 消費者時不維護跨 registry 發布路徑。
 - [x] Release 保存 distributions／來源封存檔、SHA-256、固定 Syft 版本產生的 SPDX JSON SBOM 與 source metadata；manifest 以 digest 綁定 exact tag，不要求不同執行間的 Syft JSON byte-identical。
-- [x] Conditional consumer verifier 在使用成品前驗 repository、tag、source／artifact digest 與 signer；公版不宣稱它是自動門禁。`scripts/publish-release` 自 #770 起也重用同一份 `verify_consumption()`，在發布時對自己剛建立的 Release 做 post-hoc 驗證，取代原本 `scripts/release_policy.py` 對 `immutable_releases` 的 pre-flight admin-scope probe（`GITHUB_TOKEN` 結構性讀不到；#123／#626）——發版路徑與消費路徑用同一份驗證邏輯，不重寫第二份。
+- [x] Conditional consumer verifier 在使用成品前驗 repository、tag、source／artifact digest 與 signer；公版不宣稱它是自動門禁。`scripts/publish-release` 自 #770 起也重用同一份 `verify_consumption()`，在發布時對自己剛建立的 Release 做 post-hoc 驗證，取代原本 `scripts/release_policy.py` 對 `immutable_releases` 的 pre-flight admin-scope probe（`GITHUB_TOKEN` 結構性讀不到；#123／#626）；發版路徑與消費路徑用同一份驗證邏輯，不重寫第二份。
 - [x] 公版不提供 PyPI／npm／GHCR publisher 選項；需要 registry 的產品另案採 OIDC trusted publishing，不使用長效 token。
 - [x] Dependency 與 source safety 由 lockfile、Dependabot、等待政策、publisher trust、OSV、Gitleaks 與 plan-aware CodeQL 分工，不用一項工具冒充全部供應鏈控制。
 - [x] 已發布 immutable Release 不被重寫；歷史缺失證據明記為缺失，不補造 attestation。
 
 ## Plan
 
-此 spec 維持已落地 trust chain；root CLI 從核准 GitHub Release commit 執行，新增 distribution channel 必須等 owner 提出實際需求後再重新評估。
+此 spec 維持已生效的 trust chain；root CLI 從核准 GitHub Release commit 執行，新增 distribution channel 必須等 owner 提出實際需求後再重新評估。
 
 ## Out of scope
 

@@ -27,7 +27,7 @@ Root configuration 驗證公版本身；`template/` 是 downstream contract。�
 - [x] 可逐位元組共用的 root／template 檔案由 `scripts/sync-paired-files.sh` 產生並檢查，不靠人工雙改。
 - [x] Lifecycle CLI 驗證 canonical repository、immutable release、tag、完整 commit SHA 與 provenance，dry-run 不寫入 target。
 - [x] Template update 通知只建立／更新一張去重 Issue，不自動改產品 repository。
-- [x] 尚未落地的 resumable／transactional adoption 與 metadata 完整性只列為 open work，不宣稱為現況。
+- [x] 尚未實作的 resumable／transactional adoption 與 metadata 完整性只列為 open work，不宣稱為現況。
 
 ## Plan
 

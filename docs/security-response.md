@@ -7,7 +7,7 @@
 ## 步驟
 
 1. **記錄**：收到通報的維護者在私密位置建立紀錄，寫下收件時間、通報者聯絡方式、受影響的
-   版本或元件、重現狀態。私密位置是通報管道本身的往來紀錄，或 repository 已啟用時的
+   版本或元件、重現狀態。私密位置是通報管道的往來紀錄，或 repository 已啟用時的
    GitHub Security Advisory 草稿；不放在公開 Issue、PR、Discussion、commit message 或 Actions log。
 2. **確認時限**：`.github/SECURITY.md` 不對外承諾確認或修正時間，本頁也不承諾。維護者在私密
    紀錄寫下第一次回覆通報者的時間；若之後決定對外承諾時限，先以受審查的 PR 寫進
