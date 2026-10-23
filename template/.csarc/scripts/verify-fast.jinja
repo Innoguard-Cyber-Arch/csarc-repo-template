@@ -146,6 +146,8 @@ esac
 verification_step "Changed-tree hygiene" git diff --check
 verification_step "Conflict-marker check" ./.csarc/scripts/check-update-conflicts
 verification_step "Secret scan" ./.csarc/scripts/scan-secrets
+verification_step "Message pattern check" \
+  ./.csarc/scripts/check-message-style --base "$merge_base"
 
 if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ||
   "$scopes" == *,template,* ]]; then

@@ -26,6 +26,7 @@ WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 SUBJECT_CHECKS = (
     "check-update-conflicts",
     "scan-secrets",
+    "check-message-style",
     "check-bypass-lifecycle",
     "build-repo-site",
     "build-handbook",
@@ -282,6 +283,7 @@ def test_normal_candidate_passes_through_the_trusted_executor(
     for name in (
         "check-update-conflicts",
         "scan-secrets",
+        "check-message-style",
         "check-bypass-lifecycle",
         "spec_to_issue.py",
         "build-repo-site",
