@@ -36,6 +36,7 @@ A message tells the reader what happened and what to do next. Write each message
 - M2. Put a variable value or a command in single quotes, for example `'main'`. Do not use backticks, because a shell runs the text between them.
 - M3. End each sentence with a period. Do not use exclamation marks.
 - M4. Write errors and warnings to standard error. Write notices and success messages to standard output.
+- M5. Write a raised exception's text as `<what failed>: <why>. <what to do next>.` without a prefix. The code that prints it adds `ERROR: `.
 
 ### Exceptions
 
@@ -47,7 +48,7 @@ A message can use a different form only when one of these conditions is true:
 - X4. The text is a protocol string that other code matches, for example a commit subject or a marker line.
 - X5. The text is one line of a multi-line report or table that the script prints as one unit.
 
-Record each exception in the source, on the line before the message, as a comment: `message-pattern: allow X<n> <reason>`. An exception without a recorded reason is a defect.
+Record each exception in the source, on the line before the message, as a comment: `message-pattern: allow X<n> <reason>`. For an X5 report, you can put `message-pattern: allow-begin X5 <reason>` before it and `message-pattern: allow-end` after it. An exception without a recorded reason is a defect.
 
 ## Related guide
 

@@ -1,0 +1,330 @@
+#!/usr/bin/env python3
+"""Check script messages against the writing guide message patterns."""
+
+from __future__ import annotations
+
+import argparse
+import ast
+import os
+import re
+import shlex
+import subprocess
+import sys
+from collections.abc import Callable
+from pathlib import Path
+
+BODY = "<what failed>: <why>. <what to do next>."
+PATTERNS = {
+    "ERROR": "ERROR: " + BODY,
+    "WARNING": "WARNING: <what is at risk>: <why>. <what to do next>.",
+    "NOTICE": "NOTICE: <what happened or what the script does next>.",
+    "OK": "OK: <what the script verified or changed>.",
+}
+STDERR = {"ERROR", "WARNING"}
+HOLE = "\x00"
+MARKER = re.compile(r"#.*message-pattern:")
+ALLOW = re.compile(r"#\s*message-pattern:\s*allow\s+X[1-5]\s+\S.{2,}")
+BLOCK = re.compile(r"#.*message-pattern:\s*allow-(begin|end)")
+BEGIN = re.compile(r"#\s*message-pattern:\s*allow-begin\s+X5\s+\S.{2,}")
+EXPANSION = re.compile(r"\$(?:\{[^}]*\}|\([^)]*\)|\w+|[*@#?!$-])|\{\{.*?\}\}")
+SHELL_CALL = re.compile(
+    r"(?:^|[;{(]|&&|\|\||\b(?:then|do|else))\s*(echo|die|fail)\s+(.*)$"
+)
+HEREDOC = re.compile(r"<<-?\s*['\"]?(\w+)")
+RAISED = re.compile(r"\w*(?:Error|Exit)$")
+OPERATORS = set(";&|<>")
+Message = tuple[int, int, str, str]
+
+
+def run_git(*args: str) -> str | None:
+    """Return git stdout, or None on failure."""
+    done = subprocess.run(["git", *args], capture_output=True, text=True)  # noqa: S603, S607
+    return done.stdout if done.returncode == 0 else None
+
+
+def judge(text: str, stream: str) -> str | None:
+    """Return the rule one message breaks, or None."""
+    kind = text.split(":", 1)[0]
+    if stream == "raise":
+        if kind in PATTERNS:
+            return "exception text carries a prefix"
+        text, stream, kind = "ERROR: " + text, "stderr", "ERROR"
+    if kind not in PATTERNS or not text.startswith(kind + ": "):
+        return "missing ERROR, WARNING, NOTICE, or OK prefix"
+    body = text[len(kind) + 2 :].rstrip()
+    if body.replace(HOLE, "").strip() in ("", "."):
+        return None
+    if "`" in body:
+        return "backticks instead of single quotes (M2)"
+    if "!" in body or not body.endswith("."):
+        return "sentence does not end with a period (M3)"
+    if kind in STDERR and not re.search(r": .+\. [A-Z'\x00].*\.$", body):
+        return "missing a part of the pattern"
+    if (kind in STDERR) != (stream == "stderr"):
+        return "wrong output stream (M4)"
+    return None
+
+
+def literal(node: ast.AST | None) -> str | None:
+    """Return string text with holes for values."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        return "".join(literal(part) or HOLE for part in node.values)
+    if isinstance(node, ast.BinOp):
+        left, right = literal(node.left), literal(node.right)
+        if left is not None or right is not None:
+            return (left or HOLE) + (right or HOLE)
+    return None
+
+
+def python_messages(source: str) -> list[Message]:
+    """Return the messages of Python source."""
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        call, stream = None, "stderr"
+        if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call):
+            func = node.exc.func
+            name = getattr(func, "id", getattr(func, "attr", ""))
+            call = node.exc if RAISED.match(name) else None
+            stream = "raise" if name.endswith("Error") else stream
+        elif isinstance(node, ast.Call):
+            name = ast.unparse(node.func)
+            call = node if name in ("print", "sys.exit") else None
+            if name == "print":
+                files = [k for k in node.keywords if k.arg == "file"]
+                is_err = [ast.unparse(k.value) for k in files] == ["sys.stderr"]
+                stream = "stderr" if is_err else "stdout"
+        text = literal(call.args[0]) if call and call.args else None
+        if text and text.strip():
+            first = getattr(node, "lineno", 1)
+            last = getattr(node, "end_lineno", None) or first
+            found.append((first, last, text.strip(), stream))
+    return found
+
+
+def shell_words(rest: str) -> tuple[list[str], str] | None:
+    """Return echo words and stream, or None for data."""
+    lexer = shlex.shlex(
+        EXPANSION.sub(HOLE, rest), posix=True, punctuation_chars=";&|<>"
+    )
+    lexer.whitespace_split = True
+    words, stop, target = [], "", ""
+    try:
+        for token in lexer:
+            if stop:
+                target = token
+                break
+            if set(token) <= OPERATORS:
+                stop = token
+            else:
+                words.append(token)
+    except ValueError:
+        return None
+    if stop == ">&" and words[-1:] == ["1"]:
+        words.pop()
+    if stop in ("|", ">", ">>", "<") or (stop == ">&" and target != "2"):
+        return None
+    while words and re.fullmatch(r"-[neE]+", words[0]):
+        words.pop(0)
+    return words, "stderr" if stop == ">&" else "stdout"
+
+
+def shell_messages(source: str) -> list[Message]:
+    """Return the messages of shell source."""
+    found, heredoc = [], None
+    for number, line in enumerate(source.splitlines(), 1):
+        if heredoc:
+            heredoc = None if line.strip() == heredoc else heredoc
+            continue
+        if match := HEREDOC.search(line):
+            heredoc = match.group(1)
+        code = line.strip()
+        match = SHELL_CALL.search(code)
+        if code.startswith(("#", "{%")) or not match:
+            continue
+        name, rest = match.groups()
+        parsed = None if f"$({name}" in code else shell_words(rest)
+        if parsed is None:
+            continue
+        text, stream = " ".join(parsed[0]).strip(), parsed[1]
+        if name != "echo":
+            stream = "stderr"
+            if text.split(":", 1)[0] not in PATTERNS:
+                text = "ERROR: " + text
+        if text.replace(HOLE, "").strip():
+            found.append((number, number, text, stream))
+    return found
+
+
+def messages_in(path: Path, source: str) -> list[Message] | None:
+    """Return the messages of one script, or None."""
+    name = path.name.removesuffix(".jinja")
+    head = source[:800].splitlines()
+    first = next((x for x in head if x.startswith("#!")), "")
+    if name.endswith(".py") or "python" in first:
+        return python_messages(source)
+    if name.endswith(".sh") or re.search(r"\b(ba)?sh\b", first):
+        return shell_messages(source)
+    return None
+
+
+def changed_lines(base: str, paths: list[str]) -> dict[str, set[int] | None]:
+    """Return changed lines per file; None means all."""
+    diff = run_git("diff", "-U0", "-M", base, "--", *paths) or ""
+    lines: dict[str, set[int] | None] = {}
+    current = ""
+    for row in diff.splitlines():
+        if row.startswith("+++ "):
+            current = row[6:] if row.startswith("+++ b/") else ""
+        elif row.startswith("@@") and current:
+            start, _, count = re.findall(r"\+(\d+)(,(\d+))?", row)[0]
+            first, size = int(start), int(count or 1)
+            known = lines.setdefault(current, set()) or set()
+            lines[current] = known | set(range(first, first + size))
+    untracked = run_git(
+        "ls-files", "--others", "--exclude-standard", "--", *paths
+    )
+    for name in (untracked or "").splitlines():
+        lines[name] = None
+    return lines
+
+
+def resolve_base(explicit: str | None) -> str | None:
+    """Return the merge base with HEAD, or None."""
+    candidates = [explicit or ""]
+    if not explicit:
+        branch = run_git("symbolic-ref", "--quiet", "--short", "HEAD") or ""
+        config = run_git(
+            "config", "--get", f"branch.{branch.strip()}.gh-merge-base"
+        )
+        env = os.environ.get("CSARC_CI_BASE")
+        candidates = [x.strip() for x in (env, config, "main") if x]
+    for name in filter(None, candidates):
+        name = name.removeprefix("refs/heads/").removeprefix("origin/")
+        for ref in (f"refs/remotes/origin/{name}", f"refs/heads/{name}", name):
+            if run_git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"):
+                merge_base = run_git("merge-base", ref, "HEAD")
+                if merge_base:
+                    return merge_base.strip()
+    if explicit:
+        sys.exit(
+            f"ERROR: Base '{explicit}' is unknown: Git cannot resolve it. "
+            "Run 'git fetch origin'."
+        )
+    return None
+
+
+def blocks(rows: list[str], flag: Callable[[int, str], None]) -> set[int]:
+    """Return the lines inside allow blocks."""
+    inside, opened = set(), 0
+    for number, row in enumerate(rows, 1):
+        match = BLOCK.search(row)
+        if not match:
+            continue
+        end = match.group(1) == "end"
+        if end and opened:
+            inside.update(range(opened, number))
+        elif end or opened:
+            flag(opened or number, "unmatched allow-begin or allow-end")
+        if not end and not BEGIN.search(row):
+            flag(number, "block exception needs X5 and a reason")
+        opened = 0 if end else number
+    if opened:
+        flag(opened, "unmatched allow-begin or allow-end")
+    return inside
+
+
+def check_file(
+    path: Path, changed: set[int] | None, failures: list[tuple[str, ...]]
+) -> int:
+    """Record failures; return the checked count."""
+    name = path.as_posix()
+    try:
+        source = path.read_text(encoding="utf-8")
+        messages = messages_in(path, source) or []
+    except (OSError, UnicodeDecodeError):
+        return 0
+    except SyntaxError as error:
+        failures.append((name, str(error.lineno), "cannot parse", "", ""))
+        return 0
+    rows, checked = source.splitlines(), 0
+
+    def flag(number: int, problem: str) -> None:
+        if changed is None or number in changed:
+            row = rows[number - 1].strip()
+            failures.append((name, str(number), problem, row, ""))
+
+    blocked = blocks(rows, flag)
+    for first, last, text, stream in messages:
+        if changed is not None and not changed.intersection(
+            range(first - 1, last + 1)
+        ):
+            continue
+        checked += 1
+        before = rows[first - 2] if first > 1 else ""
+        marked = MARKER.search(before) and not BLOCK.search(before)
+        if marked and not ALLOW.search(before):
+            flag(first - 1, "exception needs X1-X5 and a reason")
+        skip = marked or first in blocked
+        problem = None if skip else judge(text.replace("\n", " "), stream)
+        if problem:
+            shown = text.replace(HOLE, "<value>").replace("\n", " ")
+            expected = BODY if stream == "raise" else ""
+            failures.append((name, str(first), problem, shown, expected))
+    return checked
+
+
+def main() -> int:
+    """Check changed or all script messages."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("paths", nargs="*")
+    parser.add_argument("--all", action="store_true")
+    parser.add_argument("--base")
+    args = parser.parse_args()
+    root = Path("scripts/verify-template.sh").is_file()
+    defaults = (
+        ["scripts", "template/.csarc/scripts"] if root else [".csarc/scripts"]
+    )
+    paths = args.paths or [p for p in defaults if Path(p).exists()]
+    scope = None
+    if not args.all:
+        base = resolve_base(args.base)
+        if base is None:
+            print("NOTICE: Message pattern check skipped: no base ref.")  # noqa: T201
+            return 0
+        scope = changed_lines(base, paths)
+    files = []
+    for item in map(Path, paths):
+        files += sorted(item.rglob("*")) if item.is_dir() else [item]
+    checked, failures = 0, []
+    for path in files:
+        name = path.as_posix()
+        if not path.is_file():
+            continue
+        if scope is None:
+            checked += check_file(path, None, failures)
+        elif name in scope:
+            checked += check_file(path, scope[name], failures)
+    for name, number, problem, text, body in failures:
+        kind = text.split(":", 1)[0]
+        expected = body or PATTERNS.get(kind, " | ".join(PATTERNS.values()))
+        # message-pattern: allow X5 one line of the findings report
+        print(  # noqa: T201
+            f"{name}:{number}: {problem}: {text}\n  expected: {expected}",
+            file=sys.stderr,
+        )
+    if failures:
+        print(  # noqa: T201
+            f"ERROR: Message pattern check failed: {len(failures)} of "
+            f"{checked} messages break the writing guide. "
+            "Rewrite each listed message or record an allow marker.",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"OK: Message pattern check passed for {checked} messages.")  # noqa: T201
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
