@@ -2484,9 +2484,12 @@ def _team_writer_gap(
 
 
 def single_writer_eligibility(
-    github: GitHub, repo: str, actor: str
+    github: GitHub,
+    repo: str,
+    actor: str,
+    observed: dict[str, list[str]] | None = None,
 ) -> tuple[str, str]:
-    """Classify the `server_enforcement=none` route (Issue #1076)."""
+    """Classify the `server_enforcement=none` route (#1076, #1233)."""
     try:
         repository = github.get(repo, "")
         collaborators = github.pages(
@@ -2509,6 +2512,11 @@ def single_writer_eligibility(
     if any(type(key.get("read_only")) is not bool for key in keys):
         return "inconclusive", "a deploy key has no read_only flag"
     write_keys = [key for key in keys if key["read_only"] is False]
+    if observed is not None:
+        observed["accounts"] = sorted(writers)
+        observed["deploy_keys"] = sorted(
+            str(key.get("id")) for key in write_keys
+        )
     if len(writers) + len(write_keys) > 1:
         return (
             "multiple-writers",
@@ -2521,6 +2529,31 @@ def single_writer_eligibility(
             f"the merge actor {actor} is not the one observed writer",
         )
     return "eligible", f"{actor} is the only observed writer"
+
+
+def single_writer_opt_in(
+    github: GitHub, repo: str, actor: str, merger: str, state: str, reason: str
+) -> tuple[str, str]:
+    """Apply the owner's `single_writer_merger` opt-in (Issue #1233)."""
+    if state not in {"eligible", "multiple-writers"}:
+        return state, reason
+    refused = state if state == "multiple-writers" else "inconclusive"
+    if actor.casefold() != merger.casefold():
+        return refused, f"{reason}; only {merger} may merge by config"
+    role = live_repository_role(github, repo, actor)
+    if role not in WRITE_ROLES:
+        return refused, f"{reason}; {merger} has live role {role!r}"
+    return "eligible", f"single_writer_merger {merger} opted in; {reason}"
+
+
+def configured_single_writer_merger() -> str:
+    """Return the opted-in single-writer merger, or '' (Issue #1233)."""
+    path = repository_root() / ".csarc/config.yml"
+    try:
+        config = csarc_config.load_config(path)
+    except csarc_config.SettingsError as error:
+        raise RuntimeError(str(error)) from error
+    return str(config.get("single_writer_merger") or "")
 
 
 def repository_root() -> Path:
@@ -3187,9 +3220,14 @@ def merge_snapshot(  # noqa: C901
             protection = "blocked"
             reason = "GitHub does not report the reviewed pull request as clean"
     server_enforcement = "ruleset"
+    merger = ""
+    observed_writers: dict[str, list[str]] = {}
     if protection == "none":
         server_enforcement = "none"
-        writer_state, reason = single_writer_eligibility(github, repo, actor)
+        merger = configured_single_writer_merger()
+        writer_state, reason = single_writer_eligibility(
+            github, repo, actor, observed_writers
+        )
         # #1211: an independent exact-head approval lets a multi-writer
         # repository merge; an incomplete readback stays manual-only.
         approved = (
@@ -3199,6 +3237,10 @@ def merge_snapshot(  # noqa: C901
         if approved:
             writer_state = "eligible"
             reason = f"{authorization_actor} approved the exact head; {reason}"
+        elif merger:
+            writer_state, reason = single_writer_opt_in(
+                github, repo, actor, merger, writer_state, reason
+            )
         if writer_state != "eligible":
             protection = writer_state
         elif mergeable_state != "clean":
@@ -3224,6 +3266,8 @@ def merge_snapshot(  # noqa: C901
     if identity_refusal:
         protection = "blocked"
         reason = identity_refusal
+    elif protection == "single-writer" and merger:
+        identity = "configured-merger"
     quota_run_urls = (
         require_routine_quota_fallback(
             github, lease, pull, auth, quota_fallback_note_url
@@ -3305,6 +3349,8 @@ def merge_snapshot(  # noqa: C901
         "merge_permission": merge_route(protection),
         "server_enforcement": server_enforcement,
         "merge_identity": identity,
+        "single_writer_merger": merger,
+        "observed_writers": observed_writers,
         "protection_reason": reason,
         "required_check_evidence": check_evidence,
         "local_verification": local_evidence,
@@ -3893,9 +3939,18 @@ def trace_lines(
             "merge, lifecycle revalidated every control"
         )
     elif snapshot.get("server_enforcement") == "none":
+        observed = snapshot.get("observed_writers")
+        opt_in = ""
+        if snapshot.get("single_writer_merger") and isinstance(observed, dict):
+            # #1233: name the config opt-in and every writer at merge time.
+            opt_in = (
+                "enabled_by=config:single_writer_merger "
+                f"writers={','.join(observed['accounts']) or '-'} "
+                f"write_deploy_keys={','.join(observed['deploy_keys']) or '-'} "
+            )
         lines.append(
             "single-writer-trace: "
-            f"writer={lease['actor']} server_enforcement=none "
+            f"writer={lease['actor']} server_enforcement=none {opt_in}"
             f"head={lease['head_sha']} {suffix}; no Ruleset enforced this "
             "merge, lifecycle revalidated every control"
         )

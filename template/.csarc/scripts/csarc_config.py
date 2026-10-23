@@ -74,8 +74,12 @@ INTENT_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
     "container": (KIND_BOOL, ()),
     "project_verification_hook": (KIND_TEXT, ()),
     "github_project_url": (KIND_TEXT, ()),
+    "single_writer_merger": (KIND_TEXT, ()),
 }
-OPTIONAL_DEFAULTS: dict[str, object] = {"github_project_url": ""}
+OPTIONAL_DEFAULTS: dict[str, object] = {
+    "github_project_url": "",
+    "single_writer_merger": "",
+}
 # Derived context that is saved only as a one-time user decision when no
 # native manifest resolves it uniquely (SPEC-009); otherwise it is absent.
 DECISION_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -91,6 +95,8 @@ CODE_OWNER = re.compile(
     r"^@(?:(?![A-Za-z0-9-]*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?"
     r"|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)$"
 )
+# Issue #1233: one GitHub user login, or '' for writer auto-detection.
+GITHUB_LOGIN = re.compile(r"^(?=.{1,39}$)[A-Za-z0-9](?:-?[A-Za-z0-9])*$")
 PACKAGE_NAME = re.compile(r"^[a-z_][a-z0-9_]*$")
 HOOK_PATH = re.compile(r"^[A-Za-z0-9._/-]+$")
 PLACEHOLDERS = frozenset({"todo", "tbd", "placeholder"})
@@ -249,6 +255,11 @@ def _validate_value(  # noqa: C901
             )
     elif not isinstance(value, str):
         raise settings_error(path, f"{key} must be a string")
+    elif key == "single_writer_merger":
+        if value and GITHUB_LOGIN.fullmatch(value) is None:
+            raise settings_error(
+                path, "single_writer_merger must be '' or one GitHub login"
+            )
     else:
         _validate_text(key, value, path)
 
