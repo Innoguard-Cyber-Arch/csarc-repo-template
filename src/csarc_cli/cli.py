@@ -49,6 +49,7 @@ from csarc_cli import (
     settings_schema,
     setup_plan,
     update_plan,
+    writing_guide_review,
 )
 from csarc_cli.lifecycle_report import (
     LIFECYCLE_REPORT_FORMAT_VERSION,
@@ -396,6 +397,9 @@ class ResolvedPlan:
     # Setup questions, work mode, warnings, and approval route (#1078);
     # only init and adopt plans carry one.
     setup: dict[str, object] | None = None
+    # Read-only writing-guide review prompt (#1224). It is report-only and
+    # never part of the machine plan, so plan bytes and digests stay equal.
+    writing_guide: dict[str, object] | None = None
 
     def as_dict(self) -> dict[str, object]:
         """Return the stable machine-readable plan representation."""
@@ -2401,6 +2405,20 @@ def provenance_data(
     return result
 
 
+def recorded_writing_guide(
+    target: Path, answers: Mapping[str, object] | None
+) -> str | None:
+    """Return the writing-guide version this write records as prompted.
+
+    The version is the CLI's own state, so it lives in provenance and not in
+    the owner's settings file (SPEC-009 saves persistent intent only).
+    Without answers the mode is unknown, so nothing is recorded.
+    """
+    if answers is None:
+        return None
+    return writing_guide_review.version_to_record(target, answers)
+
+
 def write_provenance(
     target: Path,
     revision: Revision,
@@ -2424,6 +2442,9 @@ def write_provenance(
         answers=answers,
         final_plan_sha256=final_plan_sha256,
     )
+    guide = recorded_writing_guide(target, answers)
+    if guide is not None:
+        payload[writing_guide_review.PROVENANCE_KEY] = guide
     config = target / CONFIG_FILE
     if answers is not None and config.is_file():
         config_bytes = config.read_bytes()
@@ -4043,6 +4064,7 @@ def lifecycle_report_model(  # noqa: C901
             "hook": hook,
             "render_parity": render_parity,
         },
+        "writing_guide": plan.writing_guide,
     }
     redacted = cast(dict[str, object], redact(report))
     try:
@@ -4878,8 +4900,50 @@ def print_plan(plan: ResolvedPlan) -> None:
             "Conflict risk: Copier smart diff; conflicts fail closed and "
             "remain in place."
         )
+    print_writing_guide(plan.writing_guide)
     # message-pattern: allow-end
     print_update_recommendation(plan.update)
+
+
+def print_writing_guide(prompt: Mapping[str, object] | None) -> None:
+    """Print the read-only writing-guide review prompt (#1224)."""
+    if prompt is None:
+        return
+    guides = cast(list[str], prompt["guides"])
+    files = cast(list[str], prompt["files"])
+    # message-pattern: allow-begin X5 writing-guide section of the plan report
+    print(
+        f"Writing guide: review {len(files)} project-owned document(s) "
+        f"against {', '.join(guides)}; no file is changed."
+    )
+    for name in files:
+        print(f"  {name}")
+    print(f"Agent instruction: {prompt['instruction']}")
+    # message-pattern: allow-end
+
+
+def writing_guide_prompt(
+    received: Path,
+    documents: Path,
+    answers: Mapping[str, object],
+    *,
+    recorded_from: Path | None = None,
+) -> dict[str, object] | None:
+    """Return the review prompt for the guides rendered under ``received``.
+
+    ``recorded_from`` is the target whose provenance records the guide
+    version of the last prompt; a new project has none.
+    """
+    recorded = (
+        None
+        if recorded_from is None
+        else writing_guide_review.recorded_version(
+            read_provenance(recorded_from)
+        )
+    )
+    return writing_guide_review.review_prompt(
+        received, documents, answers, recorded
+    )
 
 
 def print_setup(setup: Mapping[str, object] | None) -> None:
@@ -8128,6 +8192,9 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             capabilities=capabilities,
             files=effects,
             adoption=adoption,
+            writing_guide=writing_guide_prompt(
+                candidate, target, answers, recorded_from=target
+            ),
         )
         fresh_payload = adoption_plan_payload(plan)
         if saved is not None and pre_verification_binding(
@@ -8415,6 +8482,9 @@ def build_adoption_plan(
         capabilities=capabilities,
         files=files,
         adoption=adoption,
+        writing_guide=writing_guide_prompt(
+            stage, target, answers, recorded_from=target
+        ),
     )
 
 
@@ -8845,6 +8915,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 capabilities=capabilities,
                 files=compare_stage(stage, target, adopt=False),
                 setup=setup_record,
+                writing_guide=writing_guide_prompt(stage, stage, answers),
             )
         if args.json:
             print(
@@ -13145,6 +13216,9 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         # The release workflow render flag is derived each run, never a
         # setting, so it cannot make a current repository look outdated.
         answers.pop("csarc_release_workflow", None)
+        guide_prompt = writing_guide_prompt(
+            stage, target, answers, recorded_from=target
+        )
         preflight = capability_preflight(
             managed_script(stage, "release_policy.py"),
             target,
@@ -13376,6 +13450,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         capabilities=preflight,
         files=files,
         update=status,
+        writing_guide=guide_prompt,
     )
     if target_snapshot:
         report_head = cast(str, target_snapshot["target_head"])

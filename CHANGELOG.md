@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.43.0-beta.1] - 2026-10-24
+
+### Features
+
+* feat(lifecycle): prompt a review of project docs against the writing guide (f3cf2a3)
+
 ## [0.42.0-beta.1] - 2026-10-23
 
 ### Features

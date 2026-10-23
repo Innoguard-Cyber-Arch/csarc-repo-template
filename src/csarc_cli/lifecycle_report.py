@@ -15,17 +15,26 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import cast
 
-LIFECYCLE_REPORT_FORMAT_VERSION = "2.2.0"
-# The reader still validates a 2.0.0 or 2.1.0 report (for example one
-# embedded in an earlier final plan) by its own rules; the writer emits only
-# 2.2.0.
+LIFECYCLE_REPORT_FORMAT_VERSION = "2.3.0"
+# The reader still validates a 2.0.0, 2.1.0, or 2.2.0 report (for example
+# one embedded in an earlier final plan) by its own rules; the writer emits
+# only 2.3.0.
 PREVIOUS_REPORT_FORMAT_VERSION = "2.0.0"
 REPORT_FORMAT_VERSION_2_1 = "2.1.0"
+REPORT_FORMAT_VERSION_2_2 = "2.2.0"
 READABLE_REPORT_FORMAT_VERSIONS = (
     PREVIOUS_REPORT_FORMAT_VERSION,
     REPORT_FORMAT_VERSION_2_1,
+    REPORT_FORMAT_VERSION_2_2,
     LIFECYCLE_REPORT_FORMAT_VERSION,
 )
+# 2.3.0 adds the read-only writing-guide review prompt (Issue #1224).
+WRITING_GUIDE_KEYS = frozenset({"files", "guides", "instruction", "reason"})
+WRITING_GUIDE_REASONS = ("first", "changed")
+WRITING_GUIDE_TEXT = {
+    "first": "This project receives the writing guides for the first time.",
+    "changed": "The writing guides changed since the last review prompt.",
+}
 # 2.2.0 adds the update compatibility shim a moved script keeps at its
 # legacy path while product files still call it (Issue #1083).
 COMPATIBILITY_SHIM = "compatibility-shim"
@@ -115,6 +124,9 @@ SECTION_HEADINGS = (
     "Verification",
     "Next steps",
 )
+# The tenth H2 appears only when the report carries a writing-guide prompt.
+WRITING_GUIDE_HEADING = "Writing guide"
+WRITING_GUIDE_LISTED = 20
 PRODUCT_SUBSECTIONS = (
     ("release_writers", "Release writers"),
     ("version_surfaces", "Version surfaces"),
@@ -148,6 +160,7 @@ REPORT_KEYS = frozenset(
 # 2.1.0 adds the init/adopt setup record (Issue #1078).
 REPORT_KEYS_2_0 = REPORT_KEYS
 REPORT_KEYS_2_1 = REPORT_KEYS | {"setup"}
+REPORT_KEYS_2_3 = REPORT_KEYS_2_1 | {"writing_guide"}
 SETUP_KEYS = frozenset({"approval_route", "questions", "warnings", "work_mode"})
 WARNING_KEYS = frozenset({"code", "command", "message", "subject"})
 WARNING_CODE = re.compile(r"^W[0-9]{2}-[a-z][a-z-]*$")
@@ -326,11 +339,9 @@ def _validate_files(report: Mapping[str, object]) -> list[Mapping[str, object]]:
         _exact_keys(row, FILE_KEYS, path)
         action = _member(row["action"], order, f"{path}.action")
         _member(row["reason"], FILE_ACTIONS[action], f"{path}.reason")
-        if (
-            row["reason"] == COMPATIBILITY_SHIM
-            and report["report_format_version"]
-            != LIFECYCLE_REPORT_FORMAT_VERSION
-        ):
+        if row["reason"] == COMPATIBILITY_SHIM and report[
+            "report_format_version"
+        ] not in (REPORT_FORMAT_VERSION_2_2, LIFECYCLE_REPORT_FORMAT_VERSION):
             raise _fail(f"{path}.reason", "compatibility-shim needs 2.2.0")
         if not isinstance(row["path"], str):
             raise _fail(f"{path}.path", "must be a string")
@@ -503,6 +514,25 @@ def _validate_setup(report: Mapping[str, object], operation: str) -> None:  # no
             )
 
 
+def _validate_writing_guide(report: Mapping[str, object]) -> None:
+    """Validate the 2.3.0 writing-guide prompt: null or a closed object."""
+    if report["writing_guide"] is None:
+        return
+    prompt = _mapping(report["writing_guide"], "$.writing_guide")
+    _exact_keys(prompt, WRITING_GUIDE_KEYS, "$.writing_guide")
+    _member(prompt["reason"], WRITING_GUIDE_REASONS, "$.writing_guide.reason")
+    if not isinstance(prompt["instruction"], str):
+        raise _fail("$.writing_guide.instruction", "must be a string")
+    for key in ("files", "guides"):
+        value = prompt[key]
+        if not isinstance(value, list) or not all(
+            isinstance(item, str) for item in cast(list[object], value)
+        ):
+            raise _fail(f"$.writing_guide.{key}", "must be a list of paths")
+    if not prompt["guides"]:
+        raise _fail("$.writing_guide.guides", "must name at least one guide")
+
+
 def validate_report(report: object) -> Mapping[str, object]:
     """Validate one report object and return it, failing closed.
 
@@ -520,6 +550,8 @@ def validate_report(report: object) -> Mapping[str, object]:
         value,
         REPORT_KEYS_2_0
         if version == PREVIOUS_REPORT_FORMAT_VERSION
+        else REPORT_KEYS_2_3
+        if version == LIFECYCLE_REPORT_FORMAT_VERSION
         else REPORT_KEYS_2_1,
         "$",
     )
@@ -532,6 +564,8 @@ def validate_report(report: object) -> Mapping[str, object]:
     _validate_summary(value, settings, files, actions)
     _validate_status(value, operation, actions)
     _validate_sections(value)
+    if version == LIFECYCLE_REPORT_FORMAT_VERSION:
+        _validate_writing_guide(value)
     if not isinstance(value["generated_at"], str):
         raise _fail("$.generated_at", "must be a string")
     _check_secrets(value, "$")
@@ -1153,6 +1187,31 @@ def _next_step_lines(report: Mapping[str, object]) -> list[str]:
     return lines
 
 
+def _writing_guide_lines(prompt: Mapping[str, object]) -> list[str]:
+    """Render the read-only review prompt; it never names a file write."""
+    files = cast(list[str], prompt["files"])
+    shown = files[:WRITING_GUIDE_LISTED]
+    lines = [
+        f"{WRITING_GUIDE_TEXT[str(prompt['reason'])]} CSARC did not change "
+        "any project-owned document. Review these documents against "
+        + ", ".join(code(name) for name in cast(list[str], prompt["guides"]))
+        + ":",
+        "",
+        *(f"- {code(name)}" for name in shown),
+    ]
+    if not files:
+        lines.append("None.")
+    if len(files) > len(shown):
+        lines.append(
+            f"- {len(files) - len(shown)} more file(s) are listed only in "
+            "the report JSON."
+        )
+    lines.extend(
+        ["", f"Agent instruction: {markdown_text(prompt['instruction'])}"]
+    )
+    return lines
+
+
 def render_markdown(report: object) -> str:
     """Render the human report from one validated report JSON object."""
     value = validate_report(report)
@@ -1180,4 +1239,14 @@ def render_markdown(report: object) -> str:
     ]
     for heading, body in zip(SECTION_HEADINGS, sections, strict=True):
         lines.extend(["", f"## {heading}", "", *body])
+    prompt = _optional_mapping(value.get("writing_guide"))
+    if prompt is not None:
+        lines.extend(
+            [
+                "",
+                f"## {WRITING_GUIDE_HEADING}",
+                "",
+                *_writing_guide_lines(prompt),
+            ]
+        )
     return "\n".join(lines) + "\n"
