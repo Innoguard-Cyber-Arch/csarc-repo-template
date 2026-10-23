@@ -7,6 +7,18 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.41.0-beta.1] - 2026-10-23
+
+### Features
+
+* feat(scripts): check script message patterns in CI (8d15865)
+* feat(scripts): judge exception text and allow X5 report blocks (fa4fff8)
+
+### Bug Fixes
+
+* fix(scripts): fall through an unresolvable environment base (787c17c)
+* fix(template): defer generated message check wiring to #1221 (bc942b1)
+
 ## [0.40.0] - 2026-10-23
 
 ### Features
