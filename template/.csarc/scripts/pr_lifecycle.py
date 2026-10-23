@@ -60,15 +60,7 @@ def _load_sibling(name: str) -> ModuleType:
 
 
 class SiblingModule:
-    """Import one sibling script module only when a command first uses it.
-
-    A rendered command must not require modules that only other commands
-    use, so optional siblings stay unloaded until an attribute is read.
-    The sibling always comes from this file's own directory, as an eager
-    import beside it would, even if `sys.path` changed in the meantime.
-    Attribute writes and deletes reach the loaded module, which keeps
-    monkeypatching and module-level state on the real module.
-    """
+    """Import one sibling script module only when a command first uses it."""
 
     def __init__(self, name: str) -> None:
         """Remember the sibling module name without importing it."""
@@ -1048,16 +1040,7 @@ RENEWAL_IDENTITY_FIELDS = (
 
 
 def authorization_anchor(github: GitHub, lease: dict[str, Any]) -> datetime:
-    """Return the earliest time an exact-head authorization may carry.
-
-    An ordinary lease anchors at its own `acquired_at`. An explicit renewal
-    (Issue #1017) walks its `renews` chain and anchors at the first lease,
-    but only while every predecessor is a canonical remote lease commit with
-    the identical repository, PR, head, base, owner, actor, and capability
-    digest, and was still live when its successor replaced it. A released,
-    expired, or differently owned lease breaks the chain, so an
-    authorization posted before every lease on this exact head never counts.
-    """
+    """Return the earliest time an exact-head authorization may carry."""
     anchor = parse_time(lease["acquired_at"], "Lease")
     current: dict[str, Any] = lease
     for _ in range(MAX_RENEWAL_CHAIN):
@@ -1094,14 +1077,7 @@ def authorization_anchor(github: GitHub, lease: dict[str, Any]) -> datetime:
 def renewable_lease(
     args: argparse.Namespace, github: GitHub
 ) -> dict[str, Any] | None:
-    """Return the still-live lease an explicit `--renew` replaces, if any.
-
-    Renewal (Issue #1017) is only for the caller that already holds the
-    exact lease: same evidence capability, owner, actor, PR, and head, with
-    the remote refs, base, and destination still unchanged and the lease not
-    yet expired. Anything else must release and acquire a fresh lease, which
-    requires a new exact-head authorization.
-    """
+    """Return the still-live lease an explicit `--renew` replaces, if any."""
     path = getattr(args, "renew", None)
     if path is None:
         return None
@@ -1280,13 +1256,7 @@ def warn_prior_authorization(github: GitHub, lease: dict[str, Any]) -> None:
 
 
 def live_repository_role(github: GitHub, repo: str, login: str) -> str:
-    """Return the live repository `role_name` of one user, or `unknown`.
-
-    Admin-only paths trust only `role_name` (#1058 decision 6, Issue
-    #1064). The legacy `permission` field is never read: it folds roles
-    together, so it cannot prove an admin. A failed, incomplete, or
-    mismatched response is `unknown` and every admin check fails closed.
-    """
+    """Return the live repository `role_name` of one user, or `unknown`."""
     try:
         permission = github.get(
             repo,
@@ -1309,26 +1279,14 @@ def live_repository_role(github: GitHub, repo: str, login: str) -> str:
 
 
 def is_maintainer(github: GitHub, repo: str, login: str) -> bool:
-    """Return whether a live `role_name` is `maintain` or `admin`.
-
-    #1058 decision 6: the legacy `permission` field folds `maintain` into
-    `write`, so it is never read; a missing role is `unknown` and fails.
-    """
+    """Return whether a live `role_name` is `maintain` or `admin`."""
     return live_repository_role(github, repo, login) in MAINTAINER_PERMISSIONS
 
 
 def authorization(
     github: GitHub, repo: str, pr_number: int, head_sha: str, url: str
 ) -> dict[str, Any]:
-    """Require a maintainer authorization bound to the exact PR head.
-
-    The `collaborators/{login}/permission` lookup below, not the comment's
-    `author_association`, is what proves the author is a maintainer (Issue
-    #785): `author_association` is computed relative to what the querying
-    credential can resolve, and a restricted `GITHUB_TOKEN` reports a real
-    org member as `COLLABORATOR` rather than `MEMBER` -- see #549 for the
-    identical problem, fixed the same way, in `sync_milestone_state.py`.
-    """
+    """Require a maintainer authorization bound to the exact PR head."""
     parsed = urllib.parse.urlparse(url)
     expected_path = f"/{repo}/pull/{pr_number}"
     if (
@@ -1371,14 +1329,7 @@ def find_exact_head_authorization(
     *,
     require_admin: bool = False,
 ) -> dict[str, Any] | None:
-    """Return the newest exact-head maintainer authorization, if one exists.
-
-    Unlike `authorization()`, this scans every PR comment so the shared
-    review decision needs no lease or comment URL. It ignores the
-    token-relative `author_association` (#785, #549); a live `role_name` of
-    `admin`/`maintain` proves the author, and `require_admin` accepts only
-    `admin` (Issue #1064).
-    """
+    """Return the newest exact-head maintainer authorization, if one exists."""
     expected_body = authorization_statement(repo, pr_number, head_sha)
     comments = github.pages(repo, f"issues/{pr_number}/comments?per_page=100")
     candidates: list[dict[str, Any]] = []
@@ -1409,12 +1360,7 @@ def find_exact_head_authorization(
 
 
 def normalized_comment_body(body: object) -> str | None:
-    """Return a comment body with web-UI line endings and padding removed.
-
-    GitHub stores a comment pasted through the web UI with CRLF line
-    endings (Issue #991), so the exact statement is compared after
-    normalizing CRLF to LF and stripping surrounding whitespace.
-    """
+    """Return a comment body with web-UI line endings and padding removed."""
     if not isinstance(body, str):
         return None
     return body.replace("\r\n", "\n").strip()
@@ -1710,19 +1656,7 @@ def require_default_branch_issue_route(
     lease: dict[str, Any],
     pull: dict[str, Any],
 ) -> None:
-    """Require a same-repository, Milestone-less Issue route into default.
-
-    Deliberately separate from `require_routine_route`: that function is
-    shared with `require_routine_quota_fallback` (the unrelated Actions
-    quota/billing required-check fallback from #325), and its default-branch
-    prohibition must stay intact for that path -- quota-fallback gaining
-    reach onto `main` would bypass required status checks there, a much
-    larger and unrelated risk. This checks the same "real, open, exactly
-    one Issue" shape `require_routine_route`'s issue branch checks, but a
-    Milestone-tracked Issue must use its `dev/mN` delivery branch instead
-    (`AGENTS.md` working-loop step 8), so this route requires the opposite:
-    no Milestone at all.
-    """
+    """Require a same-repository, Milestone-less Issue route into default."""
     head = pull.get("head")
     if not isinstance(head, dict):
         raise RuntimeError("Routine pull request head is invalid")
@@ -1868,13 +1802,7 @@ def exact_head_approval(
     head_sha: str,
     actor: str | set[str],
 ) -> dict[str, Any] | None:
-    """Return the newest independent maintainer approval for this head.
-
-    ``actor`` names every account that cannot approve: the author and the
-    head's last pusher (#1211), never the merger by itself.
-    Ignores `author_association` for the same reason `authorization()`
-    does (Issue #785): the live `role_name` is the source of truth.
-    """
+    """Return the newest independent maintainer approval for this head."""
     excluded = {actor} if isinstance(actor, str) else actor
     approved: list[dict[str, Any]] = []
     for login, review in reviews.items():
@@ -1910,11 +1838,7 @@ def effective_protection(
     local_mode: bool = False,
     local_fallback: bool = False,
 ) -> tuple[str, str, set[tuple[str, int]], bool, bool]:
-    """Prove review and check enforcement for an exact-head merge.
-
-    In local mode an incomplete Ruleset read is `inconclusive` (Issue
-    #1064): it never proves the E1 fallback or any wider shape.
-    """
+    """Prove review and check enforcement for an exact-head merge."""
     result = _effective_protection(
         github,
         repo,
@@ -1939,11 +1863,7 @@ RULES_PLAN_UNSUPPORTED = (
 
 
 def rules_plan_unsupported(error: RuntimeError) -> bool:
-    """Return whether a rules read failed only because the plan lacks it.
-
-    Only GitHub's exact plan-unsupported 403 qualifies; every other 403,
-    404, 5xx, or unrecognized failure stays unknown and fails closed.
-    """
+    """Return whether a rules read failed only because the plan lacks it."""
     return str(error).endswith(f"gh: {RULES_PLAN_UNSUPPORTED}")
 
 
@@ -2299,20 +2219,7 @@ def merge_identity(
     authorization_source: str,
     approver: str = "",
 ) -> tuple[str, str]:
-    """Classify the merge actor; return a refusal reason when it is unfit.
-
-    #1058 decision 27 (Issue #1076) separates the merge actor from the
-    authorizer. On the ordinary Ruleset agent route (an exact-head review
-    or Copilot review authorizes) the actor must hold `write` and neither
-    `maintain` nor `admin`, read from the live `role_name`; anything else,
-    including an unknown role, is refused. A GitHub App actor holds
-    installation permissions, never a repository role. On the admin-bypass
-    and emergency-hotfix routes the actor is the live admin authorizer
-    itself, and the single-writer route runs as the sole maintainer.
-    #1211 revises decision 27: the independent exact-head ``approver`` may
-    merge with `maintain` or `admin` (`approver`), and a multi-writer
-    repository without a Ruleset merges on that approval.
-    """
+    """Classify the merge actor; return a refusal reason when it is unfit."""
     if protection == "single-writer":
         return "sole-maintainer", ""
     if protection == "independent-approval":
@@ -2412,14 +2319,7 @@ def _team_writer_gap(
 def single_writer_eligibility(
     github: GitHub, repo: str, actor: str
 ) -> tuple[str, str]:
-    """Classify the `server_enforcement=none` route (Issue #1076).
-
-    #1058 decisions 10 and 27: only a complete, paginated readback that
-    observes exactly one writer -- the merge actor itself -- is `eligible`.
-    Another writer (a collaborator, a write-capable team member, or a
-    write deploy key) is `multiple-writers`; any failed, malformed, or
-    partial read is `inconclusive`. Both leave a manual merge only.
-    """
+    """Classify the `server_enforcement=none` route (Issue #1076)."""
     try:
         repository = github.get(repo, "")
         collaborators = github.pages(
@@ -2472,11 +2372,7 @@ def configured_verification_mode() -> str:
 
 
 def trusted_executor_module() -> ModuleType:
-    """Load the base-policy module beside this lifecycle (Issue #1069).
-
-    The import is lazy so commands that never decide a merge keep their
-    small import set.
-    """
+    """Load the base-policy module beside this lifecycle (Issue #1069)."""
     if __package__ in {None, ""}:
         return importlib.import_module("trusted_executor")
     return importlib.import_module(f"{__package__}.trusted_executor")
@@ -2488,13 +2384,7 @@ def subject_repository_root() -> Path:
 
 
 def run_from_trusted_base(args: argparse.Namespace) -> int | None:
-    """Re-execute a merge decision from the lease's trusted base commit.
-
-    Issue #1069: the gate, router, config reader, and entry point that
-    decide a local merge come from the lease-bound base commit, never from
-    the candidate checkout. The current process only bootstraps that base;
-    a process already running from it (marked by the environment) proceeds.
-    """
+    """Re-execute a merge decision from the lease's trusted base commit."""
     lease = read_lease(args.lease)
     base_sha = str(lease["base_sha"])
     executor = trusted_executor_module()
@@ -2747,13 +2637,7 @@ def authenticated_dependabot_commit(
 
 
 def dependabot_update_scope(message: str) -> list[str]:
-    """Return the minor/patch update types a signed Dependabot commit states.
-
-    Issue #1076: local mode has no hosted eligibility workflow, so the
-    update scope comes from the GitHub-signed commit's own
-    `updated-dependencies` metadata; a major, unknown, or missing type
-    leaves only a manual merge.
-    """
+    """Return the minor/patch update types a signed Dependabot commit states."""
     _, separator, metadata = message.partition("updated-dependencies:")
     types = DEPENDABOT_UPDATE_TYPE.findall(metadata) if separator else []
     if not types:
@@ -3396,13 +3280,7 @@ def create_draft_pull(  # noqa: C901
 
 
 def admin_bypass_marker_body(body: str, present: bool) -> str:
-    """Insert or remove the one exact admin-bypass marker line.
-
-    Issue #1076: the managed entry normalizes near-miss copies (a list
-    bullet or stray whitespace) so the body carries the marker exactly once
-    or not at all; the template's guidance comment is kept and anchors the
-    inserted line.
-    """
+    """Insert or remove the one exact admin-bypass marker line."""
     lines = [
         line
         for line in body.replace("\r\n", "\n").split("\n")
@@ -3714,12 +3592,7 @@ def ensure_summary(
     record: dict[str, object],
     data: bytes,
 ) -> str:
-    """Create, or replace in place, the PR's single evidence summary.
-
-    Before the merge the latest attempt replaces the payload of the one
-    marker comment; a summary whose status left `attempt` belongs to a
-    completed merge and is never rewritten.
-    """
+    """Create, or replace in place, the PR's single evidence summary."""
     summaries = [
         comment
         for comment in github.pages(
@@ -4591,22 +4464,7 @@ def canonical_scanner_helper(root: Path, path: Path) -> bool:
 
 
 def dependabot_auto_merge_exemption(root: Path, path: Path) -> bool:
-    """Trust the two exact dependabot-auto-merge.yml paths (see #602).
-
-    The only unleased write left in this workflow is the major-update
-    `needs-manual-review` label/comment. It never authorizes or performs a
-    merge; minor and patch updates use the separate exact-head workflow and
-    `pr_lifecycle.py` lease. Keeping this narrow exemption avoids taking the
-    shared main-lane lease for a non-merge classification notice.
-
-    This is a positive list, not a pattern relaxation: only these two exact
-    paths are trusted. A different file reusing the same unleased
-    `gh pr edit --add-label` command text is still caught by scan_writers.
-
-    Every scanner exemption must have its own tracking Issue (#602 is this
-    one's), and all exemptions are re-reviewed once the project leaves
-    beta — see .csarc/docs/ci-policy.md's "PR lifecycle single-writer" section.
-    """
+    """Trust the two exact dependabot-auto-merge.yml paths (see #602)."""
     return _trusted_exact_path(
         root,
         path,

@@ -169,19 +169,7 @@ def check_alignment(args: argparse.Namespace) -> None:
 
 
 def check_route(args: argparse.Namespace) -> None:
-    """Report the `promotion` required check for one ordinary pull request.
-
-    Every pull request into `main` needs an explicit `promotion` check-run
-    so `.csarc/policies/rulesets-required-checks.json`'s
-    `required_status_checks`
-    never stays permanently pending for it. A `not-applicable` or a
-    recognized promotion route (milestone, isolated, hotfix, release
-    recovery, release follow-up, or a merge-queue re-check) succeeds;
-    only a `main`-targeting branch that matches none of those routes
-    fails closed. This intentionally reuses `route_for()` rather than
-    reimplementing branch/label classification, so this check and the
-    `prepare()` evidence pipeline it feeds can never disagree silently.
-    """
+    """Report the `promotion` required check for one ordinary pull request."""
     if args.event != "pull_request":
         # A merge-queue commit was already classified when its source pull
         # request opened; `prepare()` uses the identical fallback for the

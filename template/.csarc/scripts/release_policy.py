@@ -74,25 +74,7 @@ class Capability:
 def select_release_mode(
     capabilities: dict[str, Capability], *, operator_reason: str | None = None
 ) -> tuple[str, str]:
-    """Choose Automatic, Guided, or Blocked without a second publisher.
-
-    Guided mode has one automatically-detected trigger (Actions pull
-    requests are blocked or unknown per observed capabilities) and one
-    operator-asserted trigger: `operator_reason` is a non-empty, human- or
-    agent-authored justification recording a live decision that Actions or
-    its webhook delivery is currently unhealthy (see Issue #589 and #587,
-    and the "Release 發版不依賴 Actions 健康度的 fallback" section in
-    .csarc/docs/ci-policy.md). There is no capability probe for
-    "Actions/webhooks are unhealthy": an idle hosted runner or a dropped
-    `pull_request` webhook
-    delivery looks identical to "nothing to release right now" from the
-    GitHub REST API this module probes, so this trigger is deliberately
-    manual rather than auto-detected. An operator override can only steer
-    an otherwise-automatic release toward the same reviewed Guided path
-    (prepare-candidate -> ordinary pull request -> ordinary review); it
-    never turns a genuinely blocked publish capability into a usable one,
-    and it never skips review.
-    """
+    """Choose Automatic, Guided, or Blocked without a second publisher."""
     pull_requests = capabilities["actions_pull_requests"]
     blocked = [
         name
@@ -574,12 +556,7 @@ def parser() -> argparse.ArgumentParser:
 
 
 def release_candidate() -> ModuleType:
-    """Load the CSARC release commands beside this file.
-
-    Only `release_ownership: csarc-owned` renders
-    `.csarc/scripts/release_candidate.py`; every other project keeps the
-    capability `preflight` the CSARC CLI runs (#1129).
-    """
+    """Load the CSARC release commands beside this file."""
     name = (
         "release_candidate"
         if __package__ in {None, ""}

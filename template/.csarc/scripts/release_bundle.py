@@ -44,12 +44,7 @@ def digest(path: Path) -> str:
 
 
 def project_license_metadata(root: Path) -> tuple[str, str, str] | None:
-    """Return the project package name, license, and copyright holder.
-
-    The values are one-time seeds read from native sources (SPEC-009): the
-    product manifest names the package and LICENSE declares the license and
-    holder. A product-owned (``custom``) LICENSE is not annotated.
-    """
+    """Return the project package name, license, and copyright holder."""
     if not (root / ".csarc/config.yml").is_file():
         return None
     config_script = root / "scripts/csarc_config.py"
@@ -122,13 +117,7 @@ def annotate_sbom(root: Path, sbom_path: Path, version: str) -> None:
 
 
 def identity(root: Path, tag: str) -> tuple[str, str]:
-    """Validate the release tag and return its version and commit.
-
-    Issue #918: a tag may carry the legal `-beta.N` prerelease suffix;
-    `is_valid_version` (.csarc/scripts/release_phase.py) is the one canonical
-    parser for that shape, reused here instead of a second hand-rolled
-    regex that could drift from it.
-    """
+    """Validate the release tag and return its version and commit."""
     if not tag.startswith("v") or not is_valid_version(tag):
         raise ValueError(f"invalid release tag: {tag}")
     version = verify_release_version(root, tag.removeprefix("v"))

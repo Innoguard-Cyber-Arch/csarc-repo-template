@@ -132,13 +132,7 @@ def _config_token_text(value: object, *, lang: str) -> str:
 def _substitute_config_tokens(
     markdown: str, config: dict[str, Any], *, lang: str
 ) -> str:
-    """Resolve a downstream project's `[[project_name]]`-style tokens.
-
-    Fails closed (like the retired generated-project `_substitute_config`
-    it replaces) when the source uses an allowlisted token name that this
-    project's `.csarc/config.yml` does not actually define, instead of
-    silently rendering an empty string.
-    """
+    """Resolve a downstream project's `[[project_name]]`-style tokens."""
     # Project-owned content from an older starter may still name a retired
     # setting. A csarc update never rewrites that content and must not stop
     # on it, so every build names the replacement on stderr instead of
@@ -209,18 +203,7 @@ def _esc(value: str) -> str:
 
 
 def _code_html(code: str) -> str:
-    """Encode one config-guidance code sample the way Hugo's `$codeHTML` did.
-
-    A literal newline surviving into a rendered `<pre>` or `data-*`
-    attribute is harmless for this engine -- unlike the retired Hugo build,
-    it never re-parses rendered shortcode output as Markdown, so the
-    blank-line/raw-HTML-block interaction the "&#10;" encoding originally
-    guarded against (see the historical comment this replaced in
-    site/layouts/shortcodes/config-guidance.html) cannot recur here. The
-    encoding is kept anyway so rendered output, and this port's structural
-    diff against the previously committed docs/index.html, stay close to
-    the prior renderer's.
-    """
+    """Encode one config-guidance code sample the way Hugo's `$codeHTML` did."""
     return html.escape(code, quote=True).replace("\n", "&#10;")
 
 
@@ -246,17 +229,7 @@ _TESTING_STEP_ORDER: Final = (
 
 
 def load_site_data(root: Path) -> SiteData:
-    """Load every `site/data/*` source the render functions consume.
-
-    Every file here is optional except `navigation.json` and
-    `.csarc/site/version.json`: a minimal downstream site (Issue #681) whose
-    content never uses `{{< similar-tools >}}`, `{{< testing >}}`,
-    `{{< config-guidance >}}`, `{{< file-map >}}`, or `{{< audit-trail >}}`
-    has no reason to ship placeholder JSON those shortcodes would never
-    read -- this is what makes the engine actually reusable by `template/`
-    instead of root-specific. A file that does exist is still parsed
-    strictly; only its absence is tolerated.
-    """
+    """Load every `site/data/*` source the render functions consume."""
     data_dir = root / "docs/site/data"
     glossary_path = root / ".csarc/site/data/glossary.toml"
     glossary: dict[str, Any] = {}
@@ -381,15 +354,7 @@ def _render_list_items(items: list[_ListItem]) -> str:
 
 
 def render_prose(text: str, *, state: RenderState) -> str:  # noqa: C901
-    """Render the small Markdown subset used by prose content bodies.
-
-    Supports paragraphs, `##`/`###` headings, nested `-`/`*`/`1.` lists,
-    pipe tables, fenced code (including ` ```mermaid ` blocks), bold/code/
-    link inline spans (via `_inline_markdown`), and raw HTML lines --
-    Hugo's `unsafe = true` goldmark setting let authors write an `<aside>`
-    directly in the Markdown, so a handful of content lines already rely on
-    that passthrough.
-    """
+    """Render the small Markdown subset used by prose content bodies."""
     lines = text.strip("\n").splitlines()
     blocks: list[str] = []
     paragraph: list[str] = []
@@ -504,12 +469,7 @@ def render_raw(
 
 
 class _MixedNode(Protocol):
-    """Structural shape of `repo_site_blocks.MixedNode`.
-
-    That dataclass is loaded dynamically via `runpy` (see `_BLOCKS` above),
-    so it has no static type this module can import directly; a Protocol
-    lets `ty` still check attribute access against its known shape.
-    """
+    """Structural shape of `repo_site_blocks.MixedNode`."""
 
     kind: str
     attrs: dict[str, str]
@@ -584,19 +544,7 @@ def render_mode_content(
     data: SiteData,
     state: RenderState,
 ) -> str:
-    """Render a `{{< standard >}}`/`{{< ops >}}` full-pane reading-mode variant.
-
-    Issue #681 decision F: a slide that needs both a standard and an ops
-    reading of the same topic wraps each full version in one of these two
-    shortcodes instead of sprinkling `{{< detail >}}` asides next to shared
-    prose. `detail-toggle.js` shows exactly one `.mode-content` block at a
-    time and swaps the whole thing on toggle, instead of collapsing an aside
-    in place. `key`/`title` are required (like `detail`/`disclosure`) so
-    `.csarc/scripts/check-repo-site-translations` can enforce that both
-    language sources declare a matching pair; `title` is exposed only as an
-    `aria-label` since the reading-mode toggle button already names the
-    mode visually.
-    """
+    """Render a `{{< standard >}}`/`{{< ops >}}` reading-mode variant."""
     key = _esc(attrs["key"])
     title = _esc(attrs["title"])
     inner = render_mixed(body, lang=lang, data=data, state=state)
@@ -629,29 +577,7 @@ def render_disclosure(
 
 
 def render_config_guidance(track: str, *, lang: str, data: SiteData) -> str:
-    """Port `site/layouts/shortcodes/config-guidance.html`.
-
-    Issue #525 retired the old two-mode disclosure -- a fold-open
-    `<details>` for "direct" tracks, a button plus modal-overlay-with-
-    pager for the rest -- in favor of one static block, always fully
-    expanded once Maintenance mode made it visible at all. Issue #681/
-    #682 decision Q supersedes that specific point: once every visible
-    slide's font floor rose to honor a real reading distance (never
-    below 12pt as rendered), a track with several config-item cards
-    (each a title, goal, path, and full code sample) no longer fits the
-    fixed 900px canvas without a second, in-page scrollbar -- exactly
-    what the deck's "no scroll" contract forbids. A single collapsed
-    `<details>` per track keeps every example one click away instead of
-    always paying its full height, while the simple/technical toggle
-    (see detail-toggle.css's `.config-guidance` rule) still decides
-    whether the track is offered at all. The `direct` field in
-    site/data/config_examples.json is still not read here, for the same
-    reason Issue #525 stopped reading it: both prior styles already
-    collapsed into one shape, and this reopens no distinction between
-    them -- it is left in the data file only as a record of which
-    tracks were considered "fixed baseline" when that distinction was
-    authored.
-    """
+    """Port `site/layouts/shortcodes/config-guidance.html`."""
     tracks = data.config_examples["tracks"]
     if track not in tracks:
         raise BuildError(
@@ -691,16 +617,7 @@ def render_config_guidance(track: str, *, lang: str, data: SiteData) -> str:
 
 @dataclass
 class _FileMapNode:
-    """One segment of the file-map tree, keyed by its path segment.
-
-    `children` keeps Python dict insertion order, so the tree renders in
-    the same top-to-bottom order `site/data/file_map.json` lists its
-    entries and each entry lists its `paths` -- no separate sort step.
-    `entry` is the owning `site/data/file_map.json` entry (purpose,
-    responsibility, optional `note`) when this exact node is one of that
-    entry's literal paths; intermediate directories implied only by a
-    longer sibling path (e.g. `.github/` itself) carry no entry.
-    """
+    """One segment of the file-map tree, keyed by its path segment."""
 
     name: str
     is_dir: bool = False
@@ -711,13 +628,7 @@ class _FileMapNode:
 def _insert_file_map_path(
     children: dict[str, _FileMapNode], path: str, entry: dict[str, Any]
 ) -> None:
-    """Insert one entry's literal path into the tree being built, in place.
-
-    A trailing "/" marks the whole path as a directory; any segment the
-    path continues through is a directory regardless, so two entries that
-    share a directory prefix (e.g. `.github/workflows/` and
-    `.csarc/REVIEWERS`) merge into one shared branch instead of two.
-    """
+    """Insert one entry's literal path into the tree being built, in place."""
     ends_with_slash = path.endswith("/")
     segments = [segment for segment in path.split("/") if segment]
     cursor = children
@@ -802,13 +713,7 @@ def _render_file_map_node(
 
 
 def render_file_map(*, lang: str, data: SiteData) -> str:
-    """Render `{{< file-map >}}`: a file-explorer tree of the file map.
-
-    Replaces the flat three-column path/purpose/responsibility table (see
-    Issue #534) with a real nested tree built from each entry's literal
-    `paths` in `site/data/file_map.json`; content (paths, purpose,
-    responsibility) is unchanged from that table, only the presentation.
-    """
+    """Render `{{< file-map >}}`: a file-explorer tree of the file map."""
     file_map = data.file_map
     labels = file_map["labels"][lang]
     responsibility_labels = file_map["responsibilityLabels"]
@@ -1214,22 +1119,7 @@ _AUDIT_TRAIL_ISSUES: Final = (("535", "535"), ("559", "559"))
 
 
 def render_audit_trail(*, lang: str, data: SiteData) -> str:
-    """Render `{{< audit-trail >}}`: present the governance audit trail.
-
-    `.csarc/scripts/generate_audit_trail.py` (Issue #535) queries live GitHub
-    state and writes two Markdown tables. This repo site is the
-    byte-reproducible, `file://`-openable static bundle
-    `docs/adr/portable-repo-site.md` requires, so it can never embed
-    that live query's result as if it were current -- Issue #559 decided
-    this shortcode instead documents each output file's *structure*
-    (paths and columns, sourced once here so both languages stay in sync
-    with the generator's real header text) plus the exact regeneration
-    command, and explicitly states that -- mirroring the
-    `.csarc/scripts/check-governance-drift` precedent -- no schedule or
-    on-merge job generates and commits a snapshot either. The content
-    itself is hand-curated, not live-fetched, the same way
-    `site/data/config_examples.json` backs `render_config_guidance`.
-    """
+    """Render `{{< audit-trail >}}`: present the governance audit trail."""
     audit = data.audit_trail
     labels = audit["labels"][lang]
     rows = "".join(
@@ -1376,21 +1266,7 @@ def _render_header(attrs: dict[str, str], *, legacy: bool) -> str:
 def _render_legacy_body(
     body: str, *, lang: str, data: SiteData, state: RenderState
 ) -> str:
-    """Render a `legacy="true"` slide's Inner (raw HTML, safeHTML in Hugo).
-
-    Issue #681 decision F: `{{< legacy >}}` is this slide's standard-mode
-    pane (raw HTML, usually a hand-built diagram) and `{{< basic >}}` is its
-    ops-mode pane -- the same full-pane-swap contract as the `{{< standard
-    >}}`/`{{< ops >}}` shortcode pair used by non-legacy slides, just
-    authored with Hugo's older two-block syntax because these slides
-    predate that pair and their standard-mode content is raw HTML, not
-    Markdown. Both panes get `.mode-content[data-mode]` so one shared
-    `detail-toggle.css` rule shows exactly one of them at a time; `{{<
-    basic >}}` renders its *entire* body now (prose, tables, and nested
-    `{{< detail >}}`/`{{< config-guidance >}}` cards alike) instead of only
-    the nested detail cards, so ops mode gets a complete write-up, not
-    fragments left behind by the standard-mode diagram.
-    """
+    """Render a `legacy="true"` slide's Inner (raw HTML, safeHTML in Hugo)."""
     bare = _BARE_SELF_CLOSING.match(body.strip())
     if bare:
         return _render_self_closing(
@@ -1505,35 +1381,7 @@ def render_page(
     languages: tuple[str, ...] = _LANGUAGE_ORDER,
     primary_language: str = "zh-tw",
 ) -> str:
-    """Render one language's complete pre-bundle HTML source.
-
-    When `root` is given, README.md (README.<lang>.md for a non-primary
-    language) is this page's live source for one narrower thing, so that
-    wording can never silently drift from the site's without also being
-    hand-copied into docs/site/content/_index.<lang>.md: a `<!-- csarc-readme-
-    <name>:start -->...<!-- csarc-readme-<name>:end -->` span anywhere in
-    the source is replaced with the matching README fragment (see
-    `_inject_readme_markers`) -- for example, the capability slide's hero
-    tagline. The `about` slide used to be sourced this way in full (its
-    entire body mirrored README's "## 專案概述"/"## Overview" section);
-    Issue #681 decision D reversed that so About and README can each say
-    something genuinely different, About being why CSARC exists and README
-    being whether and how to adopt it.
-
-    `root` is optional (the marker lookup only fires for content actually
-    present) so callers that render a synthetic fixture with no README,
-    such as unit tests, are unaffected. `config` is likewise optional and
-    only meaningful for a downstream project's `.csarc/config.yml`-backed
-    `[[project_name]]`-style tokens (see `_substitute_config_tokens`);
-    root's own content never uses an allowlisted token name, so passing
-    `None` here is a no-op rather than an error.
-
-    `theme_href` points at the one project-specific stylesheet a fork or
-    consuming project may safely override (Issue #527): root's own
-    `site/theme.css` for root's build, `docs/site/theme.css` for a
-    downstream project's, so an already-generated repo's existing override
-    file keeps working without a rename.
-    """
+    """Render one language's complete pre-bundle HTML source."""
     substituted = _substitute_version_tokens(markdown_text, data)
     if config is not None:
         substituted = _substitute_config_tokens(substituted, config, lang=lang)
@@ -1671,15 +1519,7 @@ aria-label="{_esc(controls["zoom_in"])}">＋</button>
 
 
 def render_llms_txt(data: SiteData) -> str:
-    """Port `site/layouts/home.llms.txt`.
-
-    Built by direct string concatenation, mirroring the Go template's own
-    token-by-token output, rather than a line list -- each group's blank
-    line before its heading and the blank line after its last term are two
-    separate newline contributions in the source template that only merge
-    into one blank line once concatenated, which a naive one-blank-per-
-    boundary line list would double up on.
-    """
+    """Port `site/layouts/home.llms.txt`."""
     glossary = data.glossary
     text = (
         f"# {glossary['title']}\n\n"
@@ -1715,11 +1555,7 @@ def _readme_text(root: Path, lang: str) -> str:
 
 
 def _split_readme_sections(text: str) -> tuple[str, dict[str, str]]:
-    """Split a README into its preamble and each H2 section's body.
-
-    The preamble is everything after the H1, before the first H2; each
-    section is keyed by its heading text verbatim.
-    """
+    """Split a README into its preamble and each H2 section's body."""
     matches = list(_H2_HEADING.finditer(text))
     h1_match = _H1_HEADING.match(text)
     preamble_start = h1_match.end() if h1_match else 0
@@ -1742,13 +1578,7 @@ _LINK_ONLY_PARAGRAPH: Final = re.compile(r"^\[[^\]]+\]\([^)]+\)$")
 
 
 def _readme_preamble_first_paragraph(root: Path, lang: str) -> str:
-    """Return the README's own opening prose paragraph, read fresh.
-
-    Lets a slide's hero tagline quote it instead of keeping a hand-typed,
-    driftable copy. Skips a leading paragraph that is only the
-    "[English](README.en.md)"-style language-switcher link, which carries
-    no content to quote.
-    """
+    """Return the README's own opening prose paragraph, read fresh."""
     preamble, _sections = _split_readme_sections(_readme_text(root, lang))
     for paragraph in preamble.split("\n\n"):
         paragraph = paragraph.strip()
@@ -1782,14 +1612,7 @@ def _inject_readme_markers(markdown_text: str, *, root: Path, lang: str) -> str:
 
 
 def _load_downstream_config(root: Path) -> dict[str, Any] | None:
-    """Load `.csarc/config.yml` for `[[project_name]]`-style tokens.
-
-    Returns `None` when the file does not exist (root's own build: root
-    dogfoods the template and does carry a `.csarc/config.yml`, but its own
-    content never uses an allowlisted token name, so loading it would be
-    harmless either way -- `None` here is simply cheaper than reading a
-    file this call will not use).
-    """
+    """Load `.csarc/config.yml` for `[[project_name]]`-style tokens."""
     config_path = root / ".csarc/config.yml"
     if not config_path.is_file():
         return None

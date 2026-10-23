@@ -285,12 +285,7 @@ FOOTER_TOKEN = re.compile(r"^[A-Za-z][A-Za-z0-9-]*(?:: | #)")
 
 
 def _breaking_notes(body: str) -> list[str]:
-    """Return the migration text of each BREAKING CHANGE footer in a body.
-
-    A footer continues until a blank line or the next footer token, so a
-    later trailer such as ``Co-Authored-By:`` or a squash ``CSARC-*`` line
-    never becomes migration text (Issue #1104).
-    """
+    """Return the migration text of each BREAKING CHANGE footer in a body."""
     notes: list[str] = []
     current: list[str] | None = None
     for line in [*body.splitlines(), ""]:
@@ -324,14 +319,7 @@ def _main_ref(root: Path) -> str:
 
 
 def project_maturity(root: Path) -> str | None:
-    """Return the ``project_maturity`` declared by current main.
-
-    The trusted base owns the bump rule, so a candidate cannot change its
-    own version policy by editing ``.csarc/config.yml`` (Issue #1085). A
-    main without the file declares no maturity. When main is unavailable
-    but the candidate declares a config, or main's config is unreadable,
-    planning fails closed instead of guessing a default.
-    """
+    """Return the ``project_maturity`` declared by current main."""
     main_ref = _main_ref(root)
     if not main_ref:
         if (root / ".csarc/config.yml").is_file():
@@ -374,23 +362,7 @@ def project_maturity(root: Path) -> str | None:
 def bump_version(
     version: str, messages: list[str], *, maturity: str | None = None
 ) -> str | None:
-    """Calculate the next CORE version from merged Conventional Commits.
-
-    ``version`` may carry a phase suffix (e.g. ``0.16.0-beta.1``); only its
-    ``major.minor.patch`` core is used for the bump arithmetic, and the
-    result is always a bare core version with no suffix -- callers apply
-    the declared phase afterward via ``release_phase.phase_version``.
-
-    While ``maturity`` is ``early`` and the core is still ``0.y.z``, a
-    breaking change advances MINOR to ``0.(y+1).0`` instead of leaving 0.x
-    (Issue #1085). Every other maturity keeps the SemVer MAJOR bump.
-
-    While ``maturity`` is ``formal`` and the core is still ``0.y.z``, any
-    releasable change graduates the line to ``1.0.0`` (Issue #1105). The
-    maturity comes from trusted main, so the PR that switches ``early`` to
-    ``formal`` still plans under ``early``; the first release planned after
-    that switch merges is ``1.0.0`` instead of an invalid formal ``0.x``.
-    """
+    """Calculate the next CORE version from merged Conventional Commits."""
     try:
         parsed = release_phase.parse_version(version)
     except release_phase.ReleasePhaseError as error:
@@ -420,17 +392,7 @@ def bump_version(
 def detect_runtime_capabilities(
     api: GitHubAPI, repo: str, sha: str, branch: str
 ) -> dict[str, Capability]:
-    """Probe current workflow-token behavior without creating resources.
-
-    Issue #770 removed the `immutable_releases` pre-flight probe
-    (`GET repos/{repo}/immutable-releases`) that used to run here: it
-    requires repository Administration (read), which the Actions
-    `GITHUB_TOKEN` can never obtain, so it was permanently `blocked` or
-    `unknown` for every hosted run. Whether Immutable Releases was actually
-    enabled is now proven post-hoc, after a Release is published, by
-    .csarc/scripts/publish-release verifying GitHub's own signed release
-    attestation instead of guessing about it here.
-    """
+    """Probe current workflow-token behavior without creating resources."""
     capabilities = unknown_capabilities("probe did not run")
     status, _ = api.request(
         "POST",
@@ -543,12 +505,7 @@ def fetch_all_releases(api: GitHubAPI, repo: str) -> list[dict[str, object]]:
 
 
 def retention_report(api: GitHubAPI, repo: str) -> dict[str, object]:
-    """Build the dry-run keep/delete listing for Issue #744 decision 5.
-
-    Never deletes anything itself -- lists only. Draft Releases are not yet
-    published and are excluded from the listing entirely, not treated as
-    "delete" candidates.
-    """
+    """Build the dry-run keep/delete listing for Issue #744 decision 5."""
     releases = [
         release
         for release in fetch_all_releases(api, repo)
@@ -620,14 +577,7 @@ def git_output(arguments: list[str], root: Path) -> str:
 def release_plan(  # noqa: C901
     root: Path, sha: str, *, phase: str | None = None
 ) -> tuple[str, str] | None:
-    """Return the next tag/version, or None when HEAD needs no release.
-
-    ``phase`` is the route-selected release channel (``beta`` or ``stable``)
-    applied to a freshly computed core version. It is never consulted when
-    a tag already exists at ``sha`` or
-    when this commit is already a prepared version-bump candidate -- those
-    paths report the version that was already decided, unsuffixed or not.
-    """
+    """Return the next tag/version, or None when HEAD needs no release."""
     pointed_tags = git_output(["tag", "--points-at", sha], root).splitlines()
     released = release_phase.sort_by_precedence(
         tag for tag in pointed_tags if release_phase.is_valid_version(tag)
@@ -797,12 +747,7 @@ def release_plan_report(
     checkpoint_role: str = "none",
     source_sha: str | None = None,
 ) -> dict[str, object]:
-    """Describe the one local release decision without changing the repo.
-
-    A squash merge can hide the reviewed history that owns a materialized
-    version, so selected promotion or Dependabot sources are planned from
-    their exact head, which must carry the same tree (#1027, #1056).
-    """
+    """Describe the one local release decision without changing the repo."""
     if source_sha:
         trees = {
             git_output(["rev-parse", f"{revision}^{{tree}}"], root)
@@ -952,19 +897,7 @@ def _pep440_equivalent(version: str) -> str:
 
 
 def _target_version(version: str, relative_path: str) -> str:
-    """Return the version string to write into one governed surface.
-
-    Every surface gets the canonical SemVer string except a Python
-    packaging surface (Issue #744): `pyproject.toml`, `uv.lock`, and the
-    package's own `src/<package_name>/__init__.py` marker. PEP 440 has no
-    hyphenated `-beta.N` pre-release segment, so those get the normalized
-    form (`0.16.0b1`) regardless of whether they are the primary
-    governed surface or a synced extra-file entry (e.g. a
-    typescript+python project's `package.json` stays primary while
-    `pyproject.toml` is still an extra-file that needs the same
-    normalization). See `_is_pep440_surface` for why `__init__.py` needs it
-    too.
-    """
+    """Return the version string to write into one governed surface."""
     return (
         _pep440_equivalent(version)
         if _is_pep440_surface(relative_path)
@@ -1064,14 +997,7 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
 def _changelog_boundary(
     root: Path, tags: list[str], version: str
 ) -> tuple[str, list[str]]:
-    """Return the notes' starting tag and any prereleases a stable covers.
-
-    A prerelease section starts at the latest tag of any kind. A stable
-    section starts at the previous stable tag and so aggregates every beta
-    since then (Issue #1018). Included prereleases are chosen by Git
-    reachability, not version precedence: a Milestone beta can carry a lower
-    version than a stable that main published meanwhile.
-    """
+    """Return the notes' starting tag and any prereleases a stable covers."""
     valid = [tag for tag in tags if release_phase.is_valid_version(tag)]
     if release_phase.parse_version(version).is_prerelease:
         ordered = release_phase.sort_by_precedence(valid)
@@ -1096,13 +1022,7 @@ def _changelog_boundary(
 
 
 def _changelog_heads(root: Path, sha: str) -> list[str]:
-    """Return the commits whose history the notes for ``sha`` describe.
-
-    A promotion bridge is a merge that is amended in place with its own
-    candidate, so its id and committer date differ between local preparation
-    and hosted verification. Its parents are stable across that amend, so a
-    merge contributes its parents' history and its first parent's date.
-    """
+    """Return the commits whose history the notes for ``sha`` describe."""
     parents = git_output(
         ["rev-list", "--parents", "-n", "1", sha], root
     ).split()[1:]
@@ -1394,12 +1314,7 @@ def branch_release_intent(root: Path, base_sha: str, head_sha: str) -> str:
 def pull_request_title_errors(
     root: Path, base_sha: str, head_sha: str, title: str
 ) -> list[str]:
-    """Reject a PR title whose release intent differs from its commits.
-
-    A squash merge keeps only the PR title, so release planning after the
-    merge reads the title's type while materialization on the branch reads
-    every branch commit. Both must express the same intent.
-    """
+    """Reject a PR title whose release intent differs from its commits."""
     title_intent = release_intent(title)
     commit_intent = branch_release_intent(root, base_sha, head_sha)
     if title_intent == commit_intent:
@@ -1417,13 +1332,7 @@ def pull_request_title_errors(
 def breaking_migration_errors(
     root: Path, base_sha: str, head_sha: str, title: str
 ) -> list[str]:
-    """Reject a breaking pull request that records no migration text.
-
-    The squash merge keeps only the title and the branch commits'
-    ``BREAKING CHANGE:`` footers, so a breaking marker (``!`` on the title
-    or a commit, or a footer) without footer text would publish an empty
-    Migration notes entry (Issue #1104).
-    """
+    """Reject a breaking pull request that records no migration text."""
     raw = git_output(
         ["log", "--format=%s%x1f%b%x1e", f"{base_sha}..{head_sha}"], root
     )
@@ -1455,16 +1364,7 @@ def verify_delivery_version(
     checkpoint_role: str = "none",
     pr_title: str | None = None,
 ) -> dict[str, object]:
-    """Require release-worthy work to end in one exact release-only commit.
-
-    Deferred checkpoint work is the exception: it must leave the version
-    untouched so only the checkpoint's terminal Issue publishes the beta.
-    When ``pr_title`` is given, the title's release intent must equal the
-    highest branch commit intent, because the squash merge keeps only the
-    title. A breaking title or commit must also carry migration text in a
-    ``BREAKING CHANGE:`` footer, for deferred work too. Callers that omit
-    it keep the earlier interface.
-    """
+    """Require release-worthy work to end in one exact release-only commit."""
     if pr_title is not None:
         migration_errors = breaking_migration_errors(
             root, base_sha, head_sha, pr_title

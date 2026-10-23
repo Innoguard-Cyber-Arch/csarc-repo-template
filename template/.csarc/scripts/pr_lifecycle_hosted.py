@@ -50,11 +50,7 @@ REQUIRED_CHECKS_POLICY = Path("policies") / "rulesets-required-checks.json"
 
 
 def declared_required_contexts() -> set[tuple[str, int]]:
-    """Read the trusted base's declared required checks (Issue #1076).
-
-    Without a Ruleset GitHub enforces no check, so the hosted single-writer
-    route still requires every context the base policy declares.
-    """
+    """Read the trusted base's declared required checks (Issue #1076)."""
     path = Path(__file__).resolve().parents[1] / REQUIRED_CHECKS_POLICY
     try:
         policy = json.loads(path.read_text(encoding="utf-8"))
@@ -244,12 +240,7 @@ def require_trusted_verification(  # noqa: C901
     check_runs: list[dict[str, Any]] | None = None,
     durable: dict[str, Any] | None = None,
 ) -> dict[str, object]:
-    """Require fresh hosted execution evidence for one exact commit.
-
-    When `durable` is given, it receives the normalized payload that the
-    merge records durably (Issue #1073), so the facts survive Actions
-    retention.
-    """
+    """Require fresh hosted execution evidence for one exact commit."""
     available = (
         check_runs
         if check_runs is not None
@@ -512,10 +503,7 @@ def require_successful_checks(  # noqa: C901
     quota_run_urls: set[str] | None = None,
     durable: dict[str, Any] | None = None,
 ) -> str:
-    """Require protected contexts to pass or have exact quota evidence.
-
-    `durable` receives the normalized hosted `verify` payload, if any.
-    """
+    """Require protected contexts to pass or have exact quota evidence."""
     check_runs = github.collection(
         repo,
         f"commits/{head_sha}/check-runs?filter=latest&per_page=100",

@@ -316,12 +316,7 @@ def validate_verification_job(  # noqa: C901
     annotations: list[dict[str, Any]] | None = None,
     commit_tree: Callable[[str], str | None] | None = None,
 ) -> dict[str, object]:
-    """Validate exact-tree, toolchain, result, runner, and freshness claims.
-
-    A clean sync may cite the full execution of the pull request whose
-    squash merge produced main; `commit_tree` then proves that main commit
-    has exactly the verified source tree.
-    """
+    """Validate exact-tree, toolchain, result, runner, and freshness claims."""
     # Issue #1075: the window comes from trusted policy and may only be
     # tightened; reject a widened request before reading any evidence.
     max_age_hours = evidence_freshness.policy_max_age_hours(max_age_hours)
