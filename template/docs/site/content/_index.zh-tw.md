@@ -62,16 +62,16 @@ git clone [[repository_url]]
 
 {{< slide key="about" track="about" eyebrow="關於" title="這個 repo 用 csarc-repo-template 治理" subtitle="工作方式跟程式碼一樣可版本化、驗證與升級，不只是產生檔案的模板。" class="dense single-column" legacy="false" >}}
 {{< standard key="about-mode-standard" title="這套治理基線持續在做什麼" >}}
-<div class="capability-map"><div class="capability-node"><h3>每項工作是一張 Issue</h3><p>寫清楚要做什麼、怎樣算完成，改動在自己的分支進行，不會互相干擾。</p></div><div class="capability-node"><h3>每次改動都有審查門檻</h3><p>自動檢查一定要過；同行、Copilot 或設定允許的管理員 exact-head 授權再滿足審查門檻。</p></div><div class="capability-node"><h3>公版更新先給你看差異</h3><p>`csarc-repo-template` 之後有更新，一樣先讓你看過差異，確認後才套用。</p></div><div class="capability-node"><h3>例行安全檢查是自動的</h3><p>套件版本與已知漏洞排好定期執行，只在真的有衝突時才需要你判斷。</p></div></div>
+<div class="capability-map"><div class="capability-node"><h3>每項工作是一張 Issue</h3><p>寫清楚要做什麼、怎樣算完成，改動放在各自的分支，不會互相干擾。</p></div><div class="capability-node"><h3>每次改動都有審查門檻</h3><p>自動檢查一定要過；同行、Copilot 或設定允許的管理員 exact-head 授權再滿足審查門檻。</p></div><div class="capability-node"><h3>公版更新先給你看差異</h3><p>`csarc-repo-template` 之後有更新，一樣先讓你看過差異，確認後才套用。</p></div><div class="capability-node"><h3>例行安全檢查是自動的</h3><p>套件版本與已知漏洞排好定期執行，只在有衝突時才需要你判斷。</p></div></div>
 {{< /standard >}}
 
 {{< ops key="about-mode-ops" title="治理基線的機制" >}}
-這個 repo 的治理規則放在 `AGENTS.md`（AI 與人共用的工作規則）、`.csarc/policies/*.json`（GitHub 設定的期望狀態）與 `.csarc/config.yml`（本專案的實際選擇）三個地方，各自有明確的角色：
+這個 repo 的治理規則放在 `AGENTS.md`（AI 與人共用的工作規則）、`.csarc/policies/*.json`（GitHub 設定的期望狀態）與 `.csarc/config.yml`（本專案的實際選擇）三個地方：
 
 - **`AGENTS.md`：** agent 開始工作前一律先讀這份；人類貢獻者的等效說明在 README。
 - **`.csarc/policies/*.json`：** 分支保護、必要檢查、標籤等期望設定，由 `.csarc/scripts/apply-repository-settings.sh` 套用與驗證。
 - **`.csarc/config.yml`：** 這個 repo 的實際選擇（語言、文件模式、負責人等），由 `csarc update` 持續同步公版更新，同時保留這裡的專案內容。
 
-這個網站本身就是同一套原則的示範：`docs/index.html` 內嵌所有樣式與程式，下載後可離線打開，不需要另外架站。
+這個網站就是同一套原則的示範：`docs/index.html` 內嵌所有樣式與程式，下載後可離線打開，不需要另外架站。
 {{< /ops >}}
 {{< /slide >}}

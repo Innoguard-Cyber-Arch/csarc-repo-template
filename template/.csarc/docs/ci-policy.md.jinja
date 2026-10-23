@@ -12,7 +12,7 @@
 - 目前 head 有有效授權：獨立 maintainer 的 exact-head `APPROVED` review{% if copilot_review == 'allowed' %}、Copilot 對 exact head 沒有任何意見的審核{% endif %}{% if admin_bypass != 'off' %}，或 admin 在 lease 內留下的 exact-head 授權留言（`admin_bypass: {{ admin_bypass }}`{% if admin_bypass == 'beta-only' %}，只限 beta{% endif %}）{% endif %}。任何新 push 都讓舊授權失效。
 - {% if hosted %}required `title`、`verify`、`review` 在 exact head 成功{% else %}exact head 有 24 小時內、綁定同一 tree 與 base 的本機驗證證據{% endif %}，且 `## Requirement evidence` 完整。
 {%- if 'issues' in lifecycle %}
-- 沒有 Milestone 的 Issue 本身已核可：另一位協作者在 Issue 留言 `Approve`，或提案者以 admin 身分留言 `Admin-approve: <理由>`；`Object: <理由>` 會阻擋，直到 `Resolve: <連結>`。Issue body 改變後要重新核可。
+- 沒有 Milestone 的 Issue 已核可：另一位協作者在 Issue 留言 `Approve`，或提案者以 admin 身分留言 `Admin-approve: <理由>`；`Object: <理由>` 會阻擋，直到 `Resolve: <連結>`。Issue body 改變後要重新核可。
 {%- endif %}
 {%- if 'milestones' in lifecycle %}
 - 有 Milestone 的 Issue 繼承 tracker 的核可；tracker 核可與 scope 規則見 [`milestone-description.md`](milestone-description.md)。
