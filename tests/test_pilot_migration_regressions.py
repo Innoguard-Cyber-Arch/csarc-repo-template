@@ -560,7 +560,11 @@ def test_a_python_shim_runs_and_imports_the_moved_module(
 
 def test_compatibility_shim_rows_need_report_2_2_0() -> None:
     """Decision 3: the shim is a listed transition in the closed vocabulary."""
-    assert lifecycle_report.LIFECYCLE_REPORT_FORMAT_VERSION == "2.2.0"
+    assert lifecycle_report.REPORT_FORMAT_VERSION_2_2 == "2.2.0"
+    assert (
+        lifecycle_report.REPORT_FORMAT_VERSION_2_2
+        in lifecycle_report.READABLE_REPORT_FORMAT_VERSIONS
+    )
     assert "compatibility-shim" in lifecycle_report.FILE_ACTIONS["overwrite"]
     rows = cli.report_file_rows(
         cli.Plan(
