@@ -31,6 +31,7 @@ SHELL_CALL = re.compile(
     r"(?:^|[;{(]|&&|\|\||\b(?:then|do|else))\s*(echo|die|fail)\s+(.*)$"
 )
 HEREDOC = re.compile(r"<<-?\s*['\"]?(\w+)")
+WRITES = {"sys.stderr.write": "stderr", "sys.stdout.write": "stdout"}
 RAISED = re.compile(r"\w*(?:Error|Exit)$")
 OPERATORS = set(";&|<>")
 Message = tuple[int, int, str, str]
@@ -90,7 +91,8 @@ def python_messages(source: str) -> list[Message]:
             stream = "raise" if name.endswith("Error") else stream
         elif isinstance(node, ast.Call):
             name = ast.unparse(node.func)
-            call = node if name in ("print", "sys.exit") else None
+            call = node if name in ("print", "sys.exit", *WRITES) else None
+            stream = WRITES.get(name, stream)
             if name == "print":
                 files = [k for k in node.keywords if k.arg == "file"]
                 is_err = [ast.unparse(k.value) for k in files] == ["sys.stderr"]
