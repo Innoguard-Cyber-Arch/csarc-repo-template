@@ -23,6 +23,9 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# Shared next step of raised messages (#1253).
+GH_RETRY = "Run 'gh auth status' and rerun"
+
 
 def _load_sibling(name: str) -> ModuleType:
     """Load one script module that sits beside this file."""
@@ -192,8 +195,7 @@ class _SnapshotGitHub:
             permission = _collaborator_permission(repo, login)
             if permission is None:
                 raise RuntimeError(
-                    "Collaborator permission: unavailable. Run 'gh auth "
-                    "status' and rerun."
+                    f"Collaborator permission: unavailable. {GH_RETRY}."
                 )
             return {"permission": permission}
         if path.startswith("milestones/"):
@@ -250,15 +252,11 @@ def _pages(raw: str) -> list[dict[str, Any]]:
     """Flatten a paginated GitHub REST response."""
     value = json.loads(raw)
     if not isinstance(value, list):
-        raise RuntimeError(
-            "GitHub collection: invalid. Run 'gh auth status' and rerun."
-        )
+        raise RuntimeError(f"GitHub collection: invalid. {GH_RETRY}.")
     if value and isinstance(value[0], list):
         value = [item for page in value for item in page]
     if not all(isinstance(item, dict) for item in value):
-        raise RuntimeError(
-            "GitHub collection item: invalid. Run 'gh auth status' and rerun."
-        )
+        raise RuntimeError(f"GitHub collection item: invalid. {GH_RETRY}.")
     return value
 
 

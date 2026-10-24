@@ -29,6 +29,12 @@ else:
         f"{__package__}.documentation_review"
     )
 
+# Shared next step of raised messages (#1253).
+GH_RETRY = "Run 'gh auth status' and rerun"
+
+# Shared next step of raised messages (#1253).
+RECREATE_SYNC = "Recreate the sync branch from main"
+
 CLOSING_ISSUE = re.compile(
     r"(?<!\w)(?a:Closes|Fixes|Resolves)[ \t]+#([1-9][0-9]*)(?!\w)",
     re.IGNORECASE,
@@ -216,8 +222,7 @@ def pull_request_issue_number(pull_request: dict[str, Any]) -> int:
     head_ref = head.get("ref") if isinstance(head, dict) else None
     if not isinstance(head_ref, str):
         raise RuntimeError(
-            "Included pull request: incomplete head. Run 'gh auth status' and "
-            "rerun."
+            f"Included pull request: incomplete head. {GH_RETRY}."
         )
     match = WORK_BRANCH.fullmatch(head_ref)
     if match is None:
@@ -267,20 +272,19 @@ def sync_pull_request_main_sha(
         or not same_repository(pull_request, repo)
     ):
         raise RuntimeError(
-            "Included sync pull request: invalid provenance. Recreate the sync "
-            "branch from main."
+            f"Included sync pull request: invalid provenance. {RECREATE_SYNC}."
         )
     sync_commit = github_get(repo, f"git/commits/{head_sha}", token)
     if not isinstance(sync_commit, dict):
         raise RuntimeError(
-            "Included sync pull request: invalid commit shape. Recreate the "
-            "sync branch from main."
+            "Included sync pull request: invalid commit shape. "
+            f"{RECREATE_SYNC}."
         )
     parents = sync_commit.get("parents")
     if not isinstance(parents, list) or len(parents) != 2:
         raise RuntimeError(
-            "Included sync pull request: invalid commit shape. Recreate the "
-            "sync branch from main."
+            "Included sync pull request: invalid commit shape. "
+            f"{RECREATE_SYNC}."
         )
     main_parent = parents[1]
     delivery_parent = parents[0]
@@ -289,8 +293,7 @@ def sync_pull_request_main_sha(
     )
     if not isinstance(synced_main_sha, str):
         raise RuntimeError(
-            "Included sync pull request: invalid provenance. Recreate the sync "
-            "branch from main."
+            f"Included sync pull request: invalid provenance. {RECREATE_SYNC}."
         )
     expected_ref = delivery_sync.sync_branch_name(
         delivery_branch, synced_main_sha
@@ -303,8 +306,7 @@ def sync_pull_request_main_sha(
         delivery_sync.compare(api, repo, synced_main_sha, current_main_sha)
     ):
         raise RuntimeError(
-            "Included sync pull request: invalid provenance. Recreate the sync "
-            "branch from main."
+            f"Included sync pull request: invalid provenance. {RECREATE_SYNC}."
         )
     if head_ref == legacy_ref:
         base_sha = base.get("sha")
@@ -331,8 +333,8 @@ def sync_pull_request_main_sha(
             or sync_tree_sha != main_tree_sha
         ):
             raise RuntimeError(
-                "Legacy sync pull request: invalid provenance. Recreate the "
-                "sync branch from main."
+                "Legacy sync pull request: invalid provenance. "
+                f"{RECREATE_SYNC}."
             )
     return synced_main_sha
 
@@ -498,21 +500,17 @@ def included_pull_requests(  # noqa: C901
         )
         if not isinstance(comparison, dict):
             raise RuntimeError(
-                "GitHub commit comparison: invalid. Run 'gh auth status' and "
-                "rerun."
+                f"GitHub commit comparison: invalid. {GH_RETRY}."
             )
         commits = comparison.get("commits", [])
         if not isinstance(commits, list):
-            raise RuntimeError(
-                "GitHub commit list: invalid. Run 'gh auth status' and rerun."
-            )
+            raise RuntimeError(f"GitHub commit list: invalid. {GH_RETRY}.")
         for commit in commits:
             sha = commit.get("sha") if isinstance(commit, dict) else None
             if not isinstance(sha, str):
                 if bridge_head_sha is not None:
                     raise RuntimeError(
-                        "Bridge commit provenance: invalid. Run 'gh auth "
-                        "status' and rerun."
+                        f"Bridge commit provenance: invalid. {GH_RETRY}."
                     )
                 continue
             if sha == bridge_head_sha:
@@ -521,8 +519,7 @@ def included_pull_requests(  # noqa: C901
             pull_requests = github_get(repo, f"commits/{sha}/pulls", token)
             if not isinstance(pull_requests, list):
                 raise RuntimeError(
-                    "GitHub associated pull requests: invalid. Run 'gh auth "
-                    "status' and rerun."
+                    f"GitHub associated pull requests: invalid. {GH_RETRY}."
                 )
             matched = False
             for pull_request in pull_requests:

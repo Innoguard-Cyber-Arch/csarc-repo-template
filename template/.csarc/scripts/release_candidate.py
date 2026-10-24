@@ -35,6 +35,9 @@ else:
     release_policy = importlib.import_module(f"{__package__}.release_policy")
     release_phase = importlib.import_module(f"{__package__}.release_phase")
 
+# Shared next step of raised messages (#1253).
+EDIT_CONFIG = "Edit 'release-please-config.json'"
+
 Capability = release_policy.Capability
 report = release_policy.report
 unknown_capabilities = release_policy.unknown_capabilities
@@ -213,9 +216,7 @@ def release_follow_up_errors(  # noqa: C901
         if not isinstance(component, str) or not component:
             raise ValueError("Release component: missing. Add it.")
         if release_type not in {"simple", "python", "node", "rust"}:
-            raise ValueError(
-                "Release type: unsupported. Edit 'release-please-config.json'."
-            )
+            raise ValueError(f"Release type: unsupported. {EDIT_CONFIG}.")
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
         errors.append(f"release-please configuration is invalid: {error}")
         return errors
@@ -944,8 +945,7 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
         _replace_toml_version(root / "Cargo.toml", "package", version)
     else:
         raise ValueError(
-            f"Release type {release_type}: unsupported. Edit "
-            "'release-please-config.json'."
+            f"Release type {release_type}: unsupported. {EDIT_CONFIG}."
         )
 
     for item in package.get("extra-files", []):
@@ -957,13 +957,11 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
             jsonpath = str(item.get("jsonpath", ""))
         else:
             raise ValueError(
-                "Release extra-file: invalid entry. Edit "
-                "'release-please-config.json'."
+                f"Release extra-file: invalid entry. {EDIT_CONFIG}."
             )
         if not isinstance(value, str):
             raise ValueError(
-                "Release extra-file: invalid path. Edit "
-                "'release-please-config.json'."
+                f"Release extra-file: invalid path. {EDIT_CONFIG}."
             )
         path = root / value
         target_version = _target_version(version, value)
@@ -993,16 +991,14 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
             match = re.search(r'name\.value=="([^"]+)"', jsonpath)
             if match is None:
                 raise ValueError(
-                    f"Release jsonpath {jsonpath}: unsupported. Edit "
-                    "'release-please-config.json'."
+                    f"Release jsonpath {jsonpath}: unsupported. {EDIT_CONFIG}."
                 )
             _replace_toml_version(
                 path, "package", target_version, package_name=match.group(1)
             )
         else:
             raise ValueError(
-                f"Release extra-file {value}: unsupported. Edit "
-                "'release-please-config.json'."
+                f"Release extra-file {value}: unsupported. {EDIT_CONFIG}."
             )
 
     cargo_manifest = root / "Cargo.toml"

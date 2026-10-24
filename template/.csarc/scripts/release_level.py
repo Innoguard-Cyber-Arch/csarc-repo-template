@@ -22,6 +22,9 @@ else:
     csarc_config = importlib.import_module(f"{__package__}.csarc_config")
     release_phase = importlib.import_module(f"{__package__}.release_phase")
 
+# Shared next step of raised messages (#1253).
+GH_RETRY = "Run 'gh auth status' and rerun"
+
 LEVELS = ("beta", "stable")
 LEVEL_RANK = {level: rank for rank, level in enumerate(LEVELS)}
 # Must equal authenticate_dependabot_head.DEPENDABOT_SYNC_COMMIT_MESSAGE.
@@ -277,9 +280,7 @@ def _work_item(
     title = item.get("title")
     url = item.get("html_url")
     if type(number) is not int or not isinstance(title, str):
-        raise RuntimeError(
-            f"GitHub {kind} data: invalid. Run 'gh auth status' and rerun."
-        )
+        raise RuntimeError(f"GitHub {kind} data: invalid. {GH_RETRY}.")
     if not isinstance(url, str):
         url = ""
     row: dict[str, object] = {
@@ -368,10 +369,7 @@ def release_batch_markdown(batch: dict[str, object]) -> str:
     """Render release-level evidence for a version PR and Release notes."""
     items = batch.get("items")
     if not isinstance(items, list):
-        raise ValueError(
-            "Release batch: work items are invalid. Run 'gh auth status' and "
-            "rerun."
-        )
+        raise ValueError(f"Release batch: work items are invalid. {GH_RETRY}.")
     lines = [
         f"<!-- {_BATCH_MARKER}:start -->",
         "## Included work and release levels",
@@ -382,8 +380,7 @@ def release_batch_markdown(batch: dict[str, object]) -> str:
     for item in items:
         if not isinstance(item, dict):
             raise ValueError(
-                "Release batch: a work item is invalid. Run 'gh auth status' "
-                "and rerun."
+                f"Release batch: a work item is invalid. {GH_RETRY}."
             )
         label = f"{item['kind']} #{item['number']}: {item['title']}"
         url = str(item.get("url") or "")
@@ -444,9 +441,7 @@ def _tracker_for(
     if not isinstance(milestone, dict) or not isinstance(
         milestone.get("title"), str
     ):
-        raise RuntimeError(
-            "GitHub Milestone data: invalid. Run 'gh auth status' and rerun."
-        )
+        raise RuntimeError(f"GitHub Milestone data: invalid. {GH_RETRY}.")
     title = f"Milestone {milestone_number}: {milestone['title']}"
     candidates = [
         item
@@ -472,9 +467,7 @@ def resolve_issue(
     """Resolve one Issue, including Milestone inheritance and trust."""
     number = issue.get("number")
     if type(number) is not int or number < 1:
-        raise RuntimeError(
-            "GitHub Issue data: invalid. Run 'gh auth status' and rerun."
-        )
+        raise RuntimeError(f"GitHub Issue data: invalid. {GH_RETRY}.")
     if not settings.enabled:
         level = settings.default_level
         return Decision(
@@ -660,10 +653,7 @@ def checkpoint_role_for_commit(
     """Resolve the checkpoint role of the pull request merged as `sha`."""
     payload = github.get(repo, f"commits/{sha}/pulls")
     if not isinstance(payload, list):
-        raise RuntimeError(
-            "GitHub commit pull requests: invalid. Run 'gh auth status' and "
-            "rerun."
-        )
+        raise RuntimeError(f"GitHub commit pull requests: invalid. {GH_RETRY}.")
     merged = [
         pull
         for pull in payload
@@ -687,9 +677,7 @@ def resolve_pr(
     """Load and resolve one pull request."""
     pull = github.get(repo, f"pulls/{pr_number}")
     if not isinstance(pull, dict):
-        raise RuntimeError(
-            "GitHub pull-request data: invalid. Run 'gh auth status' and rerun."
-        )
+        raise RuntimeError(f"GitHub pull-request data: invalid. {GH_RETRY}.")
     return resolve_pull(github, repo, pull, settings)
 
 
@@ -717,18 +705,13 @@ class GitHubCLI:
         """Read and flatten a paginated GitHub REST collection."""
         payload = self._run(["--paginate", "--slurp", f"repos/{repo}/{path}"])
         if not isinstance(payload, list):
-            raise RuntimeError(
-                "GitHub collection: invalid. Run 'gh auth status' and rerun."
-            )
+            raise RuntimeError(f"GitHub collection: invalid. {GH_RETRY}.")
         pages = (
             payload if payload and isinstance(payload[0], list) else [payload]
         )
         items = [item for page in pages for item in page]
         if not all(isinstance(item, dict) for item in items):
-            raise RuntimeError(
-                "GitHub collection item: invalid. Run 'gh auth status' and "
-                "rerun."
-            )
+            raise RuntimeError(f"GitHub collection item: invalid. {GH_RETRY}.")
         return items
 
     def write(
@@ -787,8 +770,7 @@ def unreleased_pulls(
         payload = github.get(repo, f"commits/{commit}/pulls")
         if not isinstance(payload, list):
             raise RuntimeError(
-                "GitHub commit pull requests: invalid. Run 'gh auth status' "
-                "and rerun."
+                f"GitHub commit pull requests: invalid. {GH_RETRY}."
             )
         for pull in payload:
             if (
@@ -853,8 +835,7 @@ def annotate_pull_request(
         comment_id = matches[0].get("id")
         if type(comment_id) is not int:
             raise RuntimeError(
-                "Release-level comment: no numeric ID. Run 'gh auth status' "
-                "and rerun."
+                f"Release-level comment: no numeric ID. {GH_RETRY}."
             )
         payload = github.write(
             repo, "PATCH", f"issues/comments/{comment_id}", body
@@ -867,8 +848,7 @@ def annotate_pull_request(
         payload.get("html_url"), str
     ):
         raise RuntimeError(
-            "Release-level comment: invalid response. Run 'gh auth status' and "
-            "rerun."
+            f"Release-level comment: invalid response. {GH_RETRY}."
         )
     return str(payload["html_url"])
 
@@ -1040,18 +1020,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "resolve-issue":
             issue = github.get(args.repo, f"issues/{args.issue}")
             if not isinstance(issue, dict):
-                raise RuntimeError(
-                    "GitHub Issue data: invalid. Run 'gh auth status' and "
-                    "rerun."
-                )
+                raise RuntimeError(f"GitHub Issue data: invalid. {GH_RETRY}.")
             decision = resolve_issue(github, args.repo, issue, settings)
             path_tier = None
         else:
             pull = github.get(args.repo, f"pulls/{args.pr}")
             if not isinstance(pull, dict):
                 raise RuntimeError(
-                    "GitHub pull-request data: invalid. Run 'gh auth status' "
-                    "and rerun."
+                    f"GitHub pull-request data: invalid. {GH_RETRY}."
                 )
             decision = resolve_pull(github, args.repo, pull, settings)
             path_tier = args.path_tier

@@ -34,6 +34,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+# Shared next step of raised messages (#1253).
+RESTORE_IT = "Restore it with 'csarc update'"
+
+# Shared next step of raised messages (#1253).
+RESTORE_CONTRACT = "Restore the contract with 'csarc update'"
+
 ENVELOPE_VERSION = 1
 CONTRACT_SCHEMA = 1
 CONTRACT_RELATIVE = Path("policies") / "merge-trailers.json"
@@ -349,8 +355,8 @@ def load_contract(path: Path | None = None) -> dict[str, Any]:
         contract = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise EvidenceError(
-            f"Trailer contract {target} is missing or invalid: "
-            "merge needs it. Restore it with 'csarc update'."
+            f"Trailer contract {target} is missing or invalid: merge needs it. "
+            f"{RESTORE_IT}."
         ) from error
     return validate_contract(contract)
 
@@ -358,25 +364,20 @@ def load_contract(path: Path | None = None) -> dict[str, Any]:
 def validate_contract(contract: object) -> dict[str, Any]:  # noqa: C901
     """Require the exact contract shape this module knows how to apply."""
     if not isinstance(contract, dict):
-        raise EvidenceError(
-            "Trailer contract: not an object. Restore it with 'csarc update'."
-        )
+        raise EvidenceError(f"Trailer contract: not an object. {RESTORE_IT}.")
     if contract.get("schema_version") != CONTRACT_SCHEMA:
         raise EvidenceError(
-            "Trailer contract: unsupported schema. Restore it with 'csarc "
-            "update'."
+            f"Trailer contract: unsupported schema. {RESTORE_IT}."
         )
     keys = contract.get("keys")
     order = contract.get("order")
     if not isinstance(keys, dict) or not isinstance(order, list):
         raise EvidenceError(
-            "Trailer contract: no keys or order. Restore it with 'csarc "
-            "update'."
+            f"Trailer contract: no keys or order. {RESTORE_IT}."
         )
     if sorted(order) != sorted(keys) or len(order) != len(set(order)):
         raise EvidenceError(
-            "Trailer contract: inconsistent order. Restore it with 'csarc "
-            "update'."
+            f"Trailer contract: inconsistent order. {RESTORE_IT}."
         )
     for name, rule in keys.items():
         if (
@@ -384,23 +385,20 @@ def validate_contract(contract: object) -> dict[str, Any]:  # noqa: C901
             or TRAILER_LINE.fullmatch(f"{name}: x") is None
         ):
             raise EvidenceError(
-                f"Trailer key {name!r}: invalid. Restore the contract with "
-                "'csarc update'."
+                f"Trailer key {name!r}: invalid. {RESTORE_CONTRACT}."
             )
         if not isinstance(rule, dict) or not isinstance(
             rule.get("required"), bool
         ):
             raise EvidenceError(
-                f"Trailer rule {name}: invalid. Restore the contract with "
-                "'csarc update'."
+                f"Trailer rule {name}: invalid. {RESTORE_CONTRACT}."
             )
         kind = rule.get("value")
         if kind == "enum":
             values = rule.get("values")
             if not isinstance(values, list) or not values:
                 raise EvidenceError(
-                    f"Trailer {name}: no values. Restore the contract with "
-                    "'csarc update'."
+                    f"Trailer {name}: no values. {RESTORE_CONTRACT}."
                 )
         elif kind not in {"digest", "sha", "url"}:
             raise EvidenceError(
