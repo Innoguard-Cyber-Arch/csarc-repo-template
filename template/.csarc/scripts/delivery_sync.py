@@ -15,6 +15,15 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Protocol
 
+# Shared next step of raised messages (#1253).
+RERUN_VERIFY = "Rerun the 'verify' job"
+
+# Shared next step of raised messages (#1253).
+RERUN_FAILED = "Rerun the failed job"
+
+# Shared next step of raised messages (#1253).
+REQUEUE = "Add the PR to the queue again"
+
 DELIVERY_BRANCH = re.compile(r"^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$")
 ISOLATED_BRANCH = re.compile(r"^dev/i([0-9]+)-[a-z0-9][a-z0-9-]*$")
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -100,7 +109,7 @@ def issue_labels(payload: dict[str, Any]) -> set[str]:
         for item in values
     ):
         raise RuntimeError(
-            "Bad GitHub reply: invalid PR labels. Rerun the failed job."
+            f"Bad GitHub reply: invalid PR labels. {RERUN_FAILED}."
         )
     return {str(item["name"]) for item in values}
 
@@ -131,7 +140,7 @@ def compare(api: API, repo: str, main_sha: str, head_sha: str) -> str:
     compare_status = data.get("status") if isinstance(data, dict) else None
     if not isinstance(compare_status, str):
         raise RuntimeError(
-            "Bad GitHub reply: invalid compare. Rerun the failed job."
+            f"Bad GitHub reply: invalid compare. {RERUN_FAILED}."
         )
     return compare_status
 
@@ -145,7 +154,7 @@ def read_main_sha(api: API, repo: str) -> str:
     )
     if not isinstance(main_sha, str):
         raise RuntimeError(
-            "Bad GitHub reply: invalid main ref. Rerun the failed job."
+            f"Bad GitHub reply: invalid main ref. {RERUN_FAILED}."
         )
     return main_sha
 
@@ -172,7 +181,7 @@ def merged_sync_pr_number(
     pulls = require_response(status, payload, "find merged sync PR")
     if not isinstance(pulls, list):
         raise RuntimeError(
-            "Bad GitHub reply: invalid sync PR. Rerun the failed job."
+            f"Bad GitHub reply: invalid sync PR. {RERUN_FAILED}."
         )
     for pull in pulls:
         if not isinstance(pull, dict):
@@ -335,9 +344,7 @@ def validate_sync_route(
         requester.get("login") if isinstance(requester, dict) else None
     )
     if not isinstance(requester_login, str) or not requester_login:
-        raise RuntimeError(
-            "Bad sync: requester is unknown. Rerun the failed job."
-        )
+        raise RuntimeError(f"Bad sync: requester is unknown. {RERUN_FAILED}.")
     require_sync_request(
         api,
         repo,
@@ -366,21 +373,15 @@ def verify_sync(args: argparse.Namespace) -> None:
         args.head_sha,
     )
     if ref_sha(api, args.repo, args.base) != args.base_sha:
-        raise RuntimeError(
-            "Stale sync: delivery base moved. Rerun the 'verify' job."
-        )
+        raise RuntimeError(f"Stale sync: delivery base moved. {RERUN_VERIFY}.")
     if ref_sha(api, args.repo, "main") != args.main_sha:
-        raise RuntimeError("Stale sync: main moved. Rerun the 'verify' job.")
+        raise RuntimeError(f"Stale sync: main moved. {RERUN_VERIFY}.")
     if ref_sha(api, args.repo, args.head_ref) != args.head_sha:
-        raise RuntimeError(
-            "Stale sync: sync head moved. Rerun the 'verify' job."
-        )
+        raise RuntimeError(f"Stale sync: sync head moved. {RERUN_VERIFY}.")
     commit = git_output(["rev-list", "--parents", "-n", "1", args.head_sha])
     fields = commit.split()
     if not fields or fields[0] != args.head_sha:
-        raise RuntimeError(
-            "Bad sync: no commit identity. Rerun the 'verify' job."
-        )
+        raise RuntimeError(f"Bad sync: no commit identity. {RERUN_VERIFY}.")
     head_tree = git_output(["rev-parse", f"{args.head_sha}^{{tree}}"])
     merge = subprocess.run(  # noqa: S603
         [  # noqa: S607
@@ -421,7 +422,7 @@ def ref_sha(api: API, repo: str, branch: str) -> str:
     sha = data.get("object", {}).get("sha") if isinstance(data, dict) else None
     if not isinstance(sha, str):
         raise RuntimeError(
-            f"Bad GitHub reply: invalid {branch} ref. Rerun the failed job."
+            f"Bad GitHub reply: invalid {branch} ref. {RERUN_FAILED}."
         )
     return sha
 
@@ -431,9 +432,7 @@ def pull_request(api: API, repo: str, number: int) -> dict[str, Any]:
     status, payload = api.request("GET", f"repos/{repo}/pulls/{number}")
     data = require_response(status, payload, "read pull request")
     if not isinstance(data, dict):
-        raise RuntimeError(
-            "Bad GitHub reply: invalid PR. Rerun the failed job."
-        )
+        raise RuntimeError(f"Bad GitHub reply: invalid PR. {RERUN_FAILED}.")
     return data
 
 
@@ -453,7 +452,7 @@ def associated_pull_requests(
         )
         if not isinstance(data, list):
             raise RuntimeError(
-                "Bad GitHub reply: invalid PR list. Rerun the failed job."
+                f"Bad GitHub reply: invalid PR list. {RERUN_FAILED}."
             )
         pulls.extend(item for item in data if isinstance(item, dict))
         if len(data) < 100:
@@ -479,20 +478,15 @@ def merge_group_gate(
         or FULL_SHA.fullmatch(base_sha) is None
     ):
         raise RuntimeError(
-            "Bad queue: not an exact main candidate. Add the PR to the queue "
-            "again."
+            f"Bad queue: not an exact main candidate. {REQUEUE}."
         )
     number = int(match.group(1))
     queue_branch = queue_ref.removeprefix("refs/heads/")
     if ref_sha(api, repo, queue_branch) != queue_sha:
-        raise RuntimeError(
-            "Stale queue: ref moved. Add the PR to the queue again."
-        )
+        raise RuntimeError(f"Stale queue: ref moved. {REQUEUE}.")
     pulls = associated_pull_requests(api, repo, queue_sha)
     if len(pulls) != 1 or pulls[0].get("number") != number:
-        raise RuntimeError(
-            "Bad queue: no unique pull request. Add the PR to the queue again."
-        )
+        raise RuntimeError(f"Bad queue: no unique pull request. {REQUEUE}.")
     candidate = pull_request(api, repo, number)
     base = candidate.get("base")
     head = candidate.get("head")
@@ -509,27 +503,17 @@ def merge_group_gate(
         or not isinstance(head_repo, dict)
         or head_repo.get("full_name") != repo
     ):
-        raise RuntimeError(
-            "Stale queue: PR changed. Add the PR to the queue again."
-        )
+        raise RuntimeError(f"Stale queue: PR changed. {REQUEUE}.")
     head_ref = str(head["ref"])
     head_sha = str(head["sha"])
     if ref_sha(api, repo, "main") != base_sha:
-        raise RuntimeError(
-            "Stale queue: main changed. Add the PR to the queue again."
-        )
+        raise RuntimeError(f"Stale queue: main changed. {REQUEUE}.")
     if ref_sha(api, repo, head_ref) != head_sha:
-        raise RuntimeError(
-            "Stale queue: PR head changed. Add the PR to the queue again."
-        )
+        raise RuntimeError(f"Stale queue: PR head changed. {REQUEUE}.")
     if not includes_main(compare(api, repo, base_sha, queue_sha)):
-        raise RuntimeError(
-            "Bad queue: base is missing. Add the PR to the queue again."
-        )
+        raise RuntimeError(f"Bad queue: base is missing. {REQUEUE}.")
     if not includes_main(compare(api, repo, head_sha, queue_sha)):
-        raise RuntimeError(
-            "Bad queue: head is missing. Add the PR to the queue again."
-        )
+        raise RuntimeError(f"Bad queue: head is missing. {REQUEUE}.")
     return f"exact queue candidate for {head_ref}"
 
 

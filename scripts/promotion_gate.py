@@ -34,6 +34,12 @@ else:
         f"{__package__}.documentation_review"
     )
 
+# Shared next step of raised messages (#1253).
+GH_RETRY = "Run 'gh auth status' and rerun"
+
+# Shared next step of raised messages (#1253).
+RECREATE_SYNC = "Recreate the sync branch from main"
+
 UNCHECKED = re.compile(r"(?m)^\s*-\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(
     r"(?<!\w)(?a:Closes|Fixes|Resolves)[ \t]+#([1-9][0-9]*)(?!\w)",
@@ -307,8 +313,7 @@ def pull_request_issue_number(pull_request: dict[str, Any]) -> int:
     head_ref = head.get("ref") if isinstance(head, dict) else None
     if not isinstance(head_ref, str):
         raise RuntimeError(
-            "Included pull request: incomplete head. Run 'gh auth status' and "
-            "rerun."
+            f"Included pull request: incomplete head. {GH_RETRY}."
         )
     match = WORK_BRANCH.fullmatch(head_ref)
     if match is None:
@@ -368,20 +373,19 @@ def sync_pull_request_main_sha(
         or not same_repository(pull_request, repo)
     ):
         raise RuntimeError(
-            "Included sync pull request: invalid provenance. Recreate the sync "
-            "branch from main."
+            f"Included sync pull request: invalid provenance. {RECREATE_SYNC}."
         )
     sync_commit = github_get(repo, f"git/commits/{head_sha}", token)
     if not isinstance(sync_commit, dict):
         raise RuntimeError(
-            "Included sync pull request: invalid commit shape. Recreate the "
-            "sync branch from main."
+            "Included sync pull request: invalid commit shape. "
+            f"{RECREATE_SYNC}."
         )
     parents = sync_commit.get("parents")
     if not isinstance(parents, list) or len(parents) != 2:
         raise RuntimeError(
-            "Included sync pull request: invalid commit shape. Recreate the "
-            "sync branch from main."
+            "Included sync pull request: invalid commit shape. "
+            f"{RECREATE_SYNC}."
         )
     main_parent = parents[1]
     delivery_parent = parents[0]
@@ -390,8 +394,7 @@ def sync_pull_request_main_sha(
     )
     if not isinstance(synced_main_sha, str):
         raise RuntimeError(
-            "Included sync pull request: invalid provenance. Recreate the sync "
-            "branch from main."
+            f"Included sync pull request: invalid provenance. {RECREATE_SYNC}."
         )
     expected_ref = delivery_sync.sync_branch_name(
         delivery_branch, synced_main_sha
@@ -404,8 +407,7 @@ def sync_pull_request_main_sha(
         delivery_sync.compare(api, repo, synced_main_sha, current_main_sha)
     ):
         raise RuntimeError(
-            "Included sync pull request: invalid provenance. Recreate the sync "
-            "branch from main."
+            f"Included sync pull request: invalid provenance. {RECREATE_SYNC}."
         )
     if head_ref == legacy_ref:
         base_sha = base.get("sha")
@@ -432,8 +434,8 @@ def sync_pull_request_main_sha(
             or sync_tree_sha != main_tree_sha
         ):
             raise RuntimeError(
-                "Legacy sync pull request: invalid provenance. Recreate the "
-                "sync branch from main."
+                "Legacy sync pull request: invalid provenance. "
+                f"{RECREATE_SYNC}."
             )
     return synced_main_sha
 
@@ -599,21 +601,17 @@ def included_pull_requests(  # noqa: C901
         )
         if not isinstance(comparison, dict):
             raise RuntimeError(
-                "GitHub commit comparison: invalid. Run 'gh auth status' and "
-                "rerun."
+                f"GitHub commit comparison: invalid. {GH_RETRY}."
             )
         commits = comparison.get("commits", [])
         if not isinstance(commits, list):
-            raise RuntimeError(
-                "GitHub commit list: invalid. Run 'gh auth status' and rerun."
-            )
+            raise RuntimeError(f"GitHub commit list: invalid. {GH_RETRY}.")
         for commit in commits:
             sha = commit.get("sha") if isinstance(commit, dict) else None
             if not isinstance(sha, str):
                 if bridge_head_sha is not None:
                     raise RuntimeError(
-                        "Bridge commit provenance: invalid. Run 'gh auth "
-                        "status' and rerun."
+                        f"Bridge commit provenance: invalid. {GH_RETRY}."
                     )
                 continue
             if sha == bridge_head_sha:
@@ -622,8 +620,7 @@ def included_pull_requests(  # noqa: C901
             pull_requests = github_get(repo, f"commits/{sha}/pulls", token)
             if not isinstance(pull_requests, list):
                 raise RuntimeError(
-                    "GitHub associated pull requests: invalid. Run 'gh auth "
-                    "status' and rerun."
+                    f"GitHub associated pull requests: invalid. {GH_RETRY}."
                 )
             matched = False
             for pull_request in pull_requests:
@@ -878,13 +875,11 @@ def repository_variables(repo: str, token: str) -> dict[str, str]:
         )
         if not isinstance(items, list) or not isinstance(count, int):
             raise RuntimeError(
-                "Repository variables: incomplete list. Run 'gh auth status' "
-                "and rerun."
+                f"Repository variables: incomplete list. {GH_RETRY}."
             )
         if total is not None and count != total:
             raise RuntimeError(
-                "Repository variables: count changed. Run 'gh auth status' and "
-                "rerun."
+                f"Repository variables: count changed. {GH_RETRY}."
             )
         total = count
         for item in items:
@@ -896,20 +891,17 @@ def repository_variables(repo: str, token: str) -> dict[str, str]:
                 or name in variables
             ):
                 raise RuntimeError(
-                    "Repository variables: invalid list. Run 'gh auth status' "
-                    "and rerun."
+                    f"Repository variables: invalid list. {GH_RETRY}."
                 )
             variables[name] = value
         if not items and len(variables) < total:
             raise RuntimeError(
-                "Repository variables: incomplete list. Run 'gh auth status' "
-                "and rerun."
+                f"Repository variables: incomplete list. {GH_RETRY}."
             )
         page += 1
     if len(variables) != total:
         raise RuntimeError(
-            "Repository variables: incomplete list. Run 'gh auth status' and "
-            "rerun."
+            f"Repository variables: incomplete list. {GH_RETRY}."
         )
     return variables
 
@@ -937,8 +929,7 @@ def milestone_issues(
         payload = github_get(repo, f"issues?{query}", token)
         if not isinstance(payload, list):
             raise RuntimeError(
-                "GitHub Milestone Issue list: invalid. Run 'gh auth status' "
-                "and rerun."
+                f"GitHub Milestone Issue list: invalid. {GH_RETRY}."
             )
         page_items = [item for item in payload if isinstance(item, dict)]
         issues.extend(page_items)
@@ -989,9 +980,7 @@ def promotion_bridge_source(
         source_object.get("sha") if isinstance(source_object, dict) else None
     )
     if not isinstance(source_sha, str):
-        raise RuntimeError(
-            "Bridge source reference: invalid. Run 'gh auth status' and rerun."
-        )
+        raise RuntimeError(f"Bridge source reference: invalid. {GH_RETRY}.")
     parents = git_output("rev-list", "--parents", "-n", "1", head_sha).split()
     if parents != [head_sha, source_sha, base_sha]:
         raise RuntimeError(
@@ -1344,27 +1333,21 @@ def failed_pull_request_run_urls(  # noqa: C901
         )
         if not isinstance(items, list) or not isinstance(count, int):
             raise RuntimeError(
-                "Pull request check runs: incomplete. Run 'gh auth status' and "
-                "rerun."
+                f"Pull request check runs: incomplete. {GH_RETRY}."
             )
         if total is not None and count != total:
             raise RuntimeError(
-                "Pull request check runs: count changed. Run 'gh auth status' "
-                "and rerun."
+                f"Pull request check runs: count changed. {GH_RETRY}."
             )
         total = count
         check_runs.extend(item for item in items if isinstance(item, dict))
         if not items and len(check_runs) < total:
             raise RuntimeError(
-                "Pull request check runs: incomplete. Run 'gh auth status' and "
-                "rerun."
+                f"Pull request check runs: incomplete. {GH_RETRY}."
             )
         page += 1
     if len(check_runs) != total:
-        raise RuntimeError(
-            "Pull request check runs: incomplete. Run 'gh auth status' and "
-            "rerun."
-        )
+        raise RuntimeError(f"Pull request check runs: incomplete. {GH_RETRY}.")
 
     statuses = github_get(repo, f"commits/{head_sha}/status", token)
     status_items = (
@@ -1475,25 +1458,16 @@ def require_zero_step_run(  # noqa: C901
             or type(count) is not int
             or count < 0
         ):
-            raise RuntimeError(
-                "Blocked run jobs: incomplete. Run 'gh auth status' and rerun."
-            )
+            raise RuntimeError(f"Blocked run jobs: incomplete. {GH_RETRY}.")
         if total is not None and count != total:
-            raise RuntimeError(
-                "Blocked run jobs: count changed. Run 'gh auth status' and "
-                "rerun."
-            )
+            raise RuntimeError(f"Blocked run jobs: count changed. {GH_RETRY}.")
         total = count
         jobs.extend(items)
         if not items and len(jobs) < total:
-            raise RuntimeError(
-                "Blocked run jobs: incomplete. Run 'gh auth status' and rerun."
-            )
+            raise RuntimeError(f"Blocked run jobs: incomplete. {GH_RETRY}.")
         page += 1
     if not jobs or len(jobs) != total:
-        raise RuntimeError(
-            "Blocked run jobs: incomplete. Run 'gh auth status' and rerun."
-        )
+        raise RuntimeError(f"Blocked run jobs: incomplete. {GH_RETRY}.")
     if any(
         type(job.get("id")) is not int
         or job["id"] <= 0
@@ -1523,13 +1497,11 @@ def require_zero_step_run(  # noqa: C901
             )
             if not isinstance(payload, list):
                 raise RuntimeError(
-                    "Blocked job annotations: incomplete. Run 'gh auth status' "
-                    "and rerun."
+                    f"Blocked job annotations: incomplete. {GH_RETRY}."
                 )
             if not all(isinstance(item, dict) for item in payload):
                 raise RuntimeError(
-                    "Blocked job annotations: incomplete. Run 'gh auth status' "
-                    "and rerun."
+                    f"Blocked job annotations: incomplete. {GH_RETRY}."
                 )
             annotations.extend(payload)
             if len(payload) < 100:
@@ -1751,14 +1723,10 @@ def validate_quota_preflight(  # noqa: C901
         )
         if not isinstance(runs, list) or not isinstance(count, int):
             raise RuntimeError(
-                "Pull-request runs: incomplete list. Run 'gh auth status' and "
-                "rerun."
+                f"Pull-request runs: incomplete list. {GH_RETRY}."
             )
         if total is not None and count != total:
-            raise RuntimeError(
-                "Pull-request runs: count changed. Run 'gh auth status' and "
-                "rerun."
-            )
+            raise RuntimeError(f"Pull-request runs: count changed. {GH_RETRY}.")
         total = count
         seen += len(runs)
         failed_ids.update(
@@ -1780,17 +1748,13 @@ def validate_quota_preflight(  # noqa: C901
             )
         if not runs and seen < total:
             raise RuntimeError(
-                "Pull-request runs: incomplete list. Run 'gh auth status' and "
-                "rerun."
+                f"Pull-request runs: incomplete list. {GH_RETRY}."
             )
         if len(runs) < 100:
             break
         page += 1
     if seen != total:
-        raise RuntimeError(
-            "Pull-request runs: incomplete list. Run 'gh auth status' and "
-            "rerun."
-        )
+        raise RuntimeError(f"Pull-request runs: incomplete list. {GH_RETRY}.")
     if (
         not failed_ids
         or set(run_ids) != failed_ids
@@ -1870,8 +1834,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
             body = pull_request.get("body") or ""
             if not isinstance(title, str) or not isinstance(body, str):
                 raise RuntimeError(
-                    "Promotion pull request: incomplete metadata. Run 'gh auth "
-                    "status' and rerun."
+                    f"Promotion pull request: incomplete metadata. {GH_RETRY}."
                 )
             if route.kind == "milestone":
                 validate_promotion_alignment(
@@ -1897,8 +1860,8 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 issue_body = issue.get("body") or ""
                 if not isinstance(issue_body, str):
                     raise RuntimeError(
-                        "Promotion tracking Issue: incomplete metadata. Run "
-                        "'gh auth status' and rerun."
+                        "Promotion tracking Issue: incomplete metadata. "
+                        f"{GH_RETRY}."
                     )
                 issue_title = str(issue.get("title") or "")
                 if UNCHECKED.search(issue_body):
@@ -1966,8 +1929,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
             current_main = github_get(args.repo, "git/ref/heads/main", token)
             if not isinstance(current_main, dict):
                 raise RuntimeError(
-                    "GitHub main reference: invalid. Run 'gh auth status' and "
-                    "rerun."
+                    f"GitHub main reference: invalid. {GH_RETRY}."
                 )
             main_object = current_main.get("object")
             current_main_sha = (
@@ -1979,8 +1941,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
             head_sha = pull_request["head"]["sha"]
             if not isinstance(current_main_sha, str):
                 raise RuntimeError(
-                    "GitHub main reference: invalid. Run 'gh auth status' and "
-                    "rerun."
+                    f"GitHub main reference: invalid. {GH_RETRY}."
                 )
             bridge = promotion_bridge_source(
                 args.repo,
@@ -2325,8 +2286,7 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
         )
         if not isinstance(payload, list):
             raise RuntimeError(
-                "Main source pull requests: incomplete list. Run 'gh auth "
-                "status' and rerun."
+                f"Main source pull requests: incomplete list. {GH_RETRY}."
             )
         sources.extend(item for item in payload if isinstance(item, dict))
         if len(payload) < 100:

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
         _CLOSING_KEYWORD,
         _ISSUE_VOCABULARY,
         CHECK_NAME,
+        GH_RETRY,
         Decision,
         _admin_self_approval_allowed,
         _approval_records,
@@ -258,8 +259,7 @@ def refresh_pr_checks(snapshot: dict[str, Any]) -> int:
         head_sha = pull.get("head", {}).get("sha")
         if not isinstance(head_sha, str) or not head_sha:
             raise RuntimeError(
-                "GitHub pull-request head: invalid. Run 'gh auth status' and "
-                "rerun."
+                f"GitHub pull-request head: invalid. {GH_RETRY}."
             )
         _record_check(repo, head_sha, decision)
         count += 1
@@ -271,9 +271,7 @@ def check_pr(repo: str, number: int, *, record_check: bool = True) -> Decision:
     pull = json.loads(run_gh(["api", f"repos/{repo}/pulls/{number}"]))
     head_sha = pull.get("head", {}).get("sha")
     if not isinstance(head_sha, str) or not head_sha:
-        raise RuntimeError(
-            "GitHub pull-request head: invalid. Run 'gh auth status' and rerun."
-        )
+        raise RuntimeError(f"GitHub pull-request head: invalid. {GH_RETRY}.")
     decision = _pull_decision(repo, pull)
     if record_check:
         _record_check(repo, head_sha, decision)
@@ -314,8 +312,7 @@ def _pull_decision(repo: str, pull: dict[str, Any]) -> Decision:
     milestone_number = milestone.get("number")
     if not isinstance(milestone_number, int):
         raise RuntimeError(
-            "GitHub pull-request lifecycle data: invalid. Run 'gh auth status' "
-            "and rerun."
+            f"GitHub pull-request lifecycle data: invalid. {GH_RETRY}."
         )
     return approval_decision(load_snapshot(repo, milestone_number))
 

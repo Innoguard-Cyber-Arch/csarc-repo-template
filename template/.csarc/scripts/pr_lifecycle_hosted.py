@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from pr_lifecycle import (
         CLOSING_ISSUE,
         DELIVERY_BRANCH,
+        GH_RETRY,
         ISSUE_WORK_BRANCH,
         REPOSITORY,
         REVIEW_CHECK_CONTEXT,
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
         authenticated_dependabot_commit,
         canonical_json,
         commit_tree_sha,
+        malformed_check,
         parse_time,
         verification_evidence,
     )
@@ -70,43 +72,27 @@ def declared_required_contexts() -> set[tuple[str, int]]:
             f"Required checks: unreadable: {error}. Fix the declaration."
         ) from error
     rules = policy.get("rules") if isinstance(policy, dict) else None
-    if not isinstance(rules, list):
+    valid = isinstance(rules, list) and all(isinstance(x, dict) for x in rules)
+    groups = [
+        params.get("required_status_checks")
+        if isinstance(params := rule.get("parameters"), dict)
+        else None
+        for rule in (rules if valid else [])
+        if rule.get("type") == "required_status_checks"
+    ]
+    if not valid or any(
+        not isinstance(items, list) or any(map(malformed_check, items))
+        for items in groups
+    ):
         raise RuntimeError(
             "Required checks: malformed declaration. Fix '.csarc/config.yml'."
         )
-    contexts: set[tuple[str, int]] = set()
-    for rule in rules:
-        if not isinstance(rule, dict):
-            raise RuntimeError(
-                "Required checks: malformed declaration. Fix "
-                "'.csarc/config.yml'."
-            )
-        if rule.get("type") != "required_status_checks":
-            continue
-        parameters = rule.get("parameters")
-        items = (
-            parameters.get("required_status_checks")
-            if isinstance(parameters, dict)
-            else None
-        )
-        if not isinstance(items, list):
-            raise RuntimeError(
-                "Required checks: malformed declaration. Fix "
-                "'.csarc/config.yml'."
-            )
-        for item in items:
-            if (
-                not isinstance(item, dict)
-                or not isinstance(item.get("context"), str)
-                or not item["context"]
-                or type(item.get("integration_id")) is not int
-                or item["integration_id"] <= 0
-            ):
-                raise RuntimeError(
-                    "Required checks: malformed declaration. Fix "
-                    "'.csarc/config.yml'."
-                )
-            contexts.add((item["context"], item["integration_id"]))
+    contexts = {
+        (item["context"], item["integration_id"])
+        for items in groups
+        if isinstance(items, list)
+        for item in items
+    }
     if not contexts:
         raise RuntimeError(
             "Hosted merge: no declared required checks. Declare them."
@@ -292,9 +278,7 @@ def require_trusted_verification(  # noqa: C901
     tree = commit.get("tree") if isinstance(commit, dict) else None
     tree_sha = tree.get("sha") if isinstance(tree, dict) else None
     if not isinstance(tree_sha, str):
-        raise RuntimeError(
-            "Exact-head Git tree: unavailable. Run 'gh auth status' and rerun."
-        )
+        raise RuntimeError(f"Exact-head Git tree: unavailable. {GH_RETRY}.")
     jobs = github.collection(
         repo,
         f"actions/runs/{run_id}/jobs?filter=latest&per_page=100",
@@ -685,8 +669,7 @@ def close_work_issue(  # noqa: C901
     pull = github.get(args.repo, f"pulls/{args.pr_number}")
     if not isinstance(repository, dict) or not isinstance(pull, dict):
         raise RuntimeError(
-            "Work Issue closure: state unavailable. Run 'gh auth status' and "
-            "rerun."
+            f"Work Issue closure: state unavailable. {GH_RETRY}."
         )
     head = pull.get("head") or {}
     base = pull.get("base") or {}
@@ -716,8 +699,7 @@ def close_work_issue(  # noqa: C901
     head_ref = head.get("ref")
     if not isinstance(default_branch, str) or not isinstance(base_ref, str):
         raise RuntimeError(
-            "Pull request: destination unavailable. Run 'gh auth status' and "
-            "rerun."
+            f"Pull request: destination unavailable. {GH_RETRY}."
         )
     if base_ref == default_branch:
         sys.stdout.write(

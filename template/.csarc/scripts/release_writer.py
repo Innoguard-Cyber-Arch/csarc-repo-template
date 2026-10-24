@@ -43,6 +43,12 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+# Shared next step of raised messages (#1253).
+LEASE_COMMIT_STEP = "Pass the commit that 'lease acquire' printed"
+
+# Shared next step of raised messages (#1253).
+RERUN_PUBLISH = "Run 'publish-release' again"
+
 NOT_WRITER_EXIT = 3
 CSARC_OWNED = "csarc-owned"
 # The one workflow allowed to call the writer; any other Release writer is a
@@ -160,8 +166,7 @@ class GitHub:
             return json.loads(out)
         except json.JSONDecodeError as error:
             raise WriterError(
-                f"{method} {path} failed: invalid JSON. Run 'publish-release' "
-                "again."
+                f"{method} {path} failed: invalid JSON. {RERUN_PUBLISH}."
             ) from error
 
 
@@ -259,8 +264,7 @@ def remote_tag(github: GitHub, tag: str) -> str | None:
         if NOT_FOUND.search(err):
             return None
         raise WriterError(
-            f"Cannot read tag {tag}: {err.strip()}. Run 'publish-release' "
-            "again."
+            f"Cannot read tag {tag}: {err.strip()}. {RERUN_PUBLISH}."
         )
     try:
         payload = json.loads(out)
@@ -273,7 +277,7 @@ def remote_tag(github: GitHub, tag: str) -> str | None:
     )
     if not isinstance(sha, str) or SHA.fullmatch(sha) is None:
         raise WriterError(
-            f"Bad GitHub reply: invalid tag {tag}. Run 'publish-release' again."
+            f"Bad GitHub reply: invalid tag {tag}. {RERUN_PUBLISH}."
         )
     return sha
 
@@ -297,20 +301,17 @@ def remote_release(github: GitHub, tag: str) -> dict[str, Any] | None:
         if NOT_FOUND.search(err):
             return None
         raise WriterError(
-            f"Cannot read Release {tag}: {err.strip()}. Run 'publish-release' "
-            "again."
+            f"Cannot read Release {tag}: {err.strip()}. {RERUN_PUBLISH}."
         )
     try:
         payload = json.loads(out)
     except json.JSONDecodeError as error:
         raise WriterError(
-            f"Bad GitHub reply: invalid Release {tag}. Run 'publish-release' "
-            "again."
+            f"Bad GitHub reply: invalid Release {tag}. {RERUN_PUBLISH}."
         ) from error
     if not isinstance(payload, dict) or payload.get("tagName") != tag:
         raise WriterError(
-            f"Bad GitHub reply: wrong Release for {tag}. Run "
-            "'publish-release' again."
+            f"Bad GitHub reply: wrong Release for {tag}. {RERUN_PUBLISH}."
         )
     return payload
 
@@ -448,15 +449,13 @@ def read_lease(github: GitHub, commit: str) -> dict[str, Any]:
     message = payload.get("message") if isinstance(payload, dict) else None
     if not isinstance(message, str) or "\n\n" not in message:
         raise WriterError(
-            f"Lease {commit}: not a release lease. Pass the commit that "
-            "'lease acquire' printed."
+            f"Lease {commit}: not a release lease. {LEASE_COMMIT_STEP}."
         )
     try:
         core = json.loads(message.split("\n\n", 1)[1])
     except json.JSONDecodeError as error:
         raise WriterError(
-            f"Lease {commit}: not a release lease. Pass the commit that "
-            "'lease acquire' printed."
+            f"Lease {commit}: not a release lease. {LEASE_COMMIT_STEP}."
         ) from error
     if (
         not isinstance(core, dict)
@@ -465,8 +464,7 @@ def read_lease(github: GitHub, commit: str) -> dict[str, Any]:
         or message.rstrip("\n") != lease_message(core)
     ):
         raise WriterError(
-            f"Lease {commit}: not a canonical lease. Pass the commit that "
-            "'lease acquire' printed."
+            f"Lease {commit}: not a canonical lease. {LEASE_COMMIT_STEP}."
         )
     return core
 
@@ -478,8 +476,7 @@ def _expired(core: dict[str, Any], now: datetime) -> bool:
         )
     except ValueError as error:
         raise WriterError(
-            "Bad lease expiry: not a time. Pass the commit that 'lease "
-            "acquire' printed."
+            f"Bad lease expiry: not a time. {LEASE_COMMIT_STEP}."
         ) from error
     return expires.replace(tzinfo=UTC) <= now
 
@@ -491,18 +488,17 @@ def current_lease(github: GitHub, tag: str) -> str | None:
         if NOT_FOUND.search(err):
             return None
         raise WriterError(
-            f"Cannot read the release lease: {err.strip()}. Run "
-            "'publish-release' again."
+            f"Cannot read the release lease: {err.strip()}. {RERUN_PUBLISH}."
         )
     try:
         sha = json.loads(out)["object"]["sha"]
     except (json.JSONDecodeError, KeyError, TypeError) as error:
         raise WriterError(
-            "Bad GitHub reply: invalid lease ref. Run 'publish-release' again."
+            f"Bad GitHub reply: invalid lease ref. {RERUN_PUBLISH}."
         ) from error
     if not isinstance(sha, str) or SHA.fullmatch(sha) is None:
         raise WriterError(
-            "Bad GitHub reply: invalid lease ref. Run 'publish-release' again."
+            f"Bad GitHub reply: invalid lease ref. {RERUN_PUBLISH}."
         )
     return sha
 
@@ -553,8 +549,7 @@ def acquire_lease(
     commit = created.get("sha") if isinstance(created, dict) else None
     if not isinstance(commit, str) or SHA.fullmatch(commit) is None:
         raise WriterError(
-            "Bad GitHub reply: no release lease commit. Run 'publish-release' "
-            "again."
+            f"Bad GitHub reply: no release lease commit. {RERUN_PUBLISH}."
         )
     if existing is None:
         code, _out, err = github.api(
@@ -582,13 +577,10 @@ def confirm_lease(
     """Require that this writer still holds an unexpired lease."""
     if current_lease(github, tag) != commit:
         raise WriterError(
-            f"Lost lease for {tag}: no longer held. Run 'publish-release' "
-            "again."
+            f"Lost lease for {tag}: no longer held. {RERUN_PUBLISH}."
         )
     if _expired(read_lease(github, commit), now or datetime.now(UTC)):
-        raise WriterError(
-            f"Lost lease for {tag}: it expired. Run 'publish-release' again."
-        )
+        raise WriterError(f"Lost lease for {tag}: it expired. {RERUN_PUBLISH}.")
 
 
 def release_lease(github: GitHub, tag: str, commit: str) -> bool:
