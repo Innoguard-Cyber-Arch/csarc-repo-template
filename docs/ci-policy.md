@@ -1370,6 +1370,16 @@ PR 內自動同步；選擇後者，理由記錄於本 Issue 討論（維護者 
    `push` workflow，因此 `release_ownership: csarc-owned` 成功合併後明確 dispatch repository-owned `release.yml`；
    不猜測或 dispatch product-owned workflow。
 
+   **#1262 修正**：GitHub 只把 Ruleset 的 `bypass_actors` 回給能編輯該 Ruleset 的 token；workflow 的
+   `GITHUB_TOKEN` 讀不到這個欄位，所以 admin bypass Ruleset（`admin_bypass: always`）下的 Dependabot 合併
+   自這條路徑建立起每次都停在 `an effective Ruleset permits an unverified bypass`，#1054、#1055、#1215 都由
+   維護者手動合併。現在只有 `--require-dependabot-head` 路徑接受讀不到 `bypass_actors` 的 Ruleset，而且要同時
+   成立：exact head 有維護者核准（reviewed merge）、eligibility 與 required checks 通過，以及 GitHub 回報這個
+   token 的 `current_user_can_bypass` 是 `never`（它的合併受每條規則約束）。讀得到但形狀不符、沒有核准、token
+   能 bypass，或一般 PR 路徑讀不到 `bypass_actors`，都維持 fail closed；`protection_reason` 寫明採用或拒絕的依據。
+   `check` 對被拒的 snapshot 仍以 0 結束，所以 workflow 的 `check` 步驟只在 `merge_mode` 是 `agent` 時成功；
+   否則失敗並由同一次 run 釋放自己取得的 lease，重跑不會再被舊 lease 擋 15 分鐘。
+
    同步 commit 的訊息固定用 `fix(deps): ...`，不是 `chore:`：完成條件第五項要求「會改變 template/ 內容的
    依賴更新，合併後要進入下一次發版」，`release-please`（`release-type: simple`）只認 `fix`／`feat` 升版號；
    這裡只在 `sync-paired-files.sh` 找到 drift（代表這次 bump 改到 `copier update` 會下發的內容）時

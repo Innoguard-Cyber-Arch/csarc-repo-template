@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.44.4] - 2026-10-24
+
+### Bug Fixes
+
+* fix(dependabot): merge reviewed updates under the admin bypass Ruleset (3f006dd)
+
 ## [0.44.3] - 2026-10-24
 
 ### Bug Fixes

@@ -178,6 +178,7 @@ jobs:
           HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
           OWNER: dependabot-exact-merge-${{ github.run_id }}-${{ github.run_attempt }}
           PR_NUMBER: ${{ needs.resolve-pr.outputs.number }}
+        # Issue #1262: fail on a refused snapshot so the next step releases the lease.
         run: |
           python3 scripts/pr_lifecycle.py check \
             --repo "$GITHUB_REPOSITORY" \
@@ -186,7 +187,12 @@ jobs:
             --owner "$OWNER" \
             --actor 'github-actions[bot]' \
             --lease "$RUNNER_TEMP/dependabot-lease.json" \
-            --require-dependabot-head
+            --require-dependabot-head > "$RUNNER_TEMP/check.txt"
+          cat "$RUNNER_TEMP/check.txt"
+          grep -qx '  "merge_mode": "agent",' "$RUNNER_TEMP/check.txt" || {
+            echo "ERROR: Dependabot merge: lifecycle refused it. Read 'protection_reason' above." >&2
+            exit 1
+          }
       - name: Release a pre-merge rejected lease
         if: ${{ failure() && steps.acquire.outcome == 'success' && steps.check.outcome == 'failure' }}
         env:
