@@ -90,6 +90,7 @@ def declared_required_contexts() -> set[tuple[str, int]]:
     contexts = {
         (item["context"], item["integration_id"])
         for items in groups
+        if isinstance(items, list)
         for item in items
     }
     if not contexts:
