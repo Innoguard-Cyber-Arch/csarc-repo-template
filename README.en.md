@@ -6,7 +6,7 @@ Cyber-Arch's updatable repository foundation. A new project, an adopted project,
 
 | Item | Current status |
 | --- | --- |
-| Template version | v0.44.2<!-- x-release-please-version --> |
+| Template version | v0.44.3<!-- x-release-please-version --> |
 | Supported languages | Python, Rust, TypeScript, Go (independently multi-selectable; choosing none uses only the common workflow) |
 | repo-site presentation template version | 1.1.0 |
 | repo-site render engine version | 1.1.0 |

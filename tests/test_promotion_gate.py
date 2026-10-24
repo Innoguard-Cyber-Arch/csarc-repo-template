@@ -391,6 +391,73 @@ def test_promotion_title_cannot_downgrade_batch_intent() -> None:
     check_promotion_intent(arguments)
 
 
+GATE_SCRIPTS = [
+    Path(__file__).parents[1] / "scripts" / "promotion_gate.py",
+    Path(__file__).parents[1]
+    / "template"
+    / ".csarc"
+    / "scripts"
+    / "promotion_gate.py",
+]
+
+
+@pytest.mark.parametrize("script", GATE_SCRIPTS, ids=["root", "template"])
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (
+            ["check-alignment", "--body", "", "--head-sha", "a" * 40],
+            "Milestone promotion: no '## ADR 與文件對齊' section.",
+        ),
+        (
+            [
+                "check-alignment",
+                "--body",
+                "## ADR 與文件對齊\n\n- Status: `aligned`\n"
+                f"- Reviewed head: `{'b' * 40}`\n- Reason: Checked.\n",
+                "--head-sha",
+                "a" * 40,
+            ],
+            "ADR and documentation alignment: Documentation review head is "
+            "wrong",
+        ),
+        (
+            [
+                "check-intent",
+                "--title",
+                "fix: x",
+                "--titles-json",
+                '["feat: y"]',
+            ],
+            "Promotion title: wrong SemVer intent.",
+        ),
+        (
+            ["check-intent", "--title", "fix: x", "--titles-json", "nope"],
+            "Promotion title fixture: not a string list.",
+        ),
+    ],
+    ids=["alignment-missing", "alignment-stale", "intent-low", "intent-bad"],
+)
+def test_gate_failure_prints_one_error_line(
+    script: Path, arguments: list[str], message: str
+) -> None:
+    """A failing gate prints one writing-guide ERROR line, not a traceback."""
+    result = subprocess.run(  # noqa: S603
+        ["python3", str(script), *arguments],  # noqa: S607
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    lines = result.stderr.splitlines()
+    assert len(lines) == 1, result.stderr
+    assert lines[0].startswith(f"ERROR: {message}")
+    assert lines[0].endswith(".")
+    assert "Traceback" not in result.stderr
+
+
 def test_included_pull_requests_are_deduplicated_and_scoped(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
