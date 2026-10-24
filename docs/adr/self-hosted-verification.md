@@ -3,7 +3,7 @@
 - **狀態：**Proposed
 - **日期：**2026-10-25
 - **來源 Issues：**[#1266](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1266)、[#1265](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1265)（Milestone 21 tracker，擁有者 2026-10-24、2026-10-25 決定）；部分取代 [#908](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/908) 的新專案預設
-- **實作 PR：**待擁有者核准本草稿後，由 #1266 的 PR 填入
+- **實作 PR：**[#1273](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/1273)
 
 ## 問題與限制
 
