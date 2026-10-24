@@ -959,15 +959,67 @@ def create_refs(
 
 
 def expired_remote_lease(
-    github: GitHub, repo: str, commit_sha: str, held_ref: str
+    github: GitHub, repo: str, commit_sha: str, held_ref: str, owner: str = ""
 ) -> dict[str, Any]:
-    """Validate one canonical expired lease before an atomic reclaim."""
+    """Validate one canonical expired lease before an atomic reclaim.
+
+    Issue #1252: a live lease of the same owner names its remaining time
+    and the `recover` command for a lost evidence file.
+    """
     core = canonical_remote_lease(github, repo, commit_sha, held_ref)
-    if parse_time(core["expires_at"], "Existing lease") > datetime.now(UTC):
+    left = parse_time(core["expires_at"], "Existing lease") - datetime.now(UTC)
+    if left.total_seconds() > 0:
         raise RuntimeError(
-            "PR lifecycle lease: held by another owner. Wait for its release."
+            f"PR lifecycle lease: owner '{owner}' holds it for "
+            f"{int(left.total_seconds())} more seconds. If you lost its "
+            f"evidence file, run 'pr_lifecycle.py recover --repo {repo} "
+            f"--pr-number {core['pull_request']} --head-sha "
+            f"{core['head_sha']} --owner {owner}'."
+            if core["owner"] == owner
+            else "PR lifecycle lease: held by another owner. Wait for its "
+            "release."
         )
     return core
+
+
+def recover(args: argparse.Namespace, github: GitHub) -> None:
+    """Release this caller's live lease after its evidence file is lost.
+
+    Issue #1252: only the canonical remote lease commit counts, and its
+    owner, actor, PR, and head must equal this invocation and the live PR.
+    The PR binding holds because a canonical lease names its own PR ref.
+    The raw capability exists only in the lost file, so evidence cannot be
+    rebuilt. The command prints what it found; `--apply` then deletes both
+    refs with a CAS push, so a fresh `acquire` works again.
+    """
+    require_origin(args.repo)
+    ref = pr_ref(args.pr_number)
+    commit = remote_ref(ref)
+    if commit is None:
+        raise RuntimeError("Lease: none for this pull request. Acquire one.")
+    lease = {
+        **canonical_remote_lease(github, args.repo, commit, ref),
+        "lease_commit": commit,
+    }
+    live_pull(github, args.repo, args.pr_number, args.head_sha)
+    if (
+        lease["owner"] != args.owner
+        or lease["actor"].casefold() != github.viewer(args.actor).casefold()
+        or lease["head_sha"] != args.head_sha
+    ):
+        raise RuntimeError(
+            "Lease: owner, actor, or head differs. Wait for its release."
+        )
+    sys.stdout.write(
+        f"NOTICE: Lease {commit} of '{args.owner}' expires "
+        f"{lease['expires_at']}. Recovery deletes "
+        f"{' and '.join(lease['refs'])}.\n"
+    )
+    if not args.apply:
+        sys.stdout.write("NOTICE: Dry run only. Rerun with '--apply'.\n")
+        return
+    release_refs(lease)
+    sys.stdout.write("OK: Lease released. Acquire a new lease.\n")
 
 
 def canonical_remote_lease(
@@ -1172,7 +1224,9 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     else:
         for ref, existing in observed.items():
             if existing is not None:
-                expired_remote_lease(github, args.repo, existing, ref)
+                expired_remote_lease(
+                    github, args.repo, existing, ref, args.owner
+                )
     acquired = datetime.now(UTC)
     tree = run(["git", "rev-parse", f"{args.head_sha}^{{tree}}"])
     capability = (
@@ -4022,6 +4076,35 @@ def read_body_file(body_file: Path | None) -> str | None:
         ) from error
 
 
+def promotion_milestone(
+    github: GitHub, repo: str, head: str, body: str
+) -> list[str]:
+    """Return the tracker Milestone option of a `promote/m<N>-*` PR.
+
+    Issue #1252: PR policy requires a promotion PR to carry the Milestone of
+    its `Refs #<tracker>` Issue. The tracker counts only when its title and
+    Milestone number both match the route, so a wrong reference fails closed.
+    """
+    route = re.fullmatch(r"promote/m([0-9]+)-[a-z0-9][a-z0-9-]*", head)
+    if route is None:
+        return []
+    tracker = re.search(r"[Rr][Ee][Ff][Ss]\s+#([0-9]+)", body)
+    issue = github.get(repo, f"issues/{tracker[1]}") if tracker else {}
+    if not isinstance(issue, dict):
+        issue = {}
+    milestone = issue.get("milestone") or {}
+    if (
+        "pull_request" in issue
+        or not str(issue.get("title")).startswith(f"Milestone {route[1]}: ")
+        or str(milestone.get("number")) != route[1]
+    ):
+        raise RuntimeError(
+            f"Milestone {route[1]} promotion: no tracker reference. Add 'Refs "
+            "#N' for its tracker Issue."
+        )
+    return ["--milestone", str(milestone.get("title"))]
+
+
 def create_draft_pull(  # noqa: C901
     args: argparse.Namespace, github: GitHub
 ) -> None:
@@ -4038,6 +4121,7 @@ def create_draft_pull(  # noqa: C901
     if body is None or not body.strip():
         raise RuntimeError("Pull request body: empty. Write it.")
     require_origin(args.repo)
+    milestone = promotion_milestone(github, args.repo, args.head, body)
     for branch in (args.base, args.head):
         run(["git", "check-ref-format", "--branch", branch])
     current_branch = run(["git", "branch", "--show-current"])
@@ -4067,6 +4151,7 @@ def create_draft_pull(  # noqa: C901
             "--body-file",
             "-",
             "--draft",
+            *milestone,
         ],
         input_text=body,
     )
@@ -5442,11 +5527,16 @@ def parser() -> argparse.ArgumentParser:
         "merge",
         "authorization-template",
         "release",
+        "recover",
     ):
         command = commands.add_parser(name)
         command.add_argument("--repo", required=True)
         command.add_argument("--pr-number", required=True, type=int)
-        command.add_argument("--lease", type=Path, required=True)
+        if name == "recover":
+            command.add_argument("--apply", action="store_true")
+            command.set_defaults(handler=recover)
+        else:
+            command.add_argument("--lease", type=Path, required=True)
         command.add_argument("--owner", required=True)
         command.add_argument("--actor", default="")
         if name != "release":
