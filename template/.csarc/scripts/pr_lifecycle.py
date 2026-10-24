@@ -966,11 +966,7 @@ def create_refs(
 def expired_remote_lease(
     github: GitHub, repo: str, commit_sha: str, held_ref: str, owner: str = ""
 ) -> dict[str, Any]:
-    """Validate one canonical expired lease before an atomic reclaim.
-
-    Issue #1252: a live lease of the same owner names its remaining time
-    and the `recover` command for a lost evidence file.
-    """
+    """Validate one canonical expired lease before an atomic reclaim."""
     core = canonical_remote_lease(github, repo, commit_sha, held_ref)
     left = parse_time(core["expires_at"], "Existing lease") - datetime.now(UTC)
     if left.total_seconds() > 0:
@@ -988,15 +984,7 @@ def expired_remote_lease(
 
 
 def recover(args: argparse.Namespace, github: GitHub) -> None:
-    """Release this caller's live lease after its evidence file is lost.
-
-    Issue #1252: only the canonical remote lease commit counts, and its
-    owner, actor, PR, and head must equal this invocation and the live PR.
-    The PR binding holds because a canonical lease names its own PR ref.
-    The raw capability exists only in the lost file, so evidence cannot be
-    rebuilt. The command prints what it found; `--apply` then deletes both
-    refs with a CAS push, so a fresh `acquire` works again.
-    """
+    """Release this caller's live lease after its evidence file is lost."""
     require_origin(args.repo)
     ref = pr_ref(args.pr_number)
     commit = remote_ref(ref)
@@ -3357,12 +3345,7 @@ def read_body_file(body_file: Path | None) -> str | None:
 def promotion_milestone(
     github: GitHub, repo: str, head: str, body: str
 ) -> list[str]:
-    """Return the tracker Milestone option of a `promote/m<N>-*` PR.
-
-    Issue #1252: PR policy requires a promotion PR to carry the Milestone of
-    its `Refs #<tracker>` Issue. The tracker counts only when its title and
-    Milestone number both match the route, so a wrong reference fails closed.
-    """
+    """Return the tracker Milestone option of a `promote/m<N>-*` PR."""
     route = re.fullmatch(r"promote/m([0-9]+)-[a-z0-9][a-z0-9-]*", head)
     if route is None:
         return []
