@@ -77,6 +77,11 @@ parent Issue 與 sub-issues 位於同一個 delivery bucket，防止 #939 類型
   `work-item-lifecycle.yml` 反向尋找並同步所有 linked open PR。若 PR 指向多張 Issue，會
   fail closed，不猜測哪張才是 metadata 來源。只有 PR 與 linked Issue 兩邊都沒有
   Milestone 時，才沿用 #551 的一次性提醒。
+- `promote/m<N>-*` promotion PR 用 `Refs #<tracker>`，不是 closing keyword，所以上面的
+  同步不處理它（#1252）。`scripts/pr_lifecycle.py create` 在建立前讀取 tracker：標題
+  必須以 `Milestone <N>: ` 開頭，而且 tracker 的 Milestone 編號必須等於 route 的 `<N>`。
+  兩者都符合時，PR 建立當下就掛上該 Milestone；任一不符就不建立 PR。PR policy 發現
+  Milestone 不一致時，錯誤訊息會附上可直接執行的 `gh api ... -F milestone=<number>` 修正指令。
 - 兩者共用同一支 `scripts/detect-open-milestone` 判斷式：0 個或 2 個以上 open
   Milestone 都視為「無法判斷」，一律不提醒，避免在多 Milestone 並行時猜錯、誤導。
 - 建立／驗證當下的提醒不負責推測 Issue 所屬批次；但一旦 Issue 已明確選定 Milestone，
@@ -180,6 +185,26 @@ lease，並以 CAS 把兩個 lease ref 從舊 lease commit 換到新 commit。�
 取代時尚未過期；通過後授權起點才回到鏈上第一個 lease 的 `acquired_at`。任何斷鏈、過期、
 換 owner 或換 head 都 fail closed，早於該 head 第一個 lease 的授權永遠不算數。續租不改變
 exact-head 與 actor 綁定。續租條件不成立時工具會拒絕，並說明需要新的 exact-head 授權。
+
+### 遺失 lease 證據檔時的回收（#1252）
+
+lease 證據檔保存只有持有者知道的 capability，遠端 lease commit 只記錄它的 digest。
+證據檔遺失後，`edit`、`release` 都無法執行。同一個 owner 再次 `acquire` 時，錯誤
+訊息會說明 lease 屬於同一個 owner、剩餘秒數，以及回收指令；不同 owner 時訊息不變。
+
+```bash
+python3 scripts/pr_lifecycle.py recover --repo <owner/repo> --pr-number <N> \
+  --head-sha <sha> --owner <owner> [--apply]
+```
+
+`recover` 只信任遠端 canonical lease commit。commit 的 `owner`、`actor`、PR 與
+`head_sha` 必須等於這次執行的 `--owner`、即時 GitHub 身分、`--pr-number` 與
+`--head-sha`，PR 的即時 head 也必須還是同一個 SHA；任何一項不符、commit 不是 canonical，
+都 fail closed。capability 無法從可驗證來源重建，所以 `recover` 不重建證據檔，也不
+補填 `audit_url` 等未知欄位。依[先盤點、再動作](adr/dry-run-inventory-before-action.md)，
+不加 `--apply` 時只列出找到的 lease 與將刪除的 ref；加上 `--apply` 才以 CAS 一次刪除
+兩個 lease ref。之後重新 `acquire`。新的 lease 有新的授權起點，所以先前的 exact-head
+授權留言不再有效。
 
 ### Copilot 審核模式（#752）
 

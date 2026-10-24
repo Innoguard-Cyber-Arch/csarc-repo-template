@@ -397,7 +397,7 @@ if [[ -n "${PR_AUTHOR:-}" && ",${pr_assignees}," != *",${PR_AUTHOR},"* ]]; then
   fail "Pull request: author is not an assignee. Assign the author."
 fi
 if [[ "$pr_milestone_number" != "$issue_milestone_number" ]]; then
-  fail "Pull request Milestone: differs from Issue #${issue_number}. Match it."
+  fail "Pull request Milestone: differs from Issue #${issue_number}. Run 'gh api repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER} --method PATCH -F milestone=${issue_milestone_number/#0/null}'."
 fi
 if [[ "$pr_milestone_number" == "0" && "$issue_milestone_number" == "0" && "${PR_POLICY_READ_ONLY:-false}" != "true" ]]; then
   # Issue #551: the match check above only catches a Milestone
