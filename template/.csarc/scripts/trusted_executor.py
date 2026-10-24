@@ -61,9 +61,6 @@ if __package__ in {None, ""}:
 else:
     csarc_config = importlib.import_module(f"{__package__}.csarc_config")
 
-# Shared next step of raised messages (#1253).
-RERUN_VERIFY = "Rerun the 'verify' job"
-
 EXECUTOR_TRUSTED = "trusted-base"
 EXECUTOR_LEGACY = "candidate-legacy"
 CONTROL_FILES = (
@@ -205,11 +202,13 @@ def verify_manifest(destination: Path) -> None:
     if manifest.get("executor") != EXECUTOR_TRUSTED or not isinstance(
         files, dict
     ):
-        raise RuntimeError(f"Bad executor manifest: malformed. {RERUN_VERIFY}.")
+        raise RuntimeError(
+            "Bad executor manifest: malformed. Rerun the 'verify' job."
+        )
     for relative, expected in files.items():
         if digest(destination / relative) != expected:
             raise RuntimeError(
-                f"Control file changed: {relative}. {RERUN_VERIFY}."
+                f"Control file changed: {relative}. Rerun the 'verify' job."
             )
 
 
@@ -344,7 +343,7 @@ def read_router_args(path: Path) -> list[str]:
     raw = path.read_bytes()
     if not raw.endswith(b"\0"):
         raise ValueError(
-            f"Router arguments are bad: no NUL end. {RERUN_VERIFY}."
+            "Router arguments are bad: no NUL end. Rerun the 'verify' job."
         )
     return [item.decode("utf-8") for item in raw[:-1].split(b"\0")]
 
@@ -690,7 +689,9 @@ def _git(root: Path, *args: str, data: bytes | None = None) -> bytes:
     )
     if result.returncode:
         detail = result.stderr.decode("utf-8", "replace").strip()
-        raise RuntimeError(f"git {args[0]} failed: {detail}. {RERUN_VERIFY}.")
+        raise RuntimeError(
+            f"git {args[0]} failed: {detail}. Rerun the 'verify' job."
+        )
     return result.stdout
 
 
@@ -732,7 +733,7 @@ def trusted_base_checkout(root: Path, base_sha: str) -> Generator[Path]:
             if actual != base_sha:
                 raise RuntimeError(
                     "Base checkout is wrong: not the lease base. "
-                    f"{RERUN_VERIFY}."
+                    "Rerun the 'verify' job."
                 )
             yield checkout
         finally:
