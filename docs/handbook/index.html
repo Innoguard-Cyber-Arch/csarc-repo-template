@@ -356,7 +356,7 @@
       <h1>repo-template 技術手冊</h1>
       <p class="lead"><code>repo-template</code>（<code>Innoguard-Cyber-Arch/csarc-repo-template</code>）是架構組維護的 Repository 模板；<code>csarc</code> 是呼叫模板能力的 CLI 名稱。本手冊定義產品政策、使用者承諾、操作方式及限制。</p>
       <p class="compact"><strong>適用範圍：</strong>本手冊描述首個完整實作本文能力的 stable release；實際使用版本、來源與 full SHA 以該 Release 的 <code>release-prompt.txt</code> 為準。候選版本未通過手冊、SPEC、Repository 規則、程式與測試的一致性檢查前，不得宣稱已提供本文能力。</p>
-      <p class="compact"><strong>目前狀態：</strong>M18 已於 2026-10-18 發布 stable（v0.35.2）；本文的 CLI、Ready、migration 與 Roadmap 能力自 v0.35.x 起提供。版本：2026-10-19；核准 SHA-256 見 manifest。</p>
+      <p class="compact"><strong>目前狀態：</strong>CLI、Ready、migration 與 Roadmap 自 v0.35.x 起提供；設定開啟的 single-writer 合併與新設定盤點自 v0.41.x 起提供；寫作指引與訊息句型檢查隨 Milestone 20 的 stable 提供。版本：2026-10-24；核准 SHA-256 見 manifest。</p>
       <h2>1. repo-template 的功能與使用方式</h2>
       <h3>1.1 repo-template 會替專案做什麼</h3>
       <figure class="diagram-frame">
@@ -416,7 +416,7 @@
       </table>
       <p class="compact mt-3"><strong>責任與邊界：</strong>AI 產生的程式碼由指派 agent、實際主導修改的人負責；合併者可以是同一人或 reviewer。repo-template 不承諾無人監督開發，也不取代產品測試、部署核准、法遵判斷或 GitHub 付費能力。</p>
     </div>
-    <footer class="page-footer"><span>第 1 章 · repo-template 的功能與使用方式</span><span>版本日期 261023 r4</span><span>1 / 10</span></footer>
+    <footer class="page-footer"><span>第 1 章 · repo-template 的功能與使用方式</span><span>版本日期 261024 r5</span><span>1 / 10</span></footer>
   </section>
   <section class="sheet" id="installation">
     <div class="page-content">
@@ -448,14 +448,16 @@ push 或建立 PR。</pre>
       <div class="callout compact mt-3">
       <p><strong>操作分工：</strong>Prompt 是使用者入口；外部薄型 CLI 負責可信 bootstrap、狀態判讀與交易式導入；導入後由 Repository 內的 <code>.csarc/scripts/</code> 執行日常規則與驗證。</p>
       </div>
+      <h3 class="mt-3">2.4 核心原則：先盤點、再動作</h3>
+      <p class="compact">凡是要帶入或執行未經驗證內容的流程（下游 Release、candidate PR、外部 repository 的設定或程式碼），都先以不執行的方式產生唯讀、人看得懂的盤點，逐項列出內容、來源與是否符合預期。有一項不符就停止，說明原因與下一步；需要外部程式碼的資訊時，只解析字面值，不執行、不 import。adopt 的 dry-run、<code>update --check</code>、<code>prepare-candidate</code> 與 6.1 的新設定盤點都依此設計；新流程不符時，須在 PR 說明理由並取得擁有者確認。依據見 <a href="../adr/dry-run-inventory-before-action.md"><code>dry-run-inventory-before-action</code></a>。</p>
     </div>
-    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261023 r4</span><span>2 / 10</span></footer>
+    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261024 r5</span><span>2 / 10</span></footer>
   </section>
   <section class="sheet" id="adoption-lifecycle">
     <div class="page-content">
       <div class="eyebrow">第 2 章 · 安裝與導入（續）</div>
       <h2>2. 安裝與導入（續）</h2>
-      <h3>2.4 建立、導入、更新與移除</h3>
+      <h3>2.5 建立、導入、更新與移除</h3>
       <figure class="diagram-frame diagram-process">
         <div class="diagram-scroll">
           <svg class="diagram-svg" viewBox="0 0 680 338" role="img" aria-labelledby="states-title states-desc">
@@ -523,7 +525,7 @@ push 或建立 PR。</pre>
         </tbody>
       </table>
     </div>
-    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261023 r4</span><span>3 / 10</span></footer>
+    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261024 r5</span><span>3 / 10</span></footer>
   </section>
   <section class="sheet" id="daily-workflow">
     <div class="page-content">
@@ -593,14 +595,19 @@ push 或建立 PR。</pre>
       <div class="callout compact mt-3">
       <p><strong>合併、核准與設定：</strong>agent 不執行 <code>gh pr merge</code>、UI／auto-merge、force-push、push 到 main／<code>dev/m*</code>，也不改名有 open PR 的分支；不代發核准、Milestone approval 或 exact-head 授權。設定只以 <code>csarc update --data KEY=VALUE</code> 變更，不手改 <code>.csarc/config.yml</code>／<code>.csarc/scripts</code>，不直接執行 <code>copier update</code>。模板更新都走 governance-switch；新專案預設 <code>admin_bypass: always</code> 只取代同行核准，不能略過驗證、required checks 或 lifecycle。local 的 <code>csarc-owned</code> 發版由 maintainer 執行。</p>
       </div>
+      <h3>3.2 寫作指引與訊息句型</h3>
+      <p class="compact"><strong>兩份指引：</strong>英文依 <code>docs/writing-guide.en.md</code>，以模板自己的文字參考 ASD-STE100 的精神，不收錄 STE 規則或詞典，也不宣稱合規；中文依 <code>docs/writing-guide.md</code>，整合 speak-human-tw v1.4.0 的規則並保留 MIT 授權聲明，標點依教育部《重訂標點符號手冊》。模板擁有的文字一律照指引寫。</p>
+      <p class="compact"><strong>訊息句型：</strong>腳本訊息只用 <code>ERROR:</code>、<code>WARNING:</code>、<code>NOTICE:</code>、<code>OK:</code> 四種開頭；例外只限英文指引列出的條件，並在原始碼逐筆記錄理由。<code>check-message-style</code> 在 verify 檢查新增或修改的訊息行：模板 repository 已強制，生成專案則在更新到含 #1221 的 Release 後才執行。</p>
+      <p class="compact"><strong>下游繼承：</strong>生成專案在 <code>.csarc/docs/</code> 收到英文指引，文件語言含繁體中文時另收中文指引；<code>AGENTS.md</code> 的 CSARC 區塊以連結交給 agent，不重抄規則。專案第一次收到指引或指引改版時，create／adopt／update 的報告列出專案擁有的 README 與 <code>docs/**/*.md</code>，建議 agent 依指引檢查（#1224）；工具不改寫這些文件，<code>documentation_mode: off</code> 時不提示。</p>
+      <p class="compact"><strong>不用第三方工具：</strong>不安裝 Vale、LanguageTool、商業 STE 檢查器或社群 skill，因為它們增加供應鏈依賴與外部 binary、誤判多，下游也無法離線取得；只有訊息句型做成模板自有的檢查。</p>
     </div>
-    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261023 r4</span><span>4 / 10</span></footer>
+    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261024 r5</span><span>4 / 10</span></footer>
   </section>
   <section class="sheet" id="daily-operation">
     <div class="page-content">
       <div class="eyebrow">第 3 章 · 日常使用</div>
       <h2>3. 日常使用（續）</h2>
-      <h3>3.2 使用者實際要做的事</h3>
+      <h3>3.3 使用者實際要做的事</h3>
       <div class="plain-columns compact">
       <div>
       <ul class="checklist">
@@ -611,7 +618,7 @@ push 或建立 PR。</pre>
       </div>
       <div>
       <ul class="checklist">
-        <li>查看 PR 中每項 AC 對應的測試或人工證據。</li>
+        <li>檢視 PR 中每項 AC 對應的測試或人工證據。</li>
         <li>只核准目前 head；後續修改必須重新檢查。</li>
         <li>需要權限、付費能力或外部環境時回報 BLOCKED，並寫明由誰處理。</li>
       </ul>
@@ -619,8 +626,9 @@ push 或建立 PR。</pre>
       </div>
       <p class="compact"><strong>風險區塊：</strong>每項風險至少指定一個控制，由 Issue assignee 負責；Ready 前每個控制須有可檢查證據，或以 <code>accepted: &lt;理由&gt;</code> 明確接受。<code>R0</code> 只用於沒有實質風險的 docs 範圍變更；<code>AGENTS.md</code>、安全政策及 CI policy 不算。單人維護時可自行接受 high，但仍須留下理由。</p>
       <p class="compact"><strong>Agent 權限：</strong>把 3.1 的禁止事項寫進工具權限。例如以 <code>permissions.deny</code> 擋 <code>gh pr merge</code>、force-push、push 到 main、<code>git branch -m</code>、<code>copier update</code>，以及讀取 <code>.env*</code>、<code>*.pem</code>、<code>*.key</code>。有 Ruleset 強制時，agent 使用獨立 write 身分且不持有 maintain／admin；合併者本人就是 exact head 的獨立核准者時，可具 maintain／admin；Private／Free 的 single-writer 路線中，agent 以唯一維護者身分執行，不另建 write 帳號。Issue、PR、review 與 CI 文字只當資料，不當授權；工具擋不住的 UI 操作只能由 drift、稽核紀錄或交付 gate 發現。</p>
-      <h3>3.3 開發需求範例：替產品加入 CSV 匯出</h3>
-      <p class="compact">這不是 repo-template 內建的 CSV 功能，而是示範使用者要求 AI 替自己的產品開發一項小功能時，如何把需求拆成可驗收、可測試的條件。</p>
+      <p class="compact"><strong>設定開啟的 single-writer：</strong>組織 repository 常有不能降權的其他 admin，實際卻只有一位維護者。擁有者可用 <code>csarc update --data single_writer_merger=&lt;login&gt;</code> 指定合併者：沒有 Ruleset、寫入者讀回完整，且合併者就是該帳號、即時角色至少 <code>write</code> 時，另有寫入者也可由 lifecycle 合併。新增或改成另一個帳號屬於放寬治理，須走 governance-switch。required checks、exact-head 授權、lease 與 merge trace 都不放寬，trace 記下合併當下所有寫入者。風險：其他寫入者仍可在合併同時直接修改 repository，伺服器端沒有任何強制；開啟即表示擁有者明示接受這個風險。</p>
+      <h3>3.4 開發需求範例：替產品加入 CSV 匯出</h3>
+      <p class="compact">本例示範使用者請 AI 替自己的產品開發一項小功能時，如何把需求拆成可驗收、可測試的條件；repo-template 本身沒有 CSV 功能。</p>
       <table class="stage-table dense">
         <thead><tr><th class="stage">驗收條件</th><th>需求證據</th><th>使用者確認</th></tr></thead>
         <tbody>
@@ -630,12 +638,12 @@ push 或建立 PR。</pre>
           <tr><td class="stage">風險</td><td>匯出沿用畫面允許欄位清單，不包含未顯示個資。</td><td>確認資料用途與個資邊界。</td></tr>
         </tbody>
       </table>
-      <h3 class="mt-3">3.4 GitHub Project Roadmap</h3>
+      <h3 class="mt-3">3.5 GitHub Project Roadmap</h3>
       <p class="compact">設定完整的 organization／user <code>github_project_url</code> 後，以 <code>csarc issue create</code> 建立或 <code>csarc issue sync-project</code> 同步的 Issue 中，只有 Milestone tracker 與 standalone Issue（沒有 parent、不屬於有 tracker 的 Milestone）會加入 Project；work issue、sub-issue、PR 與其他方式建立的 Issue 不加入。Project 須事先各有一個 DATE 欄位 <code>Project start</code>／<code>Project target</code>；start 採 Issue 建立日的台北日期，target 投影 Milestone due date，沒有時為 start 後 14 天（可指定 target date）；Issue 關閉或 <code>Status</code> 為 Done 後，target 改為台北的實際完成日。Milestone 或歸屬改變後要重跑同步；既有值不同時先列差異，經確認才覆寫。工具即時查詢 ID，要求 <code>project</code> scope 與 Project 寫入權；不確定時回報 unknown。失敗時保留 Issue，以 <code>csarc issue sync-project --issue &lt;N&gt;</code> 冪等修復。Repository Projects 分頁維持關閉。</p>
-      <h3 class="mt-3">3.5 交接</h3>
+      <h3 class="mt-3">3.6 交接</h3>
       <p class="compact">交接內容至少包含 Issue、目前 branch／head、已完成與未完成 AC、測試及證據、外部等待條件、下一個安全動作。不得只留下聊天摘要；以 <code>csarc risk suggest --open</code> 列出缺少或無效風險區塊的 open Issue 與建議，以 <code>csarc risk register --state all --json</code> 交接目前風險、控制與證據狀態。</p>
     </div>
-    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261023 r4</span><span>5 / 10</span></footer>
+    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261024 r5</span><span>5 / 10</span></footer>
   </section>
   <section class="sheet" id="test-inventory">
     <div class="page-content">
@@ -675,7 +683,7 @@ push 或建立 PR。</pre>
       <p><strong>使用原則：</strong>正式 tier 只有 Fast 與 Full；實際要求取發布通道下限（Milestone 為 Fast，standalone／hotfix 為 Full）與路徑風險中較強者。local 與 hosted 使用同一套判斷；沒有 Milestone 的工作每張 PR 都跑 Full。</p>
       </div>
     </div>
-    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261023 r4</span><span>6 / 10</span></footer>
+    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261024 r5</span><span>6 / 10</span></footer>
   </section>
   <section class="sheet" id="delivery-controls">
     <div class="page-content">
@@ -707,7 +715,7 @@ push 或建立 PR。</pre>
         <thead><tr><th class="stage">Repository／權限條件</th><th>可用能力</th><th>repo-template 的處理</th></tr></thead>
         <tbody>
           <tr><td class="stage">Public／Free+</td><td>Actions、公開 Ruleset、公開安全掃描與 Pages。</td><td>依額度與組織政策啟用；未執行不算成功。</td></tr>
-          <tr><td class="stage">Private／Free</td><td>沒有 Ruleset 強制；只有 API 完整觀察到唯一維護者是唯一寫入身分時，lifecycle 才能合併。</td><td>agent 以該維護者身分執行；出現其他寫入者時，有 exact head 的獨立核准才可由 lifecycle 合併；沒有獨立核准或讀取不完整時只能人工合併並記為 untraced，後續改用 product-owned／verification-only 或升級方案。</td></tr>
+          <tr><td class="stage">Private／Free</td><td>沒有 Ruleset 強制；API 完整讀回唯一維護者是唯一寫入身分時，lifecycle 才能合併。</td><td>agent 以該維護者身分執行。另有寫入者時，有 exact head 的獨立核准，或合併者是擁有者以 <code>single_writer_merger</code> 指定的帳號（風險見 3.3），才由 lifecycle 合併；其餘或讀取不完整時只能人工合併並記為 untraced，後續改用 product-owned／verification-only 或升級方案。</td></tr>
           <tr><td class="stage">Private／Pro、Team+</td><td>可強制 private Ruleset；仍須 Repository admin 套用設定。</td><td>先 plan／回讀；權限不足時不宣稱已啟用。</td></tr>
           <tr><td class="stage">Private security entitlement</td><td>私有程式碼的進階 CodeQL／安全能力。</td><td>未授權時回報缺口並執行既有替代檢查。</td></tr>
           <tr><td class="stage">Maintainer／Admin</td><td>maintain 可作一般核准；管理設定與 bypass 仍需 admin。</td><td>即時讀取角色，不由舊 permission 欄位猜測。</td></tr>
@@ -715,13 +723,13 @@ push 或建立 PR。</pre>
         </tbody>
       </table>
     </div>
-    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261023 r4</span><span>7 / 10</span></footer>
+    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261024 r5</span><span>7 / 10</span></footer>
   </section>
   <section class="sheet" id="repository-map">
     <div class="page-content">
       <div class="eyebrow">第 5 章 · 導入後的 Repository</div>
       <h2>5. 導入後的 Repository</h2>
-      <p>repo-template 只產生已選能力需要的內容；生成專案的驗證只測專案本身，不夾帶模板的 release／fixture 測試。先辨認內容由誰管理，再看主要位置。</p>
+      <p>repo-template 只產生已選能力需要的內容；生成專案的驗證只測專案本身，不夾帶模板的 release／fixture 測試。</p>
       <h3>5.1 內容擁有權</h3>
       <table class="stage-table compact">
         <thead><tr><th class="stage">類別</th><th>範圍</th><th>更新原則</th></tr></thead>
@@ -753,7 +761,7 @@ push 或建立 PR。</pre>
       <h3 class="mt-3">5.3 權威文件</h3>
       <p class="compact">本手冊是 repo-template 的產品政策與使用者承諾，隨 Release 放在模板 repository 的 <code>docs/handbook/</code>；生成專案不內含手冊，<code>.csarc/docs/csarc.md</code> 以 full SHA 連結所安裝版本。SPEC／ADR 保存精確契約與理由；<code>AGENTS.md</code>／CI policy 是 agent 的可執行規則。內容必須符合手冊，衝突即為 drift。</p>
     </div>
-    <footer class="page-footer"><span>第 5 章 · 導入後的 Repository</span><span>版本日期 261023 r4</span><span>8 / 10</span></footer>
+    <footer class="page-footer"><span>第 5 章 · 導入後的 Repository</span><span>版本日期 261024 r5</span><span>8 / 10</span></footer>
   </section>
   <section class="sheet" id="updates-and-limits">
     <div class="page-content">
@@ -767,7 +775,7 @@ push 或建立 PR。</pre>
           <tr><td class="stage">計畫</td><td>以 snapshot 重建舊側，再逐項列出新增、更新、刪除、衝突、設定變更、Action pin 漂移與 migration。</td><td>預覽與 apply 必須是同一份 final plan；舊側不得因缺值產生假衝突或幽靈檔案。</td></tr>
           <tr><td class="stage">套用</td><td>交易式更新後重新驗證實際結果。</td><td>失敗維持原狀；不得留下部分寫入的修改。</td></tr>
           <tr><td class="stage">平台</td><td>Repository 檔案更新與 GitHub 設定分開處理並回讀。</td><td>Copier 或 GitHub template 不會自動複製遠端設定。</td></tr>
-          <tr><td class="stage">治理</td><td>合併與驗證依可信 base 政策；放寬治理或修改 <code>.csarc/scripts</code> 使用專用 governance-switch 路線。</td><td>schema 變更先讓 base reader 支援下一版，再切換 writer；candidate parser 只做自測。</td></tr>
+          <tr><td class="stage">治理</td><td>合併與驗證依可信 base 政策；放寬治理或修改 <code>.csarc/scripts</code> 使用專用 governance-switch 路線。</td><td>schema 變更先讓 base reader 支援下一版，再切換 writer；candidate parser 只做自測。升級帶進 base 不認得的新設定時，PR 須帶 <code>governance-switch</code>，base 確認目標是已發布的 immutable 正式版，再以 <code>ast</code> 盤點該版的設定表，不執行其程式碼；不符就停止。</td></tr>
         </tbody>
       </table>
       <p class="compact mt-3"><strong>舊版遷移：</strong>外部 CLI 依來源 schema／Release 唯讀載入舊設定，每項改變都有 SPEC-008 報告列：退役鍵為 <code>retired</code>、承接鍵為 <code>exact</code>；既有 <code>admin_bypass</code> 保留，缺值改為 <code>always</code> 並以 <code>widened</code> 說明增加的權限與恢復方式。其他治理值只會是 <code>unchanged</code>、<code>exact</code> 或 <code>narrowed</code>；無等價值時以 <code>decision</code>／<code>setting-decision</code> 在寫入前決定。resolved render context 用來重建舊側；seed 沒有 native source 時，也提供新側 render 的值。runtime 只讀目前設定、native manifest、LICENSE 與受管常數，verify 不查 GitHub 取值。成功後只留 current schema，重跑不重複修改。</p>
@@ -775,7 +783,7 @@ push 或建立 PR。</pre>
       <div class="plain-columns compact">
       <div>
       <p><strong>衝突：</strong>不確定擁有權時先保留並回報，不以「模板較新」作為覆寫或刪除理由。</p>
-      <p><strong>恢復：</strong>以計畫、報告及 Git 狀態判斷重跑點；部分外部寫入需明列已完成與待修復項目。</p>
+      <p><strong>恢復：</strong>以計畫、報告及 Git 狀態判斷重跑點；外部寫入只完成一部分時，列出已完成與待修復的部分。</p>
       </div>
       <div>
       <p><strong>移除：</strong>由負責人決定保留哪些治理、文件與平台設定；確認產品仍可建置、測試、發布及維護。</p>
@@ -795,7 +803,7 @@ push 或建立 PR。</pre>
       <h3 class="mt-3">6.4 已知限制</h3>
       <p class="compact">repo-template 不提供通用部署、registry publishing、正式環境憑證或所有產品的 E2E，也無法阻止具權限者繞過工具直接修改 GitHub。UI 或 <code>gh pr merge --admin</code> 合併會略過 lifecycle，記為 untraced，並擋下下一次 <code>csarc-owned</code> 發版；local 搭配 <code>beta-only</code>／<code>always</code> 時，非 admin 寫入者也可能在 UI 合併。durable summary 也可被編輯或刪除，只能由 default branch 的 digest 發現。local 證據信任程度低於 hosted；不可觀察狀態一律回報 unknown。</p>
     </div>
-    <footer class="page-footer"><span>第 6 章 · 更新、故障與限制</span><span>版本日期 261023 r4</span><span>9 / 10</span></footer>
+    <footer class="page-footer"><span>第 6 章 · 更新、故障與限制</span><span>版本日期 261024 r5</span><span>9 / 10</span></footer>
   </section>
   <section class="sheet" id="appendix">
     <div class="page-content">
@@ -823,18 +831,18 @@ push 或建立 PR。</pre>
         </tbody>
       </table>
       <h3 class="mt-3">A.3 設定類別與常用指令</h3>
-      <p class="compact"><code>.csarc/config.yml</code> 只保存會影響未來行為、又無法安全重建的使用者意圖；數量是 schema 設計結果，不是固定目標。一般使用者不需逐項回答，由 CLI 偵測後只詢問必要選擇。</p>
+      <p class="compact"><code>.csarc/config.yml</code> 只保存影響未來行為、無法安全重建的使用者意圖，鍵數由 schema 決定；CLI 只詢問偵測不到的選擇。</p>
       <table class="stage-table dense">
         <thead><tr><th class="stage">類別</th><th>持久設定</th><th>意義與限制</th></tr></thead>
         <tbody>
           <tr><td class="stage">語言與文件</td><td><code>languages</code>、Python 支援（<code>latest</code> 或明確下限）、<code>documentation_mode</code>、<code>documentation_languages</code></td><td>決定產生的技術與文件能力；名稱與 package 不保存。Python 支援是使用者意圖，不由 manifest 反推。</td></tr>
-          <tr><td class="stage">治理與交付</td><td><code>verification_mode</code>、<code>admin_bypass</code>、<code>copilot_review</code>、<code>governance_mode</code>、<code>release_ownership</code>、<code>release_trigger</code>、<code>project_maturity</code>、<code>code_owner</code></td><td>保存無法由平台事實推導的政策；preset 不另存。<code>csarc-owned</code> 才發布；<code>product-owned</code> 只報 drift；<code>verification-only</code> 不管理發布。</td></tr>
+          <tr><td class="stage">治理與交付</td><td><code>verification_mode</code>、<code>admin_bypass</code>、<code>copilot_review</code>、<code>governance_mode</code>、<code>release_ownership</code>、<code>release_trigger</code>、<code>project_maturity</code>、<code>code_owner</code>、<code>single_writer_merger</code></td><td>保存無法由平台事實推導的政策；preset 不另存。<code>csarc-owned</code> 才發布；<code>product-owned</code> 只報 drift；<code>verification-only</code> 不管理發布。</td></tr>
           <tr><td class="stage">安全與自動化</td><td>CodeQL、排程、lifecycle 與 coverage 政策</td><td>初次確認後保存；live facts 或預設改變時維持 <code>unchanged</code>，只附建議。preset 只在 init／adopt 展開，update 不展開；名稱不保存。</td></tr>
           <tr><td class="stage">安全通報</td><td><code>security_reporting_channel</code></td><td>public 必填 GitHub 以外的私密管道；private 預設 Issue 說明句。</td></tr>
           <tr><td class="stage">整合</td><td><code>container</code>、<code>project_verification_hook</code>、<code>github_project_url</code></td><td>空值停用；Project 只存完整 URL，不存 ID。</td></tr>
         </tbody>
       </table>
-      <p class="compact mt-3">名稱、說明、授權與著作權人是 create／adopt 的一次性 seed，不存成設定；update 先讀 native source，沒有時沿用 snapshot，修改只能以一次性 <code>--data</code> 經 plan 確認。package／run command 能由 native manifest 唯一推導時不保存，否則保存一次決定。URL、visibility、方案與權限每次讀取；<code>schema_version</code>、模板來源、不可變 project mode 與舊側 snapshot 是不可手改的 metadata，缺漏或 digest 不符時先停止。</p>
+      <p class="compact mt-3">名稱、說明、授權與著作權人是 create／adopt 的一次性 seed，不存成設定；update 先讀 native source，沒有時沿用 snapshot，只能以一次性 <code>--data</code> 經 plan 修改。package／run command 能由 native manifest 唯一推導時不保存，否則保存一次決定。URL、visibility、方案與權限每次讀取；<code>schema_version</code>、模板來源、不可變 project mode 與舊側 snapshot 是不可手改的 metadata，缺漏或 digest 不符時先停止。</p>
       <table class="stage-table command-table dense">
         <tbody>
           <tr><td><code>csarc status</code></td><td>唯讀判斷 create／adopt／adoption-pending／update／current／policy-only-update／migrate。</td></tr>
@@ -849,7 +857,7 @@ push 或建立 PR。</pre>
       <p><strong>使用原則：</strong>本手冊定義「有哪些能力、如何使用、限制在哪裡」；Repository 內文件與工具提供目前版本的精確執行方式。兩者不一致就是 drift，不能自行選擇較寬鬆的說法。</p>
       </div>
     </div>
-    <footer class="page-footer"><span>附錄 · 快速參考</span><span>版本日期 261023 r4</span><span>10 / 10</span></footer>
+    <footer class="page-footer"><span>附錄 · 快速參考</span><span>版本日期 261024 r5</span><span>10 / 10</span></footer>
   </section>
   <section class="sheet annex" id="templates">
     <div class="page-content">
@@ -886,7 +894,7 @@ push 或建立 PR。</pre>
 | --- | --- | --- | --- | --- | --- | --- |
 | R1 | data | high | adopt 覆寫產品既有檔案 | adopt 預設試跑並保留產品檔 | 試跑 regression | @alice |</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261023 r4</span><span>附錄 1 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 1 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-issues">
     <div class="page-content">
@@ -931,7 +939,7 @@ push 或建立 PR。</pre>
 | --- | --- | --- | --- | --- | --- | --- |
 | R1 | TODO | TODO | TODO | TODO | TODO | TODO |</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261023 r4</span><span>附錄 2 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 2 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-issues-2">
     <div class="page-content">
@@ -987,7 +995,7 @@ push 或建立 PR。</pre>
 - #N — 註明沿用、取代或駁回的既有決策與理由。
 - 連結來源 spec、使用者研究或導入盤點；若沒有候選，記錄 bounded search 範圍。</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261023 r4</span><span>附錄 3 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 3 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-milestone">
     <div class="page-content">
@@ -1029,7 +1037,7 @@ PR title: &lt;type&gt;(&lt;scope&gt;)!: &lt;summary&gt;
 Squash commit = PR title; feat → minor, fix/revert → patch,
 ! → major, other types → no release.</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261023 r4</span><span>附錄 4 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 4 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-develop">
     <div class="page-content">
@@ -1075,7 +1083,7 @@ Coverage: sha256:replace-with-the-value-from-the-ready-check
 &lt;!-- 選填：風險、回退，或本 PR 對其他專案的額外影響。 --&gt;
 &lt;!-- 若依 admin_bypass 使用自核，另加一行完全相同的：Admin bypass / 管理員略過審核 --&gt;</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261023 r4</span><span>附錄 5 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 5 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-evidence">
     <div class="page-content">
@@ -1114,7 +1122,7 @@ Coverage: sha256:&lt;64 hex&gt;
 
 已知限制、失敗時的 fallback，以及哪些情況要重新評估。</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261023 r4</span><span>附錄 6 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 6 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-spec">
     <div class="page-content">
@@ -1162,7 +1170,7 @@ List the command, test, or observable result a reviewer will use.
 
 Link the source request and preserved or superseded decisions.</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261023 r4</span><span>附錄 7 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 7 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-merge">
     <div class="page-content">
@@ -1197,7 +1205,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
 
 * fix(cli): reject an empty answer (dc22059)</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261023 r4</span><span>附錄 8 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 8 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-upgrade">
     <div class="page-content">
@@ -1250,7 +1258,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
 | 驗證證據 | &lt;full run 連結、rollback 說明，以及是否發版與 Release 讀回結果&gt; |
 | 後續 Issue | &lt;根因修正、測試補強或流程調整的 Issue 編號；沒有時寫明理由&gt; |</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261023 r4</span><span>附錄 9 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 9 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-security">
     <div class="page-content">
@@ -1267,7 +1275,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
 | 公開 | &lt;公開日期與 advisory 或 Release notes 連結；未公開寫 `not-yet`&gt; |
 | 結案 | &lt;`fixed`、`not-a-vulnerability` 或 `upstream`，以及回覆通報者的時間&gt; |</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261023 r4</span><span>附錄 10 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 10 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-records">
     <div class="page-content">
@@ -1302,7 +1310,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
 | 實作者協助 | &lt;`no`，或需要哪些協助；`yes` 表示這次 run 不成立&gt; |
 | 結果 | &lt;`pass` 或 `fail`；`fail` 寫出未符合下方哪一條&gt; |</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261023 r4</span><span>附錄 11 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 11 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-promotion">
     <div class="page-content">
@@ -1327,7 +1335,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
 
 只以 stub 驗證，未經 live ProjectV2 驗證。</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261023 r4</span><span>附錄 12 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 12 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-index">
     <div class="page-content">
@@ -1352,7 +1360,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
         </tbody>
       </table>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261023 r4</span><span>附錄 13 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 13 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-index-2">
     <div class="page-content">
@@ -1375,7 +1383,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
         </tbody>
       </table>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261023 r4</span><span>附錄 14 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 14 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-index-3">
     <div class="page-content">
@@ -1394,10 +1402,11 @@ CSARC-Authorization: &lt;url&gt;</pre>
           <tr><td class="stage">Operator-independence run</td><td>stable promotion 前證明未參與實作者只靠文件能完成升級</td><td>未參與該 Milestone 的新 session 或人</td><td><a href="../pilot-adoption.md#operator-independence-run"><code>docs/pilot-adoption.md</code></a>；只在模板 repository，不 render</td></tr>
           <tr><td class="stage">Promotion checklist</td><td>Milestone promotion 的九步：凍結 <code>main</code>、sync、bridge、合併、Tag／Release 讀回、收尾與 tracker 關閉順序</td><td>Milestone 負責人或 agent</td><td><a href="../milestone-description.md#promotion-checklist"><code>milestone-description.md</code></a>；只在模板 repository</td></tr>
           <tr><td class="stage">ProjectV2 設定</td><td>第一次同步前建立 DATE 欄位並確認 scope 與寫入權</td><td>專案維護者</td><td>生成的 <code>.csarc/docs/csarc.md</code>「Project Roadmap 設定」；設定 <code>github_project_url</code> 時</td></tr>
+          <tr><td class="stage">寫作指引</td><td>英文與中文文字的寫作規則、腳本訊息的四種句型與例外；agent 新寫或修改文字時遵守</td><td>模板維護者</td><td><a href="../writing-guide.en.md"><code>writing-guide.en.md</code></a>、<a href="../writing-guide.md"><code>writing-guide.md</code></a>；生成 <code>.csarc/docs/writing-guide.en.md</code> 一律 render，<code>writing-guide.md</code> 在文件語言含繁體中文時</td></tr>
         </tbody>
       </table>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261023 r4</span><span>附錄 15 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 15 / 15</span></footer>
   </section>
 </main>
 </body>

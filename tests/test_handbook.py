@@ -36,9 +36,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 HANDBOOK = ROOT / "docs/handbook"
 APPROVED_SHA256 = (
-    "4fe3d231efa8c733d78bed4468ea4a75683c36c28777586e65debc8c895ea018"
+    "50f463291347976d2f681b8ec787251ea501291833eb17c52dde8a730e9063ed"
 )
-BASELINE = HANDBOOK / "approved/261023r4_repo-template-handbook.html"
+BASELINE = HANDBOOK / "approved/261024r5_repo-template-handbook.html"
 GENERATED = HANDBOOK / "index.html"
 SHEETS = 10
 

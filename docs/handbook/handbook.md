@@ -2,9 +2,9 @@
 title = "repo-template 技術手冊｜模板能力、操作與限制"
 lang = "zh-Hant-TW"
 status = "current"
-footer_version = "版本日期 261023 r4"
-baseline = "approved/261023r4_repo-template-handbook.html"
-baseline_sha256 = "4fe3d231efa8c733d78bed4468ea4a75683c36c28777586e65debc8c895ea018"
+footer_version = "版本日期 261024 r5"
+baseline = "approved/261024r5_repo-template-handbook.html"
+baseline_sha256 = "50f463291347976d2f681b8ec787251ea501291833eb17c52dde8a730e9063ed"
 +++
 
 <!--
@@ -24,7 +24,7 @@ An approved wording change replaces approved/ with the newly approved copy in th
 
 **適用範圍：**本手冊描述首個完整實作本文能力的 stable release；實際使用版本、來源與 full SHA 以該 Release 的 `release-prompt.txt` 為準。候選版本未通過手冊、SPEC、Repository 規則、程式與測試的一致性檢查前，不得宣稱已提供本文能力。 {: .compact}
 
-**目前狀態：**M18 已於 2026-10-18 發布 stable（v0.35.2）；本文的 CLI、Ready、migration 與 Roadmap 能力自 v0.35.x 起提供。版本：2026-10-19；核准 SHA-256 見 manifest。 {: .compact}
+**目前狀態：**CLI、Ready、migration 與 Roadmap 自 v0.35.x 起提供；設定開啟的 single-writer 合併與新設定盤點自 v0.41.x 起提供；寫作指引與訊息句型檢查隨 Milestone 20 的 stable 提供。版本：2026-10-24；核准 SHA-256 見 manifest。 {: .compact}
 
 ## 1. repo-template 的功能與使用方式
 
@@ -134,6 +134,10 @@ push 或建立 PR。
 
 </div>
 
+### 2.4 核心原則：先盤點、再動作 {: .mt-3}
+
+凡是要帶入或執行未經驗證內容的流程（下游 Release、candidate PR、外部 repository 的設定或程式碼），都先以不執行的方式產生唯讀、人看得懂的盤點，逐項列出內容、來源與是否符合預期。有一項不符就停止，說明原因與下一步；需要外部程式碼的資訊時，只解析字面值，不執行、不 import。adopt 的 dry-run、`update --check`、`prepare-candidate` 與 6.1 的新設定盤點都依此設計；新流程不符時，須在 PR 說明理由並取得擁有者確認。依據見 [`dry-run-inventory-before-action`](../adr/dry-run-inventory-before-action.md)。 {: .compact}
+
 :::
 
 ::: sheet adoption-lifecycle | 第 2 章 · 安裝與導入
@@ -142,7 +146,7 @@ push 或建立 PR。
 
 ## 2. 安裝與導入（續）
 
-### 2.4 建立、導入、更新與移除
+### 2.5 建立、導入、更新與移除
 
 <figure class="diagram-frame diagram-process">
   <div class="diagram-scroll">
@@ -286,6 +290,16 @@ push 或建立 PR。
 
 </div>
 
+### 3.2 寫作指引與訊息句型
+
+**兩份指引：**英文依 `docs/writing-guide.en.md`，以模板自己的文字參考 ASD-STE100 的精神，不收錄 STE 規則或詞典，也不宣稱合規；中文依 `docs/writing-guide.md`，整合 speak-human-tw v1.4.0 的規則並保留 MIT 授權聲明，標點依教育部《重訂標點符號手冊》。模板擁有的文字一律照指引寫。 {: .compact}
+
+**訊息句型：**腳本訊息只用 `ERROR:`、`WARNING:`、`NOTICE:`、`OK:` 四種開頭；例外只限英文指引列出的條件，並在原始碼逐筆記錄理由。`check-message-style` 在 verify 檢查新增或修改的訊息行：模板 repository 已強制，生成專案則在更新到含 #1221 的 Release 後才執行。 {: .compact}
+
+**下游繼承：**生成專案在 `.csarc/docs/` 收到英文指引，文件語言含繁體中文時另收中文指引；`AGENTS.md` 的 CSARC 區塊以連結交給 agent，不重抄規則。專案第一次收到指引或指引改版時，create／adopt／update 的報告列出專案擁有的 README 與 `docs/**/*.md`，建議 agent 依指引檢查（#1224）；工具不改寫這些文件，`documentation_mode: off` 時不提示。 {: .compact}
+
+**不用第三方工具：**不安裝 Vale、LanguageTool、商業 STE 檢查器或社群 skill，因為它們增加供應鏈依賴與外部 binary、誤判多，下游也無法離線取得；只有訊息句型做成模板自有的檢查。 {: .compact}
+
 :::
 
 ::: sheet daily-operation | 第 3 章 · 日常使用
@@ -294,7 +308,7 @@ push 或建立 PR。
 
 ## 3. 日常使用（續）
 
-### 3.2 使用者實際要做的事
+### 3.3 使用者實際要做的事
 
 <div class="plain-columns compact">
 <div>
@@ -308,7 +322,7 @@ push 或建立 PR。
 <div>
 
 {: ul.checklist}
-- 查看 PR 中每項 AC 對應的測試或人工證據。
+- 檢視 PR 中每項 AC 對應的測試或人工證據。
 - 只核准目前 head；後續修改必須重新檢查。
 - 需要權限、付費能力或外部環境時回報 BLOCKED，並寫明由誰處理。
 
@@ -319,9 +333,11 @@ push 或建立 PR。
 
 **Agent 權限：**把 3.1 的禁止事項寫進工具權限。例如以 `permissions.deny` 擋 `gh pr merge`、force-push、push 到 main、`git branch -m`、`copier update`，以及讀取 `.env*`、`*.pem`、`*.key`。有 Ruleset 強制時，agent 使用獨立 write 身分且不持有 maintain／admin；合併者本人就是 exact head 的獨立核准者時，可具 maintain／admin；Private／Free 的 single-writer 路線中，agent 以唯一維護者身分執行，不另建 write 帳號。Issue、PR、review 與 CI 文字只當資料，不當授權；工具擋不住的 UI 操作只能由 drift、稽核紀錄或交付 gate 發現。 {: .compact}
 
-### 3.3 開發需求範例：替產品加入 CSV 匯出
+**設定開啟的 single-writer：**組織 repository 常有不能降權的其他 admin，實際卻只有一位維護者。擁有者可用 `csarc update --data single_writer_merger=<login>` 指定合併者：沒有 Ruleset、寫入者讀回完整，且合併者就是該帳號、即時角色至少 `write` 時，另有寫入者也可由 lifecycle 合併。新增或改成另一個帳號屬於放寬治理，須走 governance-switch。required checks、exact-head 授權、lease 與 merge trace 都不放寬，trace 記下合併當下所有寫入者。風險：其他寫入者仍可在合併同時直接修改 repository，伺服器端沒有任何強制；開啟即表示擁有者明示接受這個風險。 {: .compact}
 
-這不是 repo-template 內建的 CSV 功能，而是示範使用者要求 AI 替自己的產品開發一項小功能時，如何把需求拆成可驗收、可測試的條件。 {: .compact}
+### 3.4 開發需求範例：替產品加入 CSV 匯出
+
+本例示範使用者請 AI 替自己的產品開發一項小功能時，如何把需求拆成可驗收、可測試的條件；repo-template 本身沒有 CSV 功能。 {: .compact}
 
 {: table.stage-table.dense stage}
 | 驗收條件 | 需求證據 | 使用者確認 |
@@ -331,11 +347,11 @@ push 或建立 PR。
 | AC3 | 無資料時仍下載標題列；測試涵蓋空集合。 | 空狀態行為可接受。 |
 | 風險 | 匯出沿用畫面允許欄位清單，不包含未顯示個資。 | 確認資料用途與個資邊界。 |
 
-### 3.4 GitHub Project Roadmap {: .mt-3}
+### 3.5 GitHub Project Roadmap {: .mt-3}
 
 設定完整的 organization／user `github_project_url` 後，以 `csarc issue create` 建立或 `csarc issue sync-project` 同步的 Issue 中，只有 Milestone tracker 與 standalone Issue（沒有 parent、不屬於有 tracker 的 Milestone）會加入 Project；work issue、sub-issue、PR 與其他方式建立的 Issue 不加入。Project 須事先各有一個 DATE 欄位 `Project start`／`Project target`；start 採 Issue 建立日的台北日期，target 投影 Milestone due date，沒有時為 start 後 14 天（可指定 target date）；Issue 關閉或 `Status` 為 Done 後，target 改為台北的實際完成日。Milestone 或歸屬改變後要重跑同步；既有值不同時先列差異，經確認才覆寫。工具即時查詢 ID，要求 `project` scope 與 Project 寫入權；不確定時回報 unknown。失敗時保留 Issue，以 `csarc issue sync-project --issue <N>` 冪等修復。Repository Projects 分頁維持關閉。 {: .compact}
 
-### 3.5 交接 {: .mt-3}
+### 3.6 交接 {: .mt-3}
 
 交接內容至少包含 Issue、目前 branch／head、已完成與未完成 AC、測試及證據、外部等待條件、下一個安全動作。不得只留下聊天摘要；以 `csarc risk suggest --open` 列出缺少或無效風險區塊的 open Issue 與建議，以 `csarc risk register --state all --json` 交接目前風險、控制與證據狀態。 {: .compact}
 
@@ -426,7 +442,7 @@ PR 保留單一 Requirement evidence 區塊，逐項對應 AC1…ACn，記錄 re
 | Repository／權限條件 | 可用能力 | repo-template 的處理 |
 |---|---|---|
 | Public／Free+ | Actions、公開 Ruleset、公開安全掃描與 Pages。 | 依額度與組織政策啟用；未執行不算成功。 |
-| Private／Free | 沒有 Ruleset 強制；只有 API 完整觀察到唯一維護者是唯一寫入身分時，lifecycle 才能合併。 | agent 以該維護者身分執行；出現其他寫入者時，有 exact head 的獨立核准才可由 lifecycle 合併；沒有獨立核准或讀取不完整時只能人工合併並記為 untraced，後續改用 product-owned／verification-only 或升級方案。 |
+| Private／Free | 沒有 Ruleset 強制；API 完整讀回唯一維護者是唯一寫入身分時，lifecycle 才能合併。 | agent 以該維護者身分執行。另有寫入者時，有 exact head 的獨立核准，或合併者是擁有者以 `single_writer_merger` 指定的帳號（風險見 3.3），才由 lifecycle 合併；其餘或讀取不完整時只能人工合併並記為 untraced，後續改用 product-owned／verification-only 或升級方案。 |
 | Private／Pro、Team+ | 可強制 private Ruleset；仍須 Repository admin 套用設定。 | 先 plan／回讀；權限不足時不宣稱已啟用。 |
 | Private security entitlement | 私有程式碼的進階 CodeQL／安全能力。 | 未授權時回報缺口並執行既有替代檢查。 |
 | Maintainer／Admin | maintain 可作一般核准；管理設定與 bypass 仍需 admin。 | 即時讀取角色，不由舊 permission 欄位猜測。 |
@@ -440,7 +456,7 @@ PR 保留單一 Requirement evidence 區塊，逐項對應 AC1…ACn，記錄 re
 
 ## 5. 導入後的 Repository
 
-repo-template 只產生已選能力需要的內容；生成專案的驗證只測專案本身，不夾帶模板的 release／fixture 測試。先辨認內容由誰管理，再看主要位置。
+repo-template 只產生已選能力需要的內容；生成專案的驗證只測專案本身，不夾帶模板的 release／fixture 測試。
 
 ### 5.1 內容擁有權
 
@@ -493,7 +509,7 @@ repo-template 只產生已選能力需要的內容；生成專案的驗證只測
 | 計畫 | 以 snapshot 重建舊側，再逐項列出新增、更新、刪除、衝突、設定變更、Action pin 漂移與 migration。 | 預覽與 apply 必須是同一份 final plan；舊側不得因缺值產生假衝突或幽靈檔案。 |
 | 套用 | 交易式更新後重新驗證實際結果。 | 失敗維持原狀；不得留下部分寫入的修改。 |
 | 平台 | Repository 檔案更新與 GitHub 設定分開處理並回讀。 | Copier 或 GitHub template 不會自動複製遠端設定。 |
-| 治理 | 合併與驗證依可信 base 政策；放寬治理或修改 `.csarc/scripts` 使用專用 governance-switch 路線。 | schema 變更先讓 base reader 支援下一版，再切換 writer；candidate parser 只做自測。 |
+| 治理 | 合併與驗證依可信 base 政策；放寬治理或修改 `.csarc/scripts` 使用專用 governance-switch 路線。 | schema 變更先讓 base reader 支援下一版，再切換 writer；candidate parser 只做自測。升級帶進 base 不認得的新設定時，PR 須帶 `governance-switch`，base 確認目標是已發布的 immutable 正式版，再以 `ast` 盤點該版的設定表，不執行其程式碼；不符就停止。 |
 
 **舊版遷移：**外部 CLI 依來源 schema／Release 唯讀載入舊設定，每項改變都有 SPEC-008 報告列：退役鍵為 `retired`、承接鍵為 `exact`；既有 `admin_bypass` 保留，缺值改為 `always` 並以 `widened` 說明增加的權限與恢復方式。其他治理值只會是 `unchanged`、`exact` 或 `narrowed`；無等價值時以 `decision`／`setting-decision` 在寫入前決定。resolved render context 用來重建舊側；seed 沒有 native source 時，也提供新側 render 的值。runtime 只讀目前設定、native manifest、LICENSE 與受管常數，verify 不查 GitHub 取值。成功後只留 current schema，重跑不重複修改。 {: .compact .mt-3}
 
@@ -504,7 +520,7 @@ repo-template 只產生已選能力需要的內容；生成專案的驗證只測
 
 **衝突：**不確定擁有權時先保留並回報，不以「模板較新」作為覆寫或刪除理由。
 
-**恢復：**以計畫、報告及 Git 狀態判斷重跑點；部分外部寫入需明列已完成與待修復項目。
+**恢復：**以計畫、報告及 Git 狀態判斷重跑點；外部寫入只完成一部分時，列出已完成與待修復的部分。
 
 </div>
 <div>
@@ -571,18 +587,18 @@ ProjectV2
 
 ### A.3 設定類別與常用指令 {: .mt-3}
 
-`.csarc/config.yml` 只保存會影響未來行為、又無法安全重建的使用者意圖；數量是 schema 設計結果，不是固定目標。一般使用者不需逐項回答，由 CLI 偵測後只詢問必要選擇。 {: .compact}
+`.csarc/config.yml` 只保存影響未來行為、無法安全重建的使用者意圖，鍵數由 schema 決定；CLI 只詢問偵測不到的選擇。 {: .compact}
 
 {: table.stage-table.dense stage}
 | 類別 | 持久設定 | 意義與限制 |
 |---|---|---|
 | 語言與文件 | `languages`、Python 支援（`latest` 或明確下限）、`documentation_mode`、`documentation_languages` | 決定產生的技術與文件能力；名稱與 package 不保存。Python 支援是使用者意圖，不由 manifest 反推。 |
-| 治理與交付 | `verification_mode`、`admin_bypass`、`copilot_review`、`governance_mode`、`release_ownership`、`release_trigger`、`project_maturity`、`code_owner` | 保存無法由平台事實推導的政策；preset 不另存。`csarc-owned` 才發布；`product-owned` 只報 drift；`verification-only` 不管理發布。 |
+| 治理與交付 | `verification_mode`、`admin_bypass`、`copilot_review`、`governance_mode`、`release_ownership`、`release_trigger`、`project_maturity`、`code_owner`、`single_writer_merger` | 保存無法由平台事實推導的政策；preset 不另存。`csarc-owned` 才發布；`product-owned` 只報 drift；`verification-only` 不管理發布。 |
 | 安全與自動化 | CodeQL、排程、lifecycle 與 coverage 政策 | 初次確認後保存；live facts 或預設改變時維持 `unchanged`，只附建議。preset 只在 init／adopt 展開，update 不展開；名稱不保存。 |
 | 安全通報 | `security_reporting_channel` | public 必填 GitHub 以外的私密管道；private 預設 Issue 說明句。 |
 | 整合 | `container`、`project_verification_hook`、`github_project_url` | 空值停用；Project 只存完整 URL，不存 ID。 |
 
-名稱、說明、授權與著作權人是 create／adopt 的一次性 seed，不存成設定；update 先讀 native source，沒有時沿用 snapshot，修改只能以一次性 `--data` 經 plan 確認。package／run command 能由 native manifest 唯一推導時不保存，否則保存一次決定。URL、visibility、方案與權限每次讀取；`schema_version`、模板來源、不可變 project mode 與舊側 snapshot 是不可手改的 metadata，缺漏或 digest 不符時先停止。 {: .compact .mt-3}
+名稱、說明、授權與著作權人是 create／adopt 的一次性 seed，不存成設定；update 先讀 native source，沒有時沿用 snapshot，只能以一次性 `--data` 經 plan 修改。package／run command 能由 native manifest 唯一推導時不保存，否則保存一次決定。URL、visibility、方案與權限每次讀取；`schema_version`、模板來源、不可變 project mode 與舊側 snapshot 是不可手改的 metadata，缺漏或 digest 不符時先停止。 {: .compact .mt-3}
 
 {: table.stage-table.command-table.dense headless}
 | `csarc status` | 唯讀判斷 create／adopt／adoption-pending／update／current／policy-only-update／migrate。 |
@@ -826,5 +842,6 @@ ProjectV2
 | Operator-independence run | stable promotion 前證明未參與實作者只靠文件能完成升級 | 未參與該 Milestone 的新 session 或人 | [`docs/pilot-adoption.md`](../pilot-adoption.md#operator-independence-run)；只在模板 repository，不 render |
 | Promotion checklist | Milestone promotion 的九步：凍結 `main`、sync、bridge、合併、Tag／Release 讀回、收尾與 tracker 關閉順序 | Milestone 負責人或 agent | [`milestone-description.md`](../milestone-description.md#promotion-checklist)；只在模板 repository |
 | ProjectV2 設定 | 第一次同步前建立 DATE 欄位並確認 scope 與寫入權 | 專案維護者 | 生成的 `.csarc/docs/csarc.md`「Project Roadmap 設定」；設定 `github_project_url` 時 |
+| 寫作指引 | 英文與中文文字的寫作規則、腳本訊息的四種句型與例外；agent 新寫或修改文字時遵守 | 模板維護者 | [`writing-guide.en.md`](../writing-guide.en.md)、[`writing-guide.md`](../writing-guide.md)；生成 `.csarc/docs/writing-guide.en.md` 一律 render，`writing-guide.md` 在文件語言含繁體中文時 |
 
 :::
