@@ -146,6 +146,9 @@ def main_route_kind(base_ref: str, head_ref: str, labels: set[str]) -> str:
     return "not-applicable"
 
 
+# Shared next steps of raised messages (#1253).
+GH_RETRY = "Run 'gh auth status' and rerun"
+LS_LEASES = "Run 'git ls-remote origin csarc/leases'"
 LEASE_SCHEMA = 2
 MAX_TTL_SECONDS = 7200
 MIN_OPERATION_SECONDS = 30
@@ -278,20 +281,15 @@ def canonical_json(value: object) -> str:
 def parse_time(value: object, label: str) -> datetime:
     """Parse an aware GitHub timestamp or fail closed."""
     if not isinstance(value, str):
-        raise RuntimeError(
-            f"{label}: no timestamp. Run 'gh auth status' and rerun."
-        )
+        raise RuntimeError(f"{label}: no timestamp. {GH_RETRY}.")
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as error:
         raise RuntimeError(
-            f"{label}: invalid timestamp. Run 'gh auth status' and rerun."
+            f"{label}: invalid timestamp. {GH_RETRY}."
         ) from error
     if parsed.tzinfo is None:
-        raise RuntimeError(
-            f"{label}: timestamp has no timezone. Run 'gh auth status' and "
-            "rerun."
-        )
+        raise RuntimeError(f"{label}: timestamp has no timezone. {GH_RETRY}.")
     return parsed.astimezone(UTC)
 
 
@@ -352,9 +350,9 @@ class GitHub:
         """Read and flatten every page of a REST collection."""
         return self.api_pages(f"repos/{repo}/{path}")
 
-    def api_pages(self, endpoint: str) -> list[dict[str, Any]]:
-        """Read and flatten every page of any REST collection endpoint."""
-        payload = json.loads(
+    def _slurp(self, endpoint: str) -> object:
+        """Read every page of one REST endpoint as one JSON list."""
+        return json.loads(
             run(
                 [
                     "gh",
@@ -367,10 +365,32 @@ class GitHub:
                 ]
             )
         )
+
+    def _send(
+        self,
+        method: str,
+        endpoint: str,
+        body: dict[str, object],
+        label: str,
+        next_step: str = GH_RETRY,
+    ) -> dict[str, Any]:
+        """Send one JSON write and require an object response."""
+        result = json.loads(
+            run(
+                ["gh", "api", "--method", method, endpoint, "--input", "-"],
+                input_text=json.dumps(body),
+            )
+        )
+        if not isinstance(result, dict):
+            raise RuntimeError(f"{label}: invalid response. {next_step}.")
+        return result
+
+    def api_pages(self, endpoint: str) -> list[dict[str, Any]]:
+        """Read and flatten every page of any REST collection endpoint."""
+        payload = self._slurp(endpoint)
         if not isinstance(payload, list):
             raise RuntimeError(
-                f"GitHub collection {endpoint}: not a list. Run 'gh auth "
-                "status' and rerun."
+                f"GitHub collection {endpoint}: not a list. {GH_RETRY}."
             )
         pages = (
             payload if payload and isinstance(payload[0], list) else [payload]
@@ -378,8 +398,7 @@ class GitHub:
         items = [item for page in pages for item in page]
         if not all(isinstance(item, dict) for item in items):
             raise RuntimeError(
-                f"GitHub collection {endpoint}: invalid entries. Run 'gh auth "
-                "status' and rerun."
+                f"GitHub collection {endpoint}: invalid entries. {GH_RETRY}."
             )
         return items
 
@@ -391,23 +410,10 @@ class GitHub:
         response_sha: str | None = None,
     ) -> list[dict[str, Any]]:
         """Read one keyed collection across every REST response page."""
-        payload = json.loads(
-            run(
-                [
-                    "gh",
-                    "api",
-                    "--paginate",
-                    "--slurp",
-                    "-H",
-                    "Accept: application/vnd.github+json",
-                    f"repos/{repo}/{path}",
-                ]
-            )
-        )
+        payload = self._slurp(f"repos/{repo}/{path}")
         if not isinstance(payload, list):
             raise RuntimeError(
-                f"GitHub collection {path}: not paginated. Run 'gh auth "
-                "status' and rerun."
+                f"GitHub collection {path}: not paginated. {GH_RETRY}."
             )
         items: list[dict[str, Any]] = []
         for page in payload:
@@ -415,19 +421,16 @@ class GitHub:
                 page.get(key), list
             ):
                 raise RuntimeError(
-                    f"GitHub collection {path}: no {key}. Run 'gh auth status' "
-                    "and rerun."
+                    f"GitHub collection {path}: no {key}. {GH_RETRY}."
                 )
             if response_sha is not None and page.get("sha") != response_sha:
                 raise RuntimeError(
-                    f"GitHub collection {path}: another SHA. Run 'gh auth "
-                    "status' and rerun."
+                    f"GitHub collection {path}: another SHA. {GH_RETRY}."
                 )
             entries = page[key]
             if not all(isinstance(item, dict) for item in entries):
                 raise RuntimeError(
-                    f"GitHub collection {path}: invalid entries. Run 'gh auth "
-                    "status' and rerun."
+                    f"GitHub collection {path}: invalid entries. {GH_RETRY}."
                 )
             items.extend(entries)
         return items
@@ -441,77 +444,38 @@ class GitHub:
         message: str,
     ) -> dict[str, Any]:
         """Synchronously merge one exact PR head through the REST API."""
-        payload = run(
-            [
-                "gh",
-                "api",
-                "--method",
-                "PUT",
-                f"repos/{repo}/pulls/{pr_number}/merge",
-                "--input",
-                "-",
-            ],
-            input_text=json.dumps(
-                {
-                    "sha": head_sha,
-                    "merge_method": "squash",
-                    "commit_title": title,
-                    "commit_message": message,
-                }
-            ),
+        return self._send(
+            "PUT",
+            f"repos/{repo}/pulls/{pr_number}/merge",
+            {
+                "sha": head_sha,
+                "merge_method": "squash",
+                "commit_title": title,
+                "commit_message": message,
+            },
+            "GitHub merge",
+            "Check the PR state on GitHub",
         )
-        result = json.loads(payload)
-        if not isinstance(result, dict):
-            raise RuntimeError(
-                "GitHub merge: invalid response. Check the PR state on GitHub."
-            )
-        return result
 
     def comment(self, repo: str, pr_number: int, body: str) -> dict[str, Any]:
         """Create one audit comment."""
-        payload = run(
-            [
-                "gh",
-                "api",
-                "--method",
-                "POST",
-                f"repos/{repo}/issues/{pr_number}/comments",
-                "--input",
-                "-",
-            ],
-            input_text=json.dumps({"body": body}),
+        return self._send(
+            "POST",
+            f"repos/{repo}/issues/{pr_number}/comments",
+            {"body": body},
+            "GitHub comment",
         )
-        result = json.loads(payload)
-        if not isinstance(result, dict):
-            raise RuntimeError(
-                "GitHub comment: invalid response. Run 'gh auth status' and "
-                "rerun."
-            )
-        return result
 
     def edit_comment(
         self, repo: str, comment_id: int, body: str
     ) -> dict[str, Any]:
         """Replace the body of the lifecycle's one evidence summary."""
-        payload = run(
-            [
-                "gh",
-                "api",
-                "--method",
-                "PATCH",
-                f"repos/{repo}/issues/comments/{comment_id}",
-                "--input",
-                "-",
-            ],
-            input_text=json.dumps({"body": body}),
+        return self._send(
+            "PATCH",
+            f"repos/{repo}/issues/comments/{comment_id}",
+            {"body": body},
+            "GitHub comment",
         )
-        result = json.loads(payload)
-        if not isinstance(result, dict):
-            raise RuntimeError(
-                "GitHub comment: invalid response. Run 'gh auth status' and "
-                "rerun."
-            )
-        return result
 
     def create_issue(
         self,
@@ -546,34 +510,18 @@ class GitHub:
         url = run(command).splitlines()[-1].strip()
         if not url.startswith(f"https://github.com/{repo}/issues/"):
             raise RuntimeError(
-                "Hotfix post-review Issue: invalid URL. Run 'gh auth status' "
-                "and rerun."
+                f"Hotfix post-review Issue: invalid URL. {GH_RETRY}."
             )
         return {"html_url": url}
 
     def close_issue(self, repo: str, issue_number: int) -> dict[str, Any]:
         """Close one validated work Issue as completed."""
-        payload = run(
-            [
-                "gh",
-                "api",
-                "--method",
-                "PATCH",
-                f"repos/{repo}/issues/{issue_number}",
-                "--input",
-                "-",
-            ],
-            input_text=json.dumps(
-                {"state": "closed", "state_reason": "completed"}
-            ),
+        return self._send(
+            "PATCH",
+            f"repos/{repo}/issues/{issue_number}",
+            {"state": "closed", "state_reason": "completed"},
+            "GitHub Issue close",
         )
-        result = json.loads(payload)
-        if not isinstance(result, dict):
-            raise RuntimeError(
-                "GitHub Issue close: invalid response. Run 'gh auth status' "
-                "and rerun."
-            )
-        return result
 
 
 def remote_repository(url: str) -> str:
@@ -619,8 +567,7 @@ def lease_refs(pull: dict[str, Any], default_branch: str) -> list[str]:
     base_ref = base.get("ref")
     if not isinstance(base_ref, str) or not base_ref:
         raise RuntimeError(
-            "Pull request: base branch unavailable. Run 'gh auth status' and "
-            "rerun."
+            f"Pull request: base branch unavailable. {GH_RETRY}."
         )
     return [pr_ref(int(pull["number"])), base_lane_ref(base_ref)]
 
@@ -631,10 +578,7 @@ def live_pull(
     """Require one open pull request at the exact expected head."""
     payload = github.get(repo, f"pulls/{pr_number}")
     if not isinstance(payload, dict):
-        raise RuntimeError(
-            "Live pull request: invalid response. Run 'gh auth status' and "
-            "rerun."
-        )
+        raise RuntimeError(f"Live pull request: invalid response. {GH_RETRY}.")
     head = payload.get("head") or {}
     if (
         payload.get("number") != pr_number
@@ -659,10 +603,7 @@ def branch_sha(github: GitHub, repo: str, branch: str) -> str:
         else None
     )
     if not isinstance(sha, str) or SHA.fullmatch(sha) is None:
-        raise RuntimeError(
-            "Destination branch: ref unavailable. Run 'gh auth status' and "
-            "rerun."
-        )
+        raise RuntimeError(f"Destination branch: ref unavailable. {GH_RETRY}.")
     return sha
 
 
@@ -673,22 +614,15 @@ def remote_ref(ref: str) -> str | None:
         return None
     lines = output.splitlines()
     if len(lines) != 1:
-        raise RuntimeError(
-            f"Remote lease ref {ref}: ambiguous. Run 'git ls-remote origin "
-            "csarc/leases'."
-        )
+        raise RuntimeError(f"Remote lease ref {ref}: ambiguous. {LS_LEASES}.")
     try:
         sha, observed_ref = lines[0].split("\t", 1)
     except ValueError as error:
         raise RuntimeError(
-            f"Remote lease ref {ref}: invalid. Run 'git ls-remote origin "
-            "csarc/leases'."
+            f"Remote lease ref {ref}: invalid. {LS_LEASES}."
         ) from error
     if observed_ref != ref or SHA.fullmatch(sha) is None:
-        raise RuntimeError(
-            f"Remote lease ref {ref}: invalid. Run 'git ls-remote origin "
-            "csarc/leases'."
-        )
+        raise RuntimeError(f"Remote lease ref {ref}: invalid. {LS_LEASES}.")
     return sha
 
 
@@ -792,10 +726,7 @@ def read_lease(path: Path) -> dict[str, Any]:
         isinstance(commit, str) and SHA.fullmatch(commit)
         for commit in payload["reclaimed_commits"]
     ):
-        raise RuntimeError(
-            "Lease reclaim history: invalid. Run 'git ls-remote origin "
-            "csarc/leases'."
-        )
+        raise RuntimeError(f"Lease reclaim history: invalid. {LS_LEASES}.")
     validate_audit_url(payload)
     validate_refs(payload)
     return payload
@@ -813,9 +744,7 @@ def validate_refs(lease: dict[str, Any]) -> None:
         or not all(isinstance(ref, str) for ref in refs)
         or refs != expected
     ):
-        raise RuntimeError(
-            "Lease refs: invalid. Run 'git ls-remote origin csarc/leases'."
-        )
+        raise RuntimeError(f"Lease refs: invalid. {LS_LEASES}.")
 
 
 def audit_comment_id(lease: dict[str, Any]) -> str:
@@ -829,9 +758,7 @@ def audit_comment_id(lease: dict[str, Any]) -> str:
         or parsed.path.casefold() != expected.casefold()
         or match is None
     ):
-        raise RuntimeError(
-            "Lease audit URL: invalid. Run 'git ls-remote origin csarc/leases'."
-        )
+        raise RuntimeError(f"Lease audit URL: invalid. {LS_LEASES}.")
     return match.group(1)
 
 
@@ -855,10 +782,7 @@ def validate_audit_comment(lease: dict[str, Any], comment: object) -> None:
         != str(lease["actor"]).casefold()
         or user.get("type") != expected_type
     ):
-        raise RuntimeError(
-            "Remote lease audit comment: invalid. Run 'git ls-remote origin "
-            "csarc/leases'."
-        )
+        raise RuntimeError(f"Remote lease audit comment: invalid. {LS_LEASES}.")
 
 
 def lease_core(lease: dict[str, Any]) -> dict[str, object]:
@@ -946,8 +870,7 @@ def require_committed_lease(github: GitHub, lease: dict[str, Any]) -> None:
     for ref in refs:
         if remote_ref(ref) != lease["lease_commit"]:
             raise RuntimeError(
-                f"Lease ownership {ref}: changed or missing. Run 'git "
-                "ls-remote origin csarc/leases'."
+                f"Lease ownership {ref}: changed or missing. {LS_LEASES}."
             )
     repo = lease["repository"]
     head_sha = lease["head_sha"]
@@ -955,8 +878,7 @@ def require_committed_lease(github: GitHub, lease: dict[str, Any]) -> None:
     head_commit = github.get(repo, f"git/commits/{head_sha}")
     if not isinstance(lease_commit, dict) or not isinstance(head_commit, dict):
         raise RuntimeError(
-            "Remote lease commit: metadata unavailable. Run 'gh auth status' "
-            "and rerun."
+            f"Remote lease commit: metadata unavailable. {GH_RETRY}."
         )
     parents = lease_commit.get("parents")
     tree = lease_commit.get("tree") or {}
@@ -970,13 +892,17 @@ def require_committed_lease(github: GitHub, lease: dict[str, Any]) -> None:
         or tree.get("sha") != lease["head_tree"]
         or head_tree.get("sha") != lease["head_tree"]
     ):
-        raise RuntimeError(
-            "Remote lease commit: not canonical. Run 'git ls-remote origin "
-            "csarc/leases'."
-        )
+        raise RuntimeError(f"Remote lease commit: not canonical. {LS_LEASES}.")
     comment_id = audit_comment_id(lease)
     comment = github.get(repo, f"issues/comments/{comment_id}")
     validate_audit_comment(lease, comment)
+
+
+def caller_lease(args: argparse.Namespace, github: GitHub) -> dict[str, Any]:
+    """Read the lease evidence and require the caller that acquired it."""
+    lease = read_lease(args.lease)
+    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
+    return lease
 
 
 def require_caller(
@@ -1013,12 +939,7 @@ def confirm_refs(lease: dict[str, Any]) -> None:
             "Lease: expired before the merge. Reacquire the lease."
         )
     commit = lease["lease_commit"]
-    refs = lease["refs"]
-    command = ["git", "push", "--atomic", "--porcelain"]
-    command.extend(f"--force-with-lease={ref}:{commit}" for ref in refs)
-    command.append("origin")
-    command.extend(f"{commit}:{ref}" for ref in refs)
-    run(command)
+    create_refs(commit, lease["refs"], dict.fromkeys(lease["refs"], commit))
 
 
 def create_refs(
@@ -1055,69 +976,49 @@ def canonical_remote_lease(
     """Validate one remote lease commit's canonical message, parent, tree."""
     payload = github.get(repo, f"git/commits/{commit_sha}")
     if not isinstance(payload, dict) or payload.get("sha") != commit_sha:
-        raise RuntimeError(
-            "Existing lease commit: unavailable. Run 'gh auth status' and "
-            "rerun."
-        )
+        raise RuntimeError(f"Existing lease commit: unavailable. {GH_RETRY}.")
     message = payload.get("message")
-    if not isinstance(message, str) or "\n\n" not in message:
-        raise RuntimeError(
-            "Existing lease commit: not canonical. Run 'git ls-remote origin "
-            "csarc/leases'."
-        )
-    _, encoded = message.split("\n\n", 1)
     try:
-        core = json.loads(encoded)
-    except json.JSONDecodeError as error:
-        raise RuntimeError(
-            "Existing lease commit: not canonical. Run 'git ls-remote origin "
-            "csarc/leases'."
-        ) from error
-    if (
-        not isinstance(core, dict)
-        or set(core) - {RENEWAL_FIELD} != set(LEASE_CORE_FIELDS)
-        or (
-            RENEWAL_FIELD in core
-            and SHA.fullmatch(str(core[RENEWAL_FIELD])) is None
-        )
-        or core.get("schema_version") != LEASE_SCHEMA
-        or str(core.get("repository", "")).casefold() != repo.casefold()
-        or not isinstance(core.get("pull_request"), int)
-        or int(core["pull_request"]) < 1
-        or OWNER.fullmatch(str(core.get("owner", ""))) is None
-        or ACTOR.fullmatch(str(core.get("actor", ""))) is None
-        or not isinstance(core.get("refs"), list)
-        or held_ref not in core["refs"]
-        or not isinstance(core.get("reclaimed_commits"), list)
-        or not all(
-            isinstance(commit, str) and SHA.fullmatch(commit)
-            for commit in core["reclaimed_commits"]
-        )
-        or SHA.fullmatch(str(core.get("head_sha", ""))) is None
-        or SHA.fullmatch(str(core.get("head_tree", ""))) is None
-        or SHA.fullmatch(str(core.get("base_sha", ""))) is None
-        or SHA256.fullmatch(str(core.get("capability_digest", ""))) is None
-        or payload.get("message") != lease_message(core)
-    ):
-        raise RuntimeError(
-            "Existing lease commit: not canonical. Run 'git ls-remote origin "
-            "csarc/leases'."
-        )
-    try:
+        if not isinstance(message, str) or "\n\n" not in message:
+            raise ValueError
+        core = json.loads(message.split("\n\n", 1)[1])
+        if (
+            not isinstance(core, dict)
+            or set(core) - {RENEWAL_FIELD} != set(LEASE_CORE_FIELDS)
+            or (
+                RENEWAL_FIELD in core
+                and SHA.fullmatch(str(core[RENEWAL_FIELD])) is None
+            )
+            or core.get("schema_version") != LEASE_SCHEMA
+            or str(core.get("repository", "")).casefold() != repo.casefold()
+            or not isinstance(core.get("pull_request"), int)
+            or int(core["pull_request"]) < 1
+            or OWNER.fullmatch(str(core.get("owner", ""))) is None
+            or ACTOR.fullmatch(str(core.get("actor", ""))) is None
+            or not isinstance(core.get("refs"), list)
+            or held_ref not in core["refs"]
+            or not isinstance(core.get("reclaimed_commits"), list)
+            or not all(
+                isinstance(commit, str) and SHA.fullmatch(commit)
+                for commit in core["reclaimed_commits"]
+            )
+            or SHA.fullmatch(str(core.get("head_sha", ""))) is None
+            or SHA.fullmatch(str(core.get("head_tree", ""))) is None
+            or SHA.fullmatch(str(core.get("base_sha", ""))) is None
+            or SHA256.fullmatch(str(core.get("capability_digest", ""))) is None
+            or message != lease_message(core)
+        ):
+            raise ValueError
         validate_refs(core)
         acquired_at = parse_time(core.get("acquired_at"), "Existing lease")
         expires_at = parse_time(core.get("expires_at"), "Existing lease")
-    except (KeyError, RuntimeError) as error:
+        ttl = (expires_at - acquired_at).total_seconds()
+        if not 60 <= ttl <= MAX_TTL_SECONDS:
+            raise ValueError
+    except (KeyError, RuntimeError, ValueError) as error:
         raise RuntimeError(
-            "Existing lease commit: not canonical. Run 'git ls-remote origin "
-            "csarc/leases'."
+            f"Existing lease commit: not canonical. {LS_LEASES}."
         ) from error
-    ttl = (expires_at - acquired_at).total_seconds()
-    if not 60 <= ttl <= MAX_TTL_SECONDS:
-        raise RuntimeError(
-            "Existing lease commit: not canonical. Run 'git ls-remote origin "
-            "csarc/leases'."
-        )
     parents = payload.get("parents")
     tree = payload.get("tree") or {}
     head = github.get(repo, f"git/commits/{core['head_sha']}")
@@ -1130,8 +1031,7 @@ def canonical_remote_lease(
         or (head.get("tree") or {}).get("sha") != core["head_tree"]
     ):
         raise RuntimeError(
-            "Existing lease commit: invalid parent or tree. Run 'git ls-remote "
-            "origin csarc/leases'."
+            f"Existing lease commit: invalid parent or tree. {LS_LEASES}."
         )
     return core
 
@@ -1244,8 +1144,7 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         repository.get("default_branch"), str
     ):
         raise RuntimeError(
-            "Repository: default branch unavailable. Run 'gh auth status' and "
-            "rerun."
+            f"Repository: default branch unavailable. {GH_RETRY}."
         )
     refs = lease_refs(pull, repository["default_branch"])
     base = pull.get("base") or {}
@@ -1254,8 +1153,7 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         or SHA.fullmatch(str(base.get("sha", ""))) is None
     ):
         raise RuntimeError(
-            "Pull request: base identity unavailable. Run 'gh auth status' and "
-            "rerun."
+            f"Pull request: base identity unavailable. {GH_RETRY}."
         )
     if branch_sha(github, args.repo, base["ref"]) != base["sha"]:
         raise RuntimeError(
@@ -1269,8 +1167,7 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
             for existing in observed.values()
         ):
             raise RuntimeError(
-                "Lease ownership: changed before renewal. Run 'git ls-remote "
-                "origin csarc/leases'."
+                f"Lease ownership: changed before renewal. {LS_LEASES}."
             )
     else:
         for ref, existing in observed.items():
@@ -1350,8 +1247,7 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
             != str(evidence["actor"]).casefold()
         ):
             raise RuntimeError(
-                "Lease audit comment: invalid actor or URL. Run 'git ls-remote "
-                "origin csarc/leases'."
+                f"Lease audit comment: invalid actor or URL. {LS_LEASES}."
             )
         evidence["audit_url"] = audit_url
         validate_audit_url(evidence)
@@ -1464,8 +1360,7 @@ def authorization(
     payload = github.get(repo, f"issues/comments/{comment_id}")
     if not isinstance(payload, dict):
         raise RuntimeError(
-            "Authorization comment: invalid response. Run 'gh auth status' and "
-            "rerun."
+            f"Authorization comment: invalid response. {GH_RETRY}."
         )
     body = payload.get("body")
     user = payload.get("user") or {}
@@ -1727,6 +1622,32 @@ def ensure_hotfix_post_review(
     return url
 
 
+def open_work_issue(
+    github: GitHub,
+    repo: str,
+    pull: dict[str, Any],
+    issue_number: int,
+    route: str,
+) -> dict[str, Any]:
+    """Require the PR to close only its open work Issue, and return it."""
+    closing_issues = [
+        int(value)
+        for value in CLOSING_ISSUE.findall(str(pull.get("body") or ""))
+    ]
+    if closing_issues != [issue_number]:
+        raise RuntimeError(f"{route}: does not close its Issue. Fix the body.")
+    issue = github.get(repo, f"issues/{issue_number}")
+    if (
+        not isinstance(issue, dict)
+        or type(issue.get("number")) is not int
+        or issue["number"] != issue_number
+        or issue.get("pull_request") is not None
+        or issue.get("state") != "open"
+    ):
+        raise RuntimeError(f"{route} Issue: not open. Reopen it.")
+    return issue
+
+
 def require_routine_route(  # noqa: C901
     github: GitHub,
     repo: str,
@@ -1764,26 +1685,9 @@ def require_routine_route(  # noqa: C901
         )
     work = ISSUE_WORK_BRANCH.fullmatch(head_ref)
     if work:
-        issue_number = int(work.group(1))
-        closing_issues = [
-            int(value)
-            for value in CLOSING_ISSUE.findall(str(pull.get("body") or ""))
-        ]
-        if closing_issues != [issue_number]:
-            raise RuntimeError(
-                "Routine work branch: does not close its Issue. Fix the body."
-            )
-        issue = github.get(repo, f"issues/{issue_number}")
-        if (
-            not isinstance(issue, dict)
-            or type(issue.get("number")) is not int
-            or issue["number"] != issue_number
-            or issue.get("pull_request") is not None
-            or issue.get("state") != "open"
-        ):
-            raise RuntimeError(
-                "Routine work branch Issue: not open. Reopen it."
-            )
+        issue = open_work_issue(
+            github, repo, pull, int(work.group(1)), "Routine work branch"
+        )
         delivery = DELIVERY_BRANCH.fullmatch(base_ref)
         expected_milestone = int(delivery.group(1)) if delivery else None
         milestone = issue.get("milestone")
@@ -1835,9 +1739,7 @@ def require_routine_route(  # noqa: C901
         comparison.get("status") if isinstance(comparison, dict) else None
     )
     if not isinstance(compare_status, str):
-        raise RuntimeError(
-            "Routine sync: invalid comparison. Run 'gh auth status' and rerun."
-        )
+        raise RuntimeError(f"Routine sync: invalid comparison. {GH_RETRY}.")
     if not promotion_gate.delivery_sync.includes_main(compare_status):
         raise RuntimeError("Routine sync head: lacks current main. Merge main.")
     commit = github.get(repo, f"git/commits/{head_sha}")
@@ -1899,24 +1801,9 @@ def require_default_branch_issue_route(
             "Stable route: head is not an Issue work branch. Use "
             "type/<Issue>-<slug>."
         )
-    issue_number = int(work.group(1))
-    closing_issues = [
-        int(value)
-        for value in CLOSING_ISSUE.findall(str(pull.get("body") or ""))
-    ]
-    if closing_issues != [issue_number]:
-        raise RuntimeError(
-            "Stable route: does not close its Issue. Fix the body."
-        )
-    issue = github.get(repo, f"issues/{issue_number}")
-    if (
-        not isinstance(issue, dict)
-        or type(issue.get("number")) is not int
-        or issue["number"] != issue_number
-        or issue.get("pull_request") is not None
-        or issue.get("state") != "open"
-    ):
-        raise RuntimeError("Stable route Issue: not open. Reopen it.")
+    issue = open_work_issue(
+        github, repo, pull, int(work.group(1)), "Stable route"
+    )
     if issue.get("milestone") is not None:
         raise RuntimeError("Stable route Issue: has a Milestone. Remove it.")
 
@@ -2223,18 +2110,19 @@ def _effective_protection(  # noqa: C901
     copilot_rules = [
         item for item in rules if item.get("type") == "copilot_code_review"
     ]
+
+    def flag(field: str) -> bool:
+        return any(item.get(field) is True for item in pull)
+
+    zero_review = bool(pull) and all(
+        item.get("required_approving_review_count") == 0 for item in pull
+    )
+    stale_and_threads = flag("dismiss_stale_reviews_on_push") and flag(
+        "required_review_thread_resolution"
+    )
     level_check_controls = (
-        bool(pull)
-        and all(
-            item.get("required_approving_review_count") == 0 for item in pull
-        )
-        and any(
-            item.get("dismiss_stale_reviews_on_push") is True for item in pull
-        )
-        and any(
-            item.get("required_review_thread_resolution") is True
-            for item in pull
-        )
+        zero_review
+        and stale_and_threads
         and any(
             context == REVIEW_CHECK_CONTEXT for context, _ in required_contexts
         )
@@ -2247,17 +2135,8 @@ def _effective_protection(  # noqa: C901
                 item.get("required_approving_review_count", 0) >= 1
                 for item in pull
             )
-            and any(
-                item.get("dismiss_stale_reviews_on_push") is True
-                for item in pull
-            )
-            and any(
-                item.get("require_last_push_approval") is True for item in pull
-            )
-            and any(
-                item.get("required_review_thread_resolution") is True
-                for item in pull
-            )
+            and stale_and_threads
+            and flag("require_last_push_approval")
         )
         # E1 fallback (#1058 decisions 4 and 5): local plus beta-only or
         # always needs no native approval but keeps stale-review dismissal,
@@ -2265,19 +2144,8 @@ def _effective_protection(  # noqa: C901
         local_e1_shape = (
             local_fallback
             and not review_controls
-            and bool(pull)
-            and all(
-                item.get("required_approving_review_count") == 0
-                for item in pull
-            )
-            and any(
-                item.get("dismiss_stale_reviews_on_push") is True
-                for item in pull
-            )
-            and any(
-                item.get("required_review_thread_resolution") is True
-                for item in pull
-            )
+            and zero_review
+            and stale_and_threads
         )
         review_controls = review_controls or local_e1_shape
         missing_reason = (
@@ -2295,18 +2163,11 @@ def _effective_protection(  # noqa: C901
         # Issue #752: zero required approvals is only safe while Copilot
         # re-reviews every push and the `review` required check (which
         # accepts a clean exact-head Copilot review or a maintainer
-        # approval) guards the merge.
-        review_controls = (
-            level_check_controls
-            and any(
-                isinstance(item.get("parameters"), dict)
-                and item["parameters"].get("review_on_push") is True
-                for item in copilot_rules
-            )
-            and any(
-                context == REVIEW_CHECK_CONTEXT
-                for context, _ in required_contexts
-            )
+        # approval) guards the merge; `level_check_controls` holds both.
+        review_controls = level_check_controls and any(
+            isinstance(item.get("parameters"), dict)
+            and item["parameters"].get("review_on_push") is True
+            for item in copilot_rules
         )
         missing_reason = (
             "Copilot review-on-push, stale-review dismissal, thread, or "
@@ -2318,20 +2179,9 @@ def _effective_protection(  # noqa: C901
                 item.get("required_approving_review_count", 0) >= 1
                 for item in pull
             )
-            and any(
-                item.get("dismiss_stale_reviews_on_push") is True
-                for item in pull
-            )
-            and any(
-                item.get("require_code_owner_review") is True for item in pull
-            )
-            and any(
-                item.get("require_last_push_approval") is True for item in pull
-            )
-            and any(
-                item.get("required_review_thread_resolution") is True
-                for item in pull
-            )
+            and stale_and_threads
+            and flag("require_code_owner_review")
+            and flag("require_last_push_approval")
         )
         review_controls = native_review_controls or level_check_controls
         missing_reason = (
@@ -2813,9 +2663,7 @@ def base_policy_decision(
         check=False,
     )
     if listing.returncode:
-        raise RuntimeError(
-            "Changed paths: cannot list them. Run 'gh auth status' and rerun."
-        )
+        raise RuntimeError(f"Changed paths: cannot list them. {GH_RETRY}.")
     base_config = repository_root() / ".csarc/config.yml"
     labels_csv = ",".join(sorted(labels))
     with tempfile.TemporaryDirectory(prefix="csarc-base-policy-") as scratch:
@@ -3058,8 +2906,7 @@ def authenticated_dependabot_commit(
     comparison = github.get(repo, f"compare/{base_sha}...{head_sha}")
     if not isinstance(commit, dict) or not isinstance(comparison, dict):
         raise RuntimeError(
-            "Dependabot head: metadata unavailable. Run 'gh auth status' and "
-            "rerun."
+            f"Dependabot head: metadata unavailable. {GH_RETRY}."
         )
     direct, direct_reason = dependabot_auth.authenticated_dependabot_head(
         pull, commit, repo, base_sha
@@ -3238,9 +3085,7 @@ def require_trusted_verification(  # noqa: C901
     tree = commit.get("tree") if isinstance(commit, dict) else None
     tree_sha = tree.get("sha") if isinstance(tree, dict) else None
     if not isinstance(tree_sha, str):
-        raise RuntimeError(
-            "Exact-head Git tree: unavailable. Run 'gh auth status' and rerun."
-        )
+        raise RuntimeError(f"Exact-head Git tree: unavailable. {GH_RETRY}.")
     jobs = github.collection(
         repo,
         f"actions/runs/{run_id}/jobs?filter=latest&per_page=100",
@@ -3910,14 +3755,11 @@ def merge_snapshot(  # noqa: C901
     base_ref = base.get("ref")
     if not isinstance(base_ref, str):
         raise RuntimeError(
-            "Pull request: base branch unavailable. Run 'gh auth status' and "
-            "rerun."
+            f"Pull request: base branch unavailable. {GH_RETRY}."
         )
     title = pull.get("title")
     if not isinstance(title, str) or not title.strip():
-        raise RuntimeError(
-            "Pull request: title unavailable. Run 'gh auth status' and rerun."
-        )
+        raise RuntimeError(f"Pull request: title unavailable. {GH_RETRY}.")
     if verification_mode == "local":
         require_local_pull_policy(repo, pull)
     (
@@ -4143,8 +3985,7 @@ def resolve_release_level(
 
 def mutate_state(args: argparse.Namespace, github: GitHub) -> None:
     """Change Draft state only while the exact lease remains live."""
-    lease = read_lease(args.lease)
-    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
+    lease = caller_lease(args, github)
     require_lease(github, lease, args.repo, args.pr_number, args.head_sha)
     pull = live_pull(github, args.repo, args.pr_number, args.head_sha)
     current = bool(pull.get("draft"))
@@ -4310,8 +4151,7 @@ def requested_edit_body(
 
 def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
     """Edit the body, labels, or milestone while the lease remains live."""
-    lease = read_lease(args.lease)
-    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
+    lease = caller_lease(args, github)
     require_lease(github, lease, args.repo, args.pr_number, args.head_sha)
     pull = live_pull(github, args.repo, args.pr_number, args.head_sha)
     labels = {
@@ -4382,8 +4222,7 @@ def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
 
 def check(args: argparse.Namespace, github: GitHub) -> None:
     """Print the live merge snapshot without mutating GitHub."""
-    lease = read_lease(args.lease)
-    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
+    lease = caller_lease(args, github)
     snapshot = merge_snapshot(
         github,
         lease,
@@ -4743,8 +4582,7 @@ def trace_lines(
 
 def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     """Merge only when the lease and exact-head controls are enforced."""
-    lease = read_lease(args.lease)
-    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
+    lease = caller_lease(args, github)
     try:
         contract = merge_trace.load_contract()
     except merge_trace.EvidenceError as error:
@@ -4898,8 +4736,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
 
 def release(args: argparse.Namespace, github: GitHub) -> None:
     """Release only the exact lease held by this evidence file."""
-    lease = read_lease(args.lease)
-    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
+    lease = caller_lease(args, github)
     if (
         lease["repository"].casefold() != args.repo.casefold()
         or lease["pull_request"] != args.pr_number
@@ -4912,8 +4749,7 @@ def release(args: argparse.Namespace, github: GitHub) -> None:
 
 def authorization_template(args: argparse.Namespace, github: GitHub) -> None:
     """Print the exact statement a human maintainer may post."""
-    lease = read_lease(args.lease)
-    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
+    lease = caller_lease(args, github)
     require_lease(github, lease, args.repo, args.pr_number, args.head_sha)
     sys.stdout.write(
         authorization_statement(args.repo, args.pr_number, args.head_sha)
@@ -4998,8 +4834,7 @@ def close_work_issue(  # noqa: C901
     pull = github.get(args.repo, f"pulls/{args.pr_number}")
     if not isinstance(repository, dict) or not isinstance(pull, dict):
         raise RuntimeError(
-            "Work Issue closure: state unavailable. Run 'gh auth status' and "
-            "rerun."
+            f"Work Issue closure: state unavailable. {GH_RETRY}."
         )
     head = pull.get("head") or {}
     base = pull.get("base") or {}
@@ -5029,8 +4864,7 @@ def close_work_issue(  # noqa: C901
     head_ref = head.get("ref")
     if not isinstance(default_branch, str) or not isinstance(base_ref, str):
         raise RuntimeError(
-            "Pull request: destination unavailable. Run 'gh auth status' and "
-            "rerun."
+            f"Pull request: destination unavailable. {GH_RETRY}."
         )
     if base_ref == default_branch:
         sys.stdout.write(
