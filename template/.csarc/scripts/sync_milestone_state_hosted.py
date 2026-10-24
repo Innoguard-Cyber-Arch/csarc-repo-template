@@ -10,6 +10,7 @@ if TYPE_CHECKING:
         _CLOSING_KEYWORD,
         _ISSUE_VOCABULARY,
         CHECK_NAME,
+        GH_RETRY,
         Decision,
         _admin_self_approval_allowed,
         _approval_records,
@@ -26,9 +27,6 @@ if TYPE_CHECKING:
         tracker,
         tracker_errors,
     )
-
-# Shared next step of raised messages (#1253).
-GH_RETRY = "Run 'gh auth status' and rerun"
 
 # Work Issue actions that can change a closed Milestone's delivery facts.
 # Every other work Issue event (labels, edits, comments) leaves it alone.
