@@ -196,8 +196,10 @@ def validate_promotion_alignment(body: str, head_sha: str) -> None:
             match.group("body"), head_sha, "content-only"
         )
     except ValueError as error:
+        # The review text already ends its sentence; avoid printing "..".
+        reason = str(error).rstrip(".")
         raise RuntimeError(
-            f"ADR and documentation alignment: {error}. Fix the section."
+            f"ADR and documentation alignment: {reason}. Fix the section."
         ) from error
 
 
@@ -538,7 +540,10 @@ def highest_release_intent(titles: list[str]) -> str:
 def check_promotion_intent(args: argparse.Namespace) -> None:
     """Require a promotion title to retain the batch's highest intent."""
     if args.titles_json is not None:
-        titles = json.loads(args.titles_json)
+        try:
+            titles = json.loads(args.titles_json)
+        except json.JSONDecodeError:
+            titles = None
         if not isinstance(titles, list) or any(
             not isinstance(title, str) for title in titles
         ):
@@ -2456,7 +2461,13 @@ def parser() -> argparse.ArgumentParser:
 def main() -> None:
     """Run the selected promotion evidence operation."""
     args = parser().parse_args()
-    args.handler(args)
+    try:
+        args.handler(args)
+    except RuntimeError as error:
+        # Expected gate failures carry a complete message; fail closed with
+        # one line instead of a traceback.
+        print(f"ERROR: {error}", file=sys.stderr)  # noqa: T201
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":
