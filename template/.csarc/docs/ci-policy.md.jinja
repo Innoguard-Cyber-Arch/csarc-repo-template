@@ -12,7 +12,7 @@
 - 目前 head 有有效授權：獨立 maintainer 的 exact-head `APPROVED` review{% if copilot_review == 'allowed' %}、Copilot 對 exact head 沒有任何意見的審核{% endif %}{% if admin_bypass != 'off' %}，或 admin 在 lease 內留下的 exact-head 授權留言（`admin_bypass: {{ admin_bypass }}`{% if admin_bypass == 'beta-only' %}，只限 beta{% endif %}）{% endif %}。任何新 push 都讓舊授權失效。
 - {% if hosted %}required `title`、`verify`、`review` 在 exact head 成功{% else %}exact head 有 24 小時內、綁定同一 tree 與 base 的本機驗證證據{% endif %}，且 `## Requirement evidence` 完整。
 {%- if 'issues' in lifecycle %}
-- 沒有 Milestone 的 Issue 本身已核可：另一位協作者在 Issue 留言 `Approve`，或提案者以 admin 身分留言 `Admin-approve: <理由>`；`Object: <理由>` 會阻擋，直到 `Resolve: <連結>`。Issue body 改變後要重新核可。
+- 沒有 Milestone 的 Issue 已核可：另一位協作者在 Issue 留言 `Approve`，或提案者以 admin 身分留言 `Admin-approve: <理由>`；`Object: <理由>` 會阻擋，直到 `Resolve: <連結>`。Issue body 改變後要重新核可。
 {%- endif %}
 {%- if 'milestones' in lifecycle %}
 - 有 Milestone 的 Issue 繼承 tracker 的核可；tracker 核可與 scope 規則見 [`milestone-description.md`](milestone-description.md)。
@@ -40,7 +40,7 @@ Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─→ main
 - **Release recovery**：`main` 缺少一次應有的發版時，以 `fix/<Issue>-<slug>`、`release-recovery` label 直接對 `main` 提出修正，比照 hotfix 一律 full。
 - **Dependabot**：minor／patch 更新在 exact head 重新驗證後經 lifecycle 合併，major 保留人工審核。
 - **模板更新**：`csarc update` 產生的 PR 帶 `governance-switch` label；改動 `.csarc/scripts/` 或放寬治理設定（例如 `admin_bypass`、`verification_mode`、關閉 CodeQL、移除 `lifecycle` 項目、降低 coverage 門檻）的 PR 也一樣。
-- **升級帶來的新設定**：帶 `governance-switch` label 且 `_commit` 是已發布 immutable 正式版時，以 `ast` 盤點該版設定表（不執行），全部相符才放行並記錄 `schema_source=release:<tag>`；否則 fail closed 並列出盤點。
+- **升級帶來的新設定**：PR 帶 `governance-switch` label，且 `.csarc/provenance.json` 記錄的 tag 是指向 `_commit` 的已發布 immutable 正式版時，以 `ast` 盤點該版設定表（不執行）。全部相符才放行，並記錄 `schema_source=release:<tag>`；否則 fail closed 並列出盤點。
 
 ## Milestone 掛勾與持續同步
 
@@ -108,7 +108,7 @@ GitHub UI 合併與 `gh pr merge --admin` 不是合法 route，沒有 trailer；
 正式組合只有 `fast` 與 `full`；開發中的 focused check 是本機回饋，不是第三種 tier。最後要求取發布通道下限與 `.csarc/scripts/ci_tier.py` 路徑分類中較強者：{% if 'milestones' in lifecycle %}`dev/m*` 的工作 PR 下限為 fast，{% endif %}指向 `main` 的 standalone、hotfix 與 release recovery 下限為 full；分類器無法判斷時升級 full。
 
 - **focused**：實作中只跑變更 owner 的窄檢查，例如單一測試檔或 lint 路徑。
-- **fast**：`./.csarc/scripts/verify-fast` 從 `branch.<name>.gh-merge-base`（或 `CSARC_CI_BASE`）找出 base，對變更路徑跑 diff hygiene、衝突標記、secret 掃描與受影響的 owner；base 無法判定時 fail closed。
+- **fast**：`./.csarc/scripts/verify-fast` 從 `branch.<name>.gh-merge-base`（或 `CSARC_CI_BASE`）找出 base，對變更路徑跑 diff hygiene、衝突標記、secret 掃描、新增或修改訊息的句型與受影響的 owner；base 無法判定時 fail closed。
 - **full**：`./.csarc/scripts/verify` 執行共同基線、已選語言的完整品質與原生建置，以及已啟用的容器與產品 hook（`project_verification_hook` 或 `scripts/verify-product`）。
 
 `CSARC_CI_TIER`、`CSARC_CI_SCOPES` 只能增加 suite 或 scope，不能移除自動算出的要求。產品 test discovery 與 coverage 不收集 `.csarc/`，generated verify 不執行模板自測。

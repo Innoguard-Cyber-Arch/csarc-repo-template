@@ -449,6 +449,27 @@ def test_every_python_entry_imports(
 
 
 @pytest.mark.parametrize("name", list(MATRIX))
+def test_every_rendered_message_follows_the_writing_guide(
+    renders: dict[str, Path], name: str
+) -> None:
+    """#1221 AC5: adopt and update add only conforming messages.
+
+    An adopt or update candidate changes every line the template brings,
+    so the generated message check passes only if all of them conform.
+    """
+    project = renders[name]
+    result = subprocess.run(  # noqa: S603
+        [project / ".csarc/scripts/check-message-style", "--all"],
+        cwd=project,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr[-4000:]
+    assert result.stdout.startswith("OK: Message pattern check passed")
+
+
+@pytest.mark.parametrize("name", list(MATRIX))
 def test_render_passes_its_own_fast_verifier(
     renders: dict[str, Path], name: str
 ) -> None:
@@ -567,44 +588,40 @@ def measured() -> dict[str, dict[str, int]]:
 
 
 def test_payload_never_grows_past_its_recorded_ceiling() -> None:
-    """Targets: measures only shrink; the ceiling never relaxes a Target.
+    """#1231: every fixture stays within the backstop and each sub-budget.
 
+    Budgets cover file count, canonical bytes, write and
+    `pull_request_target` workflows, agent document tokens, and canonical
+    runtime bytes per capability group; every runtime file has a group.
     Low headroom (#1177) is reported as a warning, never as a failure.
     """
     values_by_fixture = measured()
-    for name, values in values_by_fixture.items():
-        for measure, ceiling in generated_payload.CEILINGS[name].items():
-            assert values[measure] <= ceiling, (name, measure, values[measure])
+    failures = [
+        failure
+        for name, values in values_by_fixture.items()
+        for failure in generated_payload.budget_failures(name, values)
+    ]
+    assert failures == []
     for warning in generated_payload.headroom_warnings(values_by_fixture):
         warnings.warn(warning, UserWarning, stacklevel=1)
 
 
-def test_ceilings_equal_targets() -> None:
-    """#1081 AC8: every file and bytes ceiling is exactly its Target."""
-    assert not generated_payload.OPEN_TARGET_GAPS
-    for name, targets in generated_payload.TARGETS.items():
-        ceilings = generated_payload.CEILINGS[name]
-        # The re-approved budget is exactly the file count and total bytes.
-        assert set(targets) == set(ceilings) == {"files", "bytes"}
-        assert ceilings == targets, name
-
-
 def test_documentation_stays_within_its_budget() -> None:
-    """#1081 AC3/AC8: the #1058 documentation budget holds per fixture."""
+    """#1081 AC3/AC8: the #1058 documentation line budget holds per fixture.
+
+    #1231 replaced the two bytes budgets with the agent token budget.
+    """
     budget = generated_payload.DOC_TARGETS
     values = measured()
     solo = values["solo-default"]
     assert solo["docs_lines"] <= budget["solo_docs_lines"]
-    assert solo["docs_bytes"] <= budget["solo_docs_bytes"]
     assert solo["ci_policy_lines"] <= budget["solo_ci_policy_lines"]
     hosted = values["hosted-csarc-owned-python"]
     assert hosted["ci_policy_lines"] <= budget["hosted_ci_policy_lines"]
     for name, data in generated_payload.FIXTURES.items():
         if data.get("verification_mode") == "local":
             lines = values[name]["agent_workflow_lines"]
-            size = values[name]["agent_workflow_bytes"]
             assert lines <= budget["agent_workflow_lines"], name
-            assert size <= budget["agent_workflow_bytes"], name
         assert (
             values[name]["milestone_description_lines"]
             <= budget["milestone_description_lines"]

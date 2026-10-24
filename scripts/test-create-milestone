@@ -350,7 +350,7 @@ assert_no_gh_call
 new_state
 out="$(run_with_stub --repo acme/project --title "Ship the Q4 batch" \
   --due-on 2026-12-01 --proposal-file "$fixture_root/proposal.txt" 2>&1)"
-grep -Fq 'No --description-file given' <<<"$out"
+grep -Fq 'no --description-file given' <<<"$out"
 grep -Fq 'Milestone metadata is ready for work' <<<"$out"
 grep -Fq 'Milestone #100 (due 2026-12-01) is ready: https://github.com/acme/project/issues/900' <<<"$out"
 [[ "$(state_field '.milestones["100"].due_on')" == "2026-12-01T12:00:00Z" ]]
@@ -377,8 +377,8 @@ out="$(run_with_stub --repo acme/project --title "Ship the Q4 batch" \
   --due-on 2026-12-01 --proposal-file "$fixture_root/proposal.txt" \
   --description-file "$fixture_root/description.txt" \
   --assignee reviewer --type Feature 2>&1)"
-if grep -Fq 'No --description-file given' <<<"$out"; then
-  echo "expected no placeholder reminder when --description-file is given" >&2
+if grep -Fq 'no --description-file given' <<<"$out"; then
+  echo "ERROR: Placeholder check failed: it warned although --description-file was given. Fix create-milestone." >&2
   exit 1
 fi
 grep -Fq 'Milestone metadata is ready for work' <<<"$out"
@@ -427,7 +427,7 @@ grep -Fq 'Requested: 2026-12-01' <<<"$out"
 grep -Fq 'Actual:    2026-11-30T00:00:00Z' <<<"$out"
 grep -Fq 'gh api --method DELETE repos/acme/project/milestones/100' <<<"$out"
 if grep -Fq 'is ready:' <<<"$out"; then
-  echo "expected a due-date mismatch to fail closed, not report success" >&2
+  echo "ERROR: Due date check failed: a mismatch reported success. Fix create-milestone." >&2
   exit 1
 fi
 [[ "$(state_field '.issues | length')" == "0" ]]
@@ -454,7 +454,7 @@ grep -Fq 'Failed to attach the tracker Issue to Milestone #101' <<<"$out"
 grep -Fqi 'does not match exactly one Milestone' <<<"$out"
 grep -Fq 'gh api --method DELETE repos/acme/project/milestones/101' <<<"$out"
 if grep -Fq 'is ready:' <<<"$out"; then
-  echo "expected a duplicate-title Milestone attach to fail closed, not report success" >&2
+  echo "ERROR: Attach check failed: a duplicate-title attach reported success. Fix create-milestone." >&2
   exit 1
 fi
 [[ "$(state_field '.issues | length')" == "0" ]]
@@ -481,8 +481,8 @@ grep -Fq 'got "999999" instead' <<<"$out"
 grep -Fq 'gh issue delete 900 --repo acme/project' <<<"$out"
 grep -Fq 'gh api --method DELETE repos/acme/project/milestones/100' <<<"$out"
 if grep -Fq 'is ready:' <<<"$out"; then
-  echo "expected a wrong Milestone attachment to fail closed, not report success" >&2
+  echo "ERROR: Attach check failed: a wrong attachment reported success. Fix create-milestone." >&2
   exit 1
 fi
 
-echo "create-milestone cases passed: 11"
+echo "OK: create-milestone cases passed: 11."

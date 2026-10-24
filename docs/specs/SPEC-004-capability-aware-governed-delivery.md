@@ -35,7 +35,7 @@ GitHub plan、repository visibility、organization policy 與 token scope 會改
 
 ## Plan
 
-此 spec 描述已落地的 delivery contract；新平台能力或 route 需由獨立 work item 修改 policies、tests、文件與本 spec。
+此 spec 描述已實作的 delivery contract；新平台能力或 route 需由獨立 work item 修改 policies、tests、文件與本 spec。
 
 ## Out of scope
 

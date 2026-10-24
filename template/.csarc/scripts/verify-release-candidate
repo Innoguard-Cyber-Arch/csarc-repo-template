@@ -47,10 +47,10 @@ set +e
   base_sha="$(jq -r '.base.sha' <<<"$pr")"
   [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]]
   if [[ -n "$expected_base_sha" && "$base_sha" != "$expected_base_sha" ]]; then
-    echo "Release candidate $candidate_sha expected current base $expected_base_sha but observed $base_sha for target $base_ref." >&2
+    echo "ERROR: Candidate $candidate_sha is stale: base $base_ref is $base_sha, not $expected_base_sha. Merge the base, then run 'prepare-candidate' again." >&2
     exit 1
   fi
-  echo "Release candidate boundary: candidate=$candidate_sha current_base=$base_sha target=$base_ref"
+  echo "NOTICE: Release candidate boundary: candidate=$candidate_sha current_base=$base_sha target=$base_ref."
   actor="$(jq -r '.user.login' <<<"$pr")"
   actor_permission=''
   if [[ "$actor" != 'github-actions[bot]' ]]; then

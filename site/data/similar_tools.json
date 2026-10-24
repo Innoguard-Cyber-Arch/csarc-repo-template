@@ -133,7 +133,7 @@
     "labels": {
       "zh-tw": {
         "title": "CI/CD 設定",
-        "readingMap": "先看懂再查表：這裡有四組對照——「任何使用本模板的 repo」與「repo-template 額外」（同一份規則適用範圍不同）；「工作 PR」與「交付 PR」（審查時機不同）；本機入口與 hosted workflow（在哪裡執行）；下方「預計執行時間」表是估算，各 Journey 分頁裡的時間才是最近一次實測。",
+        "readingMap": "先看懂再查表。這裡有四組對照：「任何使用本模板的 repo」與「repo-template 額外」（同一份規則適用範圍不同）；「工作 PR」與「交付 PR」（審查時機不同）；本機入口與 hosted workflow（在哪裡執行）；下方「預計執行時間」表是估算，各 Journey 分頁裡的時間才是最近一次實測。",
         "purpose": "測試目的",
         "shared": "任何使用本模板的 repo",
         "templateOnly": "repo-template 額外",
@@ -425,7 +425,7 @@
     {
       "key": "versionMaterialization",
       "title": {"zh-tw": "何時形成精確版本與 CHANGELOG", "en": "When the exact version and changelog materialize"},
-      "description": {"zh-tw": "比較可審查的版本 PR、成功 CI 後全自動配置，以及人工一次同步所有版本面。", "en": "Compares a reviewable version PR, fully automatic materialization after CI, and one manual change that synchronizes every version surface."},
+      "description": {"zh-tw": "比較可審查的版本 PR、成功 CI 後全自動物化，以及人工一次同步所有版本面。", "en": "Compares a reviewable version PR, fully automatic materialization after CI, and one manual change that synchronizes every version surface."},
       "csarc": {"zh-tw": "Agent 在原 release-worthy PR 的最後一個 release-only commit 同步 manifest、package metadata、CHANGELOG 與 marker；CI 重建 exact tree。", "en": "The agent synchronizes the manifest, package metadata, changelog, and markers in the original release-worthy PR's final release-only commit; CI reconstructs the exact tree."}
     },
     {
@@ -746,7 +746,7 @@
       "position": {"zh-tw": "可擴展版本控制系統：以 commit stack 與 GitHub 整合處理大型 repo 的開發與審查。", "en": "A scalable version-control system using commit stacks and GitHub integration for development and review in large repositories."},
       "difference": {"zh-tw": ["Sapling 以新的 VCS 操作模型與 stacked commits 改善大型 repo 工作。", "CSARC 保留一般 Git／GitHub 操作，只規範 PR 路由、證據與交付邊界。"], "en": ["Sapling introduces a VCS workflow and stacked commits for large repositories.", "CSARC keeps ordinary Git and GitHub workflows and defines only PR routing, evidence, and delivery boundaries."]},
       "comparisons": [
-        {"key": "pullRequestUnit", "feature": "Commit stacks", "docs": "https://sapling-scm.com/docs/overview/stacks", "description": {"zh-tw": "把相依工作保存為一串可 individually review 的 commits，不必先壓成一個大型變更。", "en": "Dependent work remains a stack of individually reviewable commits instead of one large squashed change."}},
+        {"key": "pullRequestUnit", "feature": "Commit stacks", "docs": "https://sapling-scm.com/docs/overview/stacks", "description": {"zh-tw": "把相依工作保存為一串可逐一 review 的 commits，不必先壓成一個大型變更。", "en": "Dependent work remains a stack of individually reviewable commits instead of one large squashed change."}},
         {"key": "integrationRoute", "feature": "GitHub integration", "docs": "https://sapling-scm.com/docs/git/github", "description": {"zh-tw": "將 stack 對應為 GitHub PR 並更新相依關係；適合深度堆疊，但需要 Sapling 工作模型。", "en": "It maps a stack to GitHub pull requests and updates their dependencies, which suits deep stacks but requires the Sapling workflow."}}
       ]
     },
@@ -886,7 +886,7 @@
       "difference": {"zh-tw": ["semantic-release 可把 maintenance branch 上的修補直接交給自動發布。", "CSARC 把修正合併與 patch Release 拆成兩個決策：hotfix 先 review／full verification，精確版本與 CHANGELOG 再由 Release Please PR 供人核准。"], "en": ["semantic-release can hand fixes on maintenance branches directly to automated publishing.", "CSARC separates merging a fix from a patch Release: the hotfix first passes review and full verification, then a Release Please PR presents the exact version and changelog for approval."]},
       "comparisons": [
         {"key": "versionIntent", "feature": "commit-analyzer", "docs": "https://semantic-release.gitbook.io/semantic-release/#commit-message-format", "description": {"zh-tw": "從 release branch 上的 commit messages 自動判斷 consumer impact。", "en": "Automatically derives consumer impact from commit messages on a release branch."}},
-        {"key": "versionMaterialization", "feature": "CI release steps", "docs": "https://semantic-release.gitbook.io/semantic-release/#release-steps", "description": {"zh-tw": "成功 build 後在同一套自動流程分析 commits、配置版本並產生 notes。", "en": "After a successful build, one automated flow analyzes commits, materializes the version, and generates notes."}},
+        {"key": "versionMaterialization", "feature": "CI release steps", "docs": "https://semantic-release.gitbook.io/semantic-release/#release-steps", "description": {"zh-tw": "成功 build 後在同一套自動流程分析 commits、物化版本並產生 notes。", "en": "After a successful build, one automated flow analyzes commits, materializes the version, and generates notes."}},
         {"key": "releaseOwnership", "feature": "maintenance release branches", "docs": "https://semantic-release.gitbook.io/semantic-release/usage/workflow-configuration#maintenance-branches", "description": {"zh-tw": "維護分支可限制在既有 major／minor 範圍發布相容修補，CI 再由 plugins 建立 tag、Release 或 registry publish。", "en": "Maintenance branches can publish compatible fixes within an existing major or minor range before CI plugins create tags, Releases, or registry publications."}}
       ]
     },

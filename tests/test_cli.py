@@ -2145,9 +2145,9 @@ def test_milestone_description_plan_degrades_without_api_access(
     )
 
     assert cli.milestone_description_plan(tmp_path) is None
-    output = capsys.readouterr().out
-    assert "Milestone descriptions: unavailable" in output
-    assert "review them manually" in output
+    output = capsys.readouterr().err
+    assert "WARNING: Milestone descriptions are unavailable" in output
+    assert "Review them by hand." in output
 
 
 @pytest.mark.large
@@ -2362,7 +2362,7 @@ def test_adopt_finalize_reports_unchanged_manual_merges(
     error = capsys.readouterr().err
     assert "unchanged content after Git normalization" in error
     assert "pyproject.toml" in error
-    assert "rerun csarc adopt --finalize" in error
+    assert "csarc adopt --finalize" in error
     assert git(project, "status", "--porcelain") == before_status
     assert finalize_plan_path(project).read_bytes() == before_report
     assert checkpoint_path.is_file()
@@ -2702,7 +2702,7 @@ def test_adopt_finalize_apply_rechecks_state_before_write(
     assert "Project verification failed at ./scripts/verify" in error
     assert "Structured result: pnpm failed" in error
     assert "Pending manual files: pyproject.toml" in error
-    assert "rerun csarc adopt --finalize" in error
+    assert "csarc adopt --finalize" in error
     assert cli.target_file_snapshot(project) == before
     assert git(project, "status", "--porcelain") == before_status
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
@@ -5064,7 +5064,7 @@ def test_unreleased_replay_decline_prevents_source_execution(
         )
         == 0
     )
-    assert "Saved adoption plan:" in capsys.readouterr().out
+    assert "Saved adoption plan follows." in capsys.readouterr().out
     assert events == ["milestone-plan", "confirm"]
     assert not (project / ".copier-answers.yml").exists()
 
@@ -5120,7 +5120,7 @@ def test_unreleased_checkpoint_requires_fresh_authority_before_execution(
         )
         == 0
     )
-    assert "Saved adoption plan:" in capsys.readouterr().out
+    assert "Saved adoption plan follows." in capsys.readouterr().out
     assert events == ["milestone-plan", "confirm"]
 
 
@@ -5701,7 +5701,10 @@ def test_invalid_project_hook_blocks_pending_adoption_without_writes(
     assert payload["adoption"]["project_verification_hook"] == {
         "configured": True,
         "path": "scripts/missing",
-        "reason": "Project verification hook does not exist: scripts/missing",
+        "reason": (
+            "Project verification hook does not exist: scripts/missing. "
+            "Create the script or fix 'project_verification_hook'."
+        ),
         "result": "failed",
         "source": "explicit",
     }
@@ -6707,7 +6710,7 @@ def test_cli_rejects_malformed_code_owner_without_copier_traceback(
         == 2
     )
     error = capsys.readouterr().err
-    assert "csarc: code_owner must use an @user" in error
+    assert "ERROR: code_owner must use an @user" in error
     assert "Traceback" not in error
 
 

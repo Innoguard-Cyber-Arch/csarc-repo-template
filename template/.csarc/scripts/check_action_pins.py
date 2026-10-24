@@ -87,9 +87,14 @@ def main(argv: list[str] | None = None) -> int:
     errors = check(workflow_files(args.root), args.root)
     if errors:
         for error in errors:
-            sys.stderr.write(f"action pin drift: {error}\n")
+            # message-pattern: allow X5 one drift finding per line
+            sys.stderr.write(f"- {error}\n")
+        sys.stderr.write(
+            "ERROR: Action pins disagree: the lines above differ. "
+            "Pin each action to one SHA.\n"
+        )
         return 1
-    sys.stdout.write("Action pins agree across the repository.\n")
+    sys.stdout.write("OK: Action pins agree across the repository.\n")
     return 0
 
 

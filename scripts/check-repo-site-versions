@@ -26,7 +26,9 @@ def _parse_version(value: str) -> tuple[int, int, int]:
     """Parse one strict `MAJOR.MINOR.PATCH` version string."""
     match = _VERSION.fullmatch(value)
     if not match:
-        raise ValueError(f"not a MAJOR.MINOR.PATCH version: {value!r}")
+        raise ValueError(
+            f"Bad version {value!r}: not X.Y.Z. Write it as X.Y.Z."
+        )
     return (int(match["major"]), int(match["minor"]), int(match["patch"]))
 
 
@@ -37,8 +39,8 @@ def _parse_range(
     match = _RANGE.fullmatch(value)
     if not match:
         raise ValueError(
-            "expected a '>=MAJOR.MINOR.PATCH <MAJOR.MINOR.PATCH' range: "
-            f"{value!r}"
+            f"Bad range {value!r}: not '>=MAJOR.MINOR.PATCH "
+            "<MAJOR.MINOR.PATCH'. Use that form."
         )
     return _parse_version(match["min"]), _parse_version(match["max"])
 
@@ -49,21 +51,25 @@ def check(data: dict[str, object]) -> str:
     template = data["template"]  # type: ignore[assignment]
     compatible_range = data["compatible_template_range"]  # type: ignore[assignment]
     if not isinstance(engine, str) or not isinstance(template, str):
-        raise ValueError("'engine' and 'template' must be strings")
+        raise ValueError(
+            "Bad versions: engine and template need text. Set both."
+        )
     if not isinstance(compatible_range, str):
-        raise ValueError("'compatible_template_range' must be a string")
+        raise ValueError(
+            "Bad range: it needs text. Set 'compatible_template_range'."
+        )
 
     _parse_version(engine)
     template_version = _parse_version(template)
     minimum, maximum = _parse_range(compatible_range)
     if not (minimum <= template_version < maximum):
         raise ValueError(
-            f"template {template} does not satisfy engine {engine}'s "
-            f"compatible_template_range {compatible_range!r}"
+            f"Template {template} is incompatible: engine {engine} needs "
+            f"{compatible_range!r}. Align the versions."
         )
     return (
-        f"Repo-site versions: engine {engine}, template {template}, "
-        f"compatible with {compatible_range}\n"
+        f"OK: Repo-site engine {engine} accepts template {template} "
+        f"in {compatible_range}.\n"
     )
 
 
@@ -72,13 +78,12 @@ def main() -> int:
     try:
         data = json.loads(VERSION_FILE.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
-            raise ValueError("expected a JSON object")
+            raise ValueError(
+                f"Bad {VERSION_FILE}: not a JSON object. Make it one."
+            )
         status = check(data)
     except (OSError, KeyError, ValueError, json.JSONDecodeError) as error:
-        sys.stderr.write(
-            f"repo-site version contract invalid ({VERSION_FILE}): "
-            f"{error}\n"
-        )
+        sys.stderr.write(f"ERROR: {error}\n")
         return 1
     sys.stdout.write(status)
     return 0

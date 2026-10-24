@@ -1,0 +1,55 @@
+# English writing guide
+
+This guide applies to English text that the template owns: agent instructions, script messages, forms, templates, documents, and code comments. Write new text by this guide. When you change existing text, make the changed sentences follow it.
+
+The rules are inspired by ASD-STE100 Simplified Technical English, Issue 9 (<https://www.asd-ste100.org/>). They are written in this template's own words. This guide does not contain STE rules or the STE dictionary, and text that follows it is not STE-compliant.
+
+## Sentences
+
+- E1. Write one instruction in one sentence. Put a condition before the instruction: "If the check fails, run it again."
+- E2. Keep an instruction to 20 words or fewer and a description to 25 words or fewer. Split a longer sentence.
+- E3. Use the active voice. Name who or what does the action.
+- E4. Write a procedure step as a command. Give each step its own numbered item.
+- E5. In a warning, write the instruction or condition first, then the reason.
+- E6. Use a precise verb. Do not use a vague verb such as "handle" or "deal with" when a precise verb exists.
+- E7. Do not stack more than three nouns. Rewrite the group with a verb or a preposition.
+- E8. Remove filler words such as "simply", "just", "please note", and "basically".
+
+## Terms
+
+- E9. Use one term for one concept, and one concept for each term. Do not replace a defined term with a synonym.
+- E10. Use the terms of this repository as `site/data/glossary.toml` and the current specifications define them.
+- E11. Write commands, paths, configuration keys, and literal values in code format. Use digits for numbers.
+
+## Script messages
+
+A message tells the reader what happened and what to do next. Write each message on one line. Start it with one of these prefixes, in upper case, followed by a colon and a space.
+
+| Kind | Pattern | Use |
+| --- | --- | --- |
+| Error | `ERROR: <what failed>: <why>. <what to do next>.` | The script stops with a non-zero exit status. |
+| Warning | `WARNING: <what is at risk>: <why>. <what to do next>.` | The script continues; the reader must act or decide. |
+| Notice | `NOTICE: <what happened or what the script does next>.` | Information only; no action is necessary. |
+| Success | `OK: <what the script verified or changed>.` | The script completed its task. |
+
+- M1. Write "what to do next" as a command that the reader can do, for example "Run 'git fetch origin'."
+- M2. Put a variable value or a command in single quotes, for example `'main'`. Do not use backticks, because a shell runs the text between them.
+- M3. End each sentence with a period. Do not use exclamation marks.
+- M4. Write errors and warnings to standard error. Write notices and success messages to standard output.
+- M5. Write a raised exception's text as `<what failed>: <why>. <what to do next>.` without a prefix. The code that prints it adds `ERROR: `.
+
+### Exceptions
+
+A message can use a different form only when one of these conditions is true:
+
+- X1. Another program reads the line, for example JSON, `key=value` lines, a status token, or a test protocol.
+- X2. The script prints the output of another tool without change, for example `git` or `gh` output.
+- X3. The text is usage or help output from an argument parser.
+- X4. The text is a protocol string that other code matches, for example a commit subject or a marker line.
+- X5. The text is one line of a multi-line report or table that the script prints as one unit.
+
+Record each exception in the source, on the line before the message, as a comment: `message-pattern: allow X<n> <reason>`. For an X5 report, you can put `message-pattern: allow-begin X5 <reason>` before it and `message-pattern: allow-end` after it. An exception without a recorded reason is a defect.
+
+## Related guide
+
+Traditional Chinese text follows [`writing-guide.md`](writing-guide.md).

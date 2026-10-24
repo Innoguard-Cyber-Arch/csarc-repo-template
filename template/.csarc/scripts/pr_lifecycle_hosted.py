@@ -3,16 +3,26 @@
 from __future__ import annotations
 
 import json
+import re
+import sys
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    import argparse
+
     from pr_lifecycle import (
+        CLOSING_ISSUE,
+        DELIVERY_BRANCH,
+        ISSUE_WORK_BRANCH,
+        REPOSITORY,
         REVIEW_CHECK_CONTEXT,
+        SHA,
         GitHub,
-        actions_run_url,
         authenticated_dependabot_commit,
+        canonical_json,
         commit_tree_sha,
         parse_time,
         verification_evidence,
@@ -47,28 +57,30 @@ TRUSTED_CHECK_PRODUCERS: dict[str, tuple[str, frozenset[str]]] = {
     ),
 }
 REQUIRED_CHECKS_POLICY = Path("policies") / "rulesets-required-checks.json"
+WORK_CLOSURE_MARKER = "Work Issue closure evidence"
 
 
 def declared_required_contexts() -> set[tuple[str, int]]:
-    """Read the trusted base's declared required checks (Issue #1076).
-
-    Without a Ruleset GitHub enforces no check, so the hosted single-writer
-    route still requires every context the base policy declares.
-    """
+    """Read the trusted base's declared required checks (Issue #1076)."""
     path = Path(__file__).resolve().parents[1] / REQUIRED_CHECKS_POLICY
     try:
         policy = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise RuntimeError(
-            f"The declared required checks are unreadable: {error}"
+            f"Required checks: unreadable: {error}. Fix the declaration."
         ) from error
     rules = policy.get("rules") if isinstance(policy, dict) else None
     if not isinstance(rules, list):
-        raise RuntimeError("The declared required checks are malformed")
+        raise RuntimeError(
+            "Required checks: malformed declaration. Fix '.csarc/config.yml'."
+        )
     contexts: set[tuple[str, int]] = set()
     for rule in rules:
         if not isinstance(rule, dict):
-            raise RuntimeError("The declared required checks are malformed")
+            raise RuntimeError(
+                "Required checks: malformed declaration. Fix "
+                "'.csarc/config.yml'."
+            )
         if rule.get("type") != "required_status_checks":
             continue
         parameters = rule.get("parameters")
@@ -78,7 +90,10 @@ def declared_required_contexts() -> set[tuple[str, int]]:
             else None
         )
         if not isinstance(items, list):
-            raise RuntimeError("The declared required checks are malformed")
+            raise RuntimeError(
+                "Required checks: malformed declaration. Fix "
+                "'.csarc/config.yml'."
+            )
         for item in items:
             if (
                 not isinstance(item, dict)
@@ -87,11 +102,14 @@ def declared_required_contexts() -> set[tuple[str, int]]:
                 or type(item.get("integration_id")) is not int
                 or item["integration_id"] <= 0
             ):
-                raise RuntimeError("The declared required checks are malformed")
+                raise RuntimeError(
+                    "Required checks: malformed declaration. Fix "
+                    "'.csarc/config.yml'."
+                )
             contexts.add((item["context"], item["integration_id"]))
     if not contexts:
         raise RuntimeError(
-            "Hosted single-writer merge needs declared required checks"
+            "Hosted merge: no declared required checks. Declare them."
         )
     return contexts
 
@@ -136,7 +154,10 @@ def trusted_check_run_matches_context(
     if run_id not in run_cache:
         payload = github.get(repo, f"actions/runs/{run_id}")
         if not isinstance(payload, dict):
-            raise RuntimeError("Required check Actions run is malformed")
+            raise RuntimeError(
+                "Required check: malformed Actions run. Rerun it in GitHub "
+                "Actions."
+            )
         run_cache[run_id] = payload
     run = run_cache[run_id]
     repository = run.get("repository")
@@ -227,7 +248,7 @@ def require_trusted_dependabot_head(
         or check.get("conclusion") != "success"
     ):
         raise RuntimeError(
-            "Dependabot head has no trusted merge eligibility on the exact head"
+            "Dependabot head: no trusted merge eligibility. Merge it manually."
         )
     return kind
 
@@ -244,12 +265,7 @@ def require_trusted_verification(  # noqa: C901
     check_runs: list[dict[str, Any]] | None = None,
     durable: dict[str, Any] | None = None,
 ) -> dict[str, object]:
-    """Require fresh hosted execution evidence for one exact commit.
-
-    When `durable` is given, it receives the normalized payload that the
-    merge records durably (Issue #1073), so the facts survive Actions
-    retention.
-    """
+    """Require fresh hosted execution evidence for one exact commit."""
     available = (
         check_runs
         if check_runs is not None
@@ -266,7 +282,8 @@ def require_trusted_verification(  # noqa: C901
     check_run = selected.get(identity)
     if check_run is None:
         raise RuntimeError(
-            "Required verify check has no trusted producer on the exact head"
+            "Verify check: no trusted producer on the exact head. Rerun "
+            "'verify' on the exact head."
         )
     run_url = actions_run_url(str(check_run.get("details_url") or ""), repo)
     run_id = int(run_url.rsplit("/", 1)[1])
@@ -275,7 +292,9 @@ def require_trusted_verification(  # noqa: C901
     tree = commit.get("tree") if isinstance(commit, dict) else None
     tree_sha = tree.get("sha") if isinstance(tree, dict) else None
     if not isinstance(tree_sha, str):
-        raise RuntimeError("Exact-head Git tree identity is unavailable")
+        raise RuntimeError(
+            "Exact-head Git tree: unavailable. Run 'gh auth status' and rerun."
+        )
     jobs = github.collection(
         repo,
         f"actions/runs/{run_id}/jobs?filter=latest&per_page=100",
@@ -287,7 +306,10 @@ def require_trusted_verification(  # noqa: C901
         if job.get("html_url") == check_run.get("details_url")
     ]
     if len(matching_jobs) != 1:
-        raise RuntimeError("Trusted verify check has no unique Actions job")
+        raise RuntimeError(
+            "Trusted verify check: no unique Actions job. Rerun 'verify' on "
+            "the exact head."
+        )
     job = matching_jobs[0]
     annotations = (
         github.pages(
@@ -307,14 +329,14 @@ def require_trusted_verification(  # noqa: C901
             source_run, dict
         ):
             raise RuntimeError(
-                "Trusted verification reuse source is unavailable"
+                "Verification reuse source: unavailable. Rerun verify."
             )
         source_head = source_check.get("head_sha")
         if not isinstance(source_head, str) or (
             source_kind == "reuse" and source_head != head_sha
         ):
             raise RuntimeError(
-                "Trusted verification reuse source head is invalid"
+                "Verification reuse source: invalid head. Rerun verify."
             )
         source_cache = {source_run_id: source_run}
         if not trusted_check_run_matches_context(
@@ -327,7 +349,7 @@ def require_trusted_verification(  # noqa: C901
             source_cache,
         ):
             raise RuntimeError(
-                "Trusted verification reuse source producer is invalid"
+                "Verification reuse source: invalid producer. Rerun verify."
             )
         source_jobs = github.collection(
             repo,
@@ -342,7 +364,7 @@ def require_trusted_verification(  # noqa: C901
         ]
         if len(matching_sources) != 1:
             raise RuntimeError(
-                "Trusted verification reuse source has no unique Actions job"
+                "Verification reuse source: no unique job. Rerun verify."
             )
         source_job = matching_sources[0]
         source_commit = (
@@ -360,7 +382,7 @@ def require_trusted_verification(  # noqa: C901
         )
         if not isinstance(source_tree_sha, str):
             raise RuntimeError(
-                "Trusted verification reuse source tree is unavailable"
+                "Verification reuse source: tree unavailable. Rerun verify."
             )
         source_evidence = (
             source_check,
@@ -491,7 +513,10 @@ def authoritative_check_runs(
             or type(app_id) is not int
             or app_id <= 0
         ):
-            raise RuntimeError("Check run identity is malformed")
+            raise RuntimeError(
+                "Check run: malformed identity. Rerun the check in GitHub "
+                "Actions."
+            )
         identity = (name, app_id)
         identities.append((name, app_id, check_id))
         latest_ids[identity] = max(latest_ids.get(identity, 0), check_id)
@@ -512,10 +537,7 @@ def require_successful_checks(  # noqa: C901
     quota_run_urls: set[str] | None = None,
     durable: dict[str, Any] | None = None,
 ) -> str:
-    """Require protected contexts to pass or have exact quota evidence.
-
-    `durable` receives the normalized hosted `verify` payload, if any.
-    """
+    """Require protected contexts to pass or have exact quota evidence."""
     check_runs = github.collection(
         repo,
         f"commits/{head_sha}/check-runs?filter=latest&per_page=100",
@@ -587,16 +609,17 @@ def require_successful_checks(  # noqa: C901
         )
         if non_quota_failures:
             raise RuntimeError(
-                "Non-quota check failures remain on the exact head: "
+                "Exact head: non-quota check failures: "
                 + ", ".join(sorted(non_quota_failures))
+                + ". Fix the failed jobs."
             )
     if not missing:
         return "quota-fallback" if quota_run_urls else "success"
     if quota_run_urls:
         if any(context == "verify" for context, _integration_id in missing):
             raise RuntimeError(
-                "Quota fallback cannot replace trusted verify "
-                "execution evidence"
+                "Quota fallback: cannot replace trusted verify evidence. "
+                "Rerun verify."
             )
         for context, integration_id in missing:
             failed_run = required_runs.get((context, integration_id))
@@ -614,6 +637,175 @@ def require_successful_checks(  # noqa: C901
         else:
             return "quota-fallback"
     raise RuntimeError(
-        "Required checks have not succeeded on the exact head: "
+        "Required checks: not passed on the exact head: "
         + ", ".join(context for context, _integration_id in missing)
+        + ". Wait for them to pass."
+    )
+
+
+def actions_run_url(details_url: str, repo: str) -> str:
+    """Normalize an exact-repository Actions check URL to its run URL."""
+    parsed = urllib.parse.urlparse(details_url)
+    match = re.fullmatch(
+        rf"/{re.escape(repo)}/actions/runs/(\d+)(?:/job/\d+)?",
+        parsed.path,
+    )
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc.casefold() != "github.com"
+        or match is None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise RuntimeError(
+            "Failed check: no Actions run URL here. Rerun it in GitHub Actions."
+        )
+    return f"https://github.com/{repo}/actions/runs/{match.group(1)}"
+
+
+def work_closure_message(binding: dict[str, object]) -> str:
+    """Return exact, replay-safe evidence for one work Issue closure."""
+    return f"{WORK_CLOSURE_MARKER}\n\n`{canonical_json(binding)}`"
+
+
+def close_work_issue(  # noqa: C901
+    args: argparse.Namespace, github: GitHub
+) -> None:
+    """Close one Issue only after its exact work PR reaches its dev branch."""
+    if (
+        REPOSITORY.fullmatch(args.repo) is None
+        or args.pr_number < 1
+        or SHA.fullmatch(args.head_sha) is None
+    ):
+        raise RuntimeError(
+            "Work Issue closure: invalid input. Pass --pr-number and "
+            "--head-sha."
+        )
+    repository = github.get(args.repo, "")
+    pull = github.get(args.repo, f"pulls/{args.pr_number}")
+    if not isinstance(repository, dict) or not isinstance(pull, dict):
+        raise RuntimeError(
+            "Work Issue closure: state unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
+    head = pull.get("head") or {}
+    base = pull.get("base") or {}
+    head_repo = head.get("repo") or {} if isinstance(head, dict) else {}
+    merge_sha = pull.get("merge_commit_sha")
+    if (
+        pull.get("number") != args.pr_number
+        or pull.get("state") != "closed"
+        or pull.get("merged") is not True
+        or not isinstance(pull.get("merged_at"), str)
+        or not isinstance(head, dict)
+        or head.get("sha") != args.head_sha
+        or not isinstance(head_repo, dict)
+        or str(head_repo.get("full_name", "")).casefold()
+        != args.repo.casefold()
+        or not isinstance(base, dict)
+        or not isinstance(merge_sha, str)
+        or SHA.fullmatch(merge_sha) is None
+    ):
+        raise RuntimeError(
+            "Merged pull request: invalid identity or head. Pass the merged PR "
+            "number and head SHA."
+        )
+    parse_time(pull["merged_at"], "Pull request merge")
+    default_branch = repository.get("default_branch")
+    base_ref = base.get("ref")
+    head_ref = head.get("ref")
+    if not isinstance(default_branch, str) or not isinstance(base_ref, str):
+        raise RuntimeError(
+            "Pull request: destination unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
+    if base_ref == default_branch:
+        sys.stdout.write(
+            f"NOTICE: PR #{args.pr_number}: default-branch closing remains "
+            "GitHub-native.\n"
+        )
+        return
+    delivery = DELIVERY_BRANCH.fullmatch(base_ref)
+    work = ISSUE_WORK_BRANCH.fullmatch(str(head_ref or ""))
+    if delivery is None or work is None:
+        raise RuntimeError(
+            "Merged pull request: not a Milestone work route. Run close-work "
+            "only for dev/m* work."
+        )
+    issue_number = int(work.group(1))
+    closing_issues = [
+        int(value)
+        for value in CLOSING_ISSUE.findall(str(pull.get("body") or ""))
+    ]
+    if closing_issues != [issue_number]:
+        raise RuntimeError(
+            "Work pull request: does not close its Issue. Fix the body."
+        )
+    issue = github.get(args.repo, f"issues/{issue_number}")
+    if (
+        not isinstance(issue, dict)
+        or issue.get("number") != issue_number
+        or issue.get("pull_request") is not None
+    ):
+        raise RuntimeError(
+            "Work Issue: invalid identity. Fix the work branch name."
+        )
+    expected_milestone = int(delivery.group(1))
+    issue_milestone = issue.get("milestone") or {}
+    pull_milestone = pull.get("milestone") or {}
+    if (
+        not isinstance(issue_milestone, dict)
+        or not isinstance(pull_milestone, dict)
+        or issue_milestone.get("number") != expected_milestone
+        or pull_milestone.get("number") != expected_milestone
+    ):
+        raise RuntimeError(
+            "Work Issue: PR or dev branch disagrees. Fix the route."
+        )
+    binding: dict[str, object] = {
+        "base_ref": base_ref,
+        "head_sha": args.head_sha,
+        "issue": issue_number,
+        "merge_commit_sha": merge_sha,
+        "pull_request": args.pr_number,
+        "repository": args.repo,
+        "schema_version": 1,
+    }
+    message = work_closure_message(binding)
+    comments = github.pages(args.repo, f"issues/{issue_number}/comments")
+    evidence = [
+        str(comment.get("body") or "")
+        for comment in comments
+        if str(comment.get("body") or "").startswith(WORK_CLOSURE_MARKER)
+    ]
+    if len(evidence) > 1 or (evidence and evidence != [message]):
+        raise RuntimeError(
+            "Work Issue: conflicting closure evidence. Run 'gh issue view'."
+        )
+    state = issue.get("state")
+    if state == "closed":
+        if issue.get("state_reason") != "completed" or evidence != [message]:
+            raise RuntimeError(
+                "Work Issue: closed without matching evidence. Reopen it."
+            )
+        sys.stdout.write(
+            f"NOTICE: Issue #{issue_number} is already closed by PR "
+            f"#{args.pr_number}.\n"
+        )
+        return
+    if state != "open":
+        raise RuntimeError("Work Issue: invalid state. Run 'gh issue view'.")
+    if not evidence:
+        github.comment(args.repo, issue_number, message)
+    result = github.close_issue(args.repo, issue_number)
+    if (
+        result.get("number") != issue_number
+        or result.get("state") != "closed"
+        or result.get("state_reason") != "completed"
+    ):
+        raise RuntimeError(
+            "Issue closure: GitHub did not confirm it. Run 'gh issue view'."
+        )
+    sys.stdout.write(
+        f"OK: Issue #{issue_number} closed by merged PR #{args.pr_number}.\n"
     )

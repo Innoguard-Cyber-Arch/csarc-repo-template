@@ -341,12 +341,14 @@ def _nested(record: dict[str, Any], *keys: str) -> object:
 def _pull_request_records(value: object) -> list[object]:
     """Flatten one `gh api --paginate --slurp` result into PR records."""
     if not isinstance(value, list):
-        raise MergeCandidateError("associated pull requests are not a list")
+        raise MergeCandidateError(
+            "Bad PR payload: not a list. Re-run the workflow."
+        )
     if all(isinstance(page, list) for page in value):
         return [item for page in value for item in page]
     if all(isinstance(item, dict) for item in value):
         return list(value)
-    raise MergeCandidateError("associated pull request pages are malformed")
+    raise MergeCandidateError("Bad PR pages: malformed. Re-run the workflow.")
 
 
 def resolve_merge_candidate(  # noqa: C901
@@ -367,9 +369,13 @@ def resolve_merge_candidate(  # noqa: C901
     caller never picks one arbitrarily.
     """
     if _SHA.fullmatch(head_sha or "") is None:
-        raise MergeCandidateError("workflow event head SHA is invalid")
+        raise MergeCandidateError(
+            "Bad head SHA: not 40 hex. Pass a full '--head-sha'."
+        )
     if not base_repo:
-        raise MergeCandidateError("base repository is missing")
+        raise MergeCandidateError(
+            "Base repository is missing: none. Pass '--base-repo'."
+        )
     if head_repository != base_repo or not head_branch.startswith(
         DEPENDABOT_HEAD_PREFIX
     ):
@@ -387,10 +393,14 @@ def resolve_merge_candidate(  # noqa: C901
     matches: dict[int, dict[str, Any]] = {}
     for record in _pull_request_records(pulls):
         if not isinstance(record, dict):
-            raise MergeCandidateError("associated pull request is malformed")
+            raise MergeCandidateError(
+                "Bad PR record: not an object. Re-run the workflow."
+            )
         state = record.get("state")
         if not isinstance(state, str):
-            raise MergeCandidateError("associated pull request has no state")
+            raise MergeCandidateError(
+                "Bad PR record: no state. Re-run the workflow."
+            )
         if state != "open":
             # Closed and merged pull requests are never a substitute.
             continue
@@ -406,7 +416,7 @@ def resolve_merge_candidate(  # noqa: C901
             isinstance(number, int) and not isinstance(number, bool)
         ):
             raise MergeCandidateError(
-                "an open associated pull request has incomplete identity"
+                "Bad open PR record: incomplete identity. Re-run the workflow."
             )
         if (
             record.get("merged") is True
@@ -414,12 +424,14 @@ def resolve_merge_candidate(  # noqa: C901
             or record.get("closed_at") is not None
         ):
             raise MergeCandidateError(
-                f"pull request #{number} is open but reports a closed state"
+                f"PR #{number} is inconsistent: open but closed. "
+                "Re-run the workflow."
             )
         previous = matches.get(number)
         if previous is not None and previous != record:
             raise MergeCandidateError(
-                f"pull request #{number} appears with conflicting snapshots"
+                f"PR #{number} is inconsistent: conflicting snapshots. "
+                "Re-run the workflow."
             )
         matches[number] = record
 
@@ -428,7 +440,7 @@ def resolve_merge_candidate(  # noqa: C901
     if len(matches) > 1:
         numbers = ", ".join(f"#{number}" for number in sorted(matches))
         raise MergeCandidateError(
-            f"several open pull requests match the exact head: {numbers}"
+            f"Head is ambiguous: open PRs {numbers} match. Close all but one."
         )
     (number,) = matches
     return MERGE_CANDIDATE_MATCH, number, f"exact open pull request #{number}"
@@ -466,12 +478,15 @@ def resolve_main(argv: list[str]) -> int:
     except (OSError, json.JSONDecodeError, MergeCandidateError) as error:
         outcome, reason, status = MERGE_CANDIDATE_REJECTED, str(error), 1
     if outcome == MERGE_CANDIDATE_NO_OP:
+        # message-pattern: allow X1 workflow annotation
         sys.stderr.write(f"::notice::Dependabot exact merge no-op: {reason}\n")
     elif outcome == MERGE_CANDIDATE_REJECTED:
+        # message-pattern: allow X1 workflow annotation
         sys.stderr.write(
             f"::error::Dependabot exact merge failed closed: {reason}\n"
         )
     else:
+        # message-pattern: allow X1 reason that the step output repeats
         sys.stderr.write(reason + "\n")
     matched = outcome == MERGE_CANDIDATE_MATCH
     with open(args.github_output, "a", encoding="utf-8") as handle:
@@ -486,7 +501,9 @@ def _load_json(path: str) -> dict[str, Any]:
     with open(path, encoding="utf-8") as handle:
         value = json.load(handle)
     if not isinstance(value, dict):
-        raise ValueError(f"{path} must contain a JSON object")
+        raise ValueError(
+            f"{path} is invalid: not a JSON object. Re-run the workflow."
+        )
     return value
 
 
@@ -558,6 +575,7 @@ def main(argv: list[str] | None = None) -> int:
             args.expected_base_sha,
         )
         reason = f"{reason}; {child_reason}"
+    # message-pattern: allow X1 reason that the step output repeats
     sys.stderr.write(reason + "\n")
     with open(args.github_output, "a", encoding="utf-8") as handle:
         handle.write(

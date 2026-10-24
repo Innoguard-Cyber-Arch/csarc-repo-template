@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-09-21
-- **來源 Issues：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)、[#1070](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1070)（2026-10-14 補充 runtime 邊界與固定位置 allowlist）、[#1077](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1077)（2026-10-14 補充依選項 render 的 payload 規則）、[#1129](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1129)（2026-10-15 補充模板 repository 專用工具與精簡後的共用模組）、[#1177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1177)（2026-10-19 補充 hosted 專用 sibling 與 payload 餘裕提醒）、[#1208](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1208)（2026-10-21 補充只在 Milestone 或 hosted render 的 Milestone script）；Milestone 18 對齊：[#1066](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1066)、[#1067](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1067)、[#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)、[#1081](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1081)、[#1146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1146)、[#1153](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1153)、[#1157](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1157)
+- **來源 Issues：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)、[#1070](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1070)（2026-10-14 補充 runtime 邊界與固定位置 allowlist）、[#1077](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1077)（2026-10-14 補充依選項 render 的 payload 規則）、[#1129](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1129)（2026-10-15 補充模板 repository 專用工具與精簡後的共用模組）、[#1177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1177)（2026-10-19 補充 hosted 專用 sibling 與 payload 餘裕提醒）、[#1208](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1208)（2026-10-21 補充只在 Milestone 或 hosted render 的 Milestone script）、[#1227](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1227)（2026-10-23 補充生成副本只保留 docstring 摘要行）、[#1230](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1230)（2026-10-23 補充 hosted 專用的 lifecycle 路徑）、[#1231](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1231)（2026-10-23 修訂 payload 度量：總閘加分項預算）；Milestone 18 對齊：[#1066](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1066)、[#1067](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1067)、[#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)、[#1081](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1081)、[#1146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1146)、[#1153](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1153)、[#1157](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1157)
 - **實作 PR：**[#860](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/860)
 
 ## 問題與限制
@@ -103,6 +103,7 @@ typescript/tests/index.test.ts
 # path | rendered when
 .csarc/docs/documentation-policy.md | documentation_mode != 'off'
 .csarc/docs/milestone-description.md | 'milestones' in lifecycle
+.csarc/docs/writing-guide.md | 'zh-tw' in documentation_languages
 .csarc/scripts/authenticate_dependabot_hosted.py | verification_mode == 'hosted'
 .csarc/scripts/build-repo-site | documentation_mode == 'template-and-content'
 .csarc/scripts/build_repo_site.py | documentation_mode == 'template-and-content'
@@ -177,7 +178,70 @@ typescript/tests/index.test.ts
 - 這取代 #1129 對 local render 的例外：未啟用 Milestone 的 local 專案不再支援 `dev/m*`、`promote/m*` 路由。呼叫端把缺少的模組視為未啟用 Milestone：`pr_lifecycle.py` 仍分類 hotfix、release recovery、release follow-up 與 isolated 路由，Milestone delivery 的 routine sync 以清楚訊息失敗；`validate-pr-policy` 拒絕 Milestone promotion 並說明需要 `lifecycle: milestones`；`publish-release` 略過 Milestone 收尾；`gh-issue-edit` 不檢查 approval（沒有任何 local 檢查讀取 Issue approval）。
 - 既有專案 update 時，這三支的移除列在 update plan；產品檔案仍在使用的那一支依 #1146 保留為 product-owned。
 
-`scripts/generated_payload.py` 量測 #1058 `Targets` 的 fixture；`tests/test_generated_payload.py` 斷言每個量測不超過記錄的上限，上限只能下降，不放寬 `Targets`。2026-10-15 重新核准後，`Targets` 只有檔案數與總 bytes：檔案數上限等於 `Targets`；#1129 先記錄的 bytes 實測上限已由 #1081 降到 `Targets`：每個 fixture 的檔案數與 bytes 上限都等於 `Targets`，沒有未達成的缺口（`test_ceilings_equal_targets`）。`.csarc/scripts` 支數、腳本行數與 workflow 數仍會量測並印出，但只供參考，不是預算。
+### hosted 專用的 lifecycle 路徑（#1230）
+
+- 只由 hosted workflow 呼叫的 `pr_lifecycle.py close-work`（work-item lifecycle workflow 在 Milestone work PR 合併後關閉 Issue）與 `actions_run_url`（只讀 hosted Actions check run）移到 `pr_lifecycle_hosted.py`。生成的 `pr_lifecycle.py` 保留 `close_work_issue` 轉交函式與完整命令列；local render 執行 `close-work` 時以 exit 1 失敗並說明需要 `verification_mode: hosted`。沒有新增或停止 render 的檔案，`copier.yml` 與下方 payload 表不變。
+- 既有 local 專案 update 時，`pr_lifecycle.py` 的縮減列為一般的模板修改，不會新增 `pr_lifecycle_hosted.py`；hosted 專案兩個檔案一起更新，沒有檔案被移除（`tests/test_hosted_lifecycle_split.py`）。
+
+### 生成副本只保留 docstring 摘要行（#1227）
+
+- 沒有與 root 逐位元組配對（`scripts/sync-paired-files.sh`）的生成 Python 副本，函式與類別的 docstring 只保留第一行摘要；完整說明只留在 root 模組一份，不再於每個生成專案重複付出 payload。模組 docstring 會成為 `--help` 說明，維持不變；註解與程式碼不變，因此行為不變，也不改變任何 render 的檔案清單。`tests/test_generated_module_pruning.py` 的 `test_generated_python_keeps_summary_docstrings` 防止多行 docstring 回到生成副本；`test_generated_copy_only_removes_root_code` 本來就忽略 docstring 比對定義。
+
+### Payload 度量：總閘加分項預算（#1231）
+
+#1058 的 `Targets` 以原始總 bytes 當主要預算。2026-10-23 的檢討發現，原始 bytes 對應不到它要保護的成本：85% 是使用者不會修改、update 時整份替換的 `.csarc/scripts`；中文每字 3 bytes；docstring、註解與 `ruff format` 的換行縮排都算進去，所以 #1227 用刪說明換空間，而訊息改寫（#1219–#1221）約七成的增量只是格式化換行。本節改成「一個不放寬的總閘，加上直接對應成本的分項預算」。
+
+**1. 總閘：canonical bytes。** 每個 fixture 量一個總量：`.csarc/scripts` 以外的檔案算原始 bytes；`.csarc/scripts` 內的每支 runtime 算 canonical code bytes：
+
+- Python（副檔名 `.py`，或 shebang 含 `python`）：以 `ast.parse` 解析，移除 module、class 與 function 的 docstring，以 `ast.unparse` 輸出，每行去掉前後空白後計 bytes 加 1 個換行。註解、空行、縮排、格式換行與引號風格都不計。
+- 其他 runtime（shell）：非空白、不以 `#` 開頭的行，去掉前後空白後計 bytes 加 1。
+
+canonical bytes 以 lock 的 Python 3.14 計算，因為 `ast.unparse` 的輸出可能隨 Python 版本改變。總閘數字由 #1058 的 bytes `Targets` 換算，不另訂：在換算基準 `cd0b69d`（#1227 合併後、本 Issue 核准時的 `dev/m20-writing-guidelines`），每個 fixture 的新上限＝舊 `Targets` −（原始 bytes − canonical bytes），再向下取整到 1,000 B。換算點的餘裕因此與舊規則相同（只因取整少不到 1,000 B），舊的原始 bytes 數字沒有調高；之後只能下調。原始總 bytes 仍會印出供參考，不再是預算。
+
+| Fixture | 舊 `Targets` bytes | `cd0b69d` 原始 | `cd0b69d` canonical | 新總閘 | 換算點餘裕（舊／新） |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| solo-default | 1,000,000 | 832,993 | 617,537 | 784,000 | 167,007／166,463 |
+| solo-python | 1,010,000 | 836,501 | 621,025 | 794,000 | 173,499／172,975 |
+| hosted-csarc-owned-python | 1,200,000 | 1,166,727 | 887,846 | 921,000 | 33,273／33,154 |
+| consumer-a | 1,050,000 | 993,740 | 764,616 | 820,000 | 56,260／55,384 |
+| consumer-b | 1,050,000 | 984,913 | 756,226 | 821,000 | 65,087／64,774 |
+
+**2. 檔案數上限收緊。** 新上限＝min（舊 `Targets`，本 Issue 實作 head 的實測值＋6）。以實作 base `096987b`（含 #1219、#1220、#1230）實測：solo-default 92、solo-python 95（不變，實測＋6 會超過舊值）、hosted 126（原 137）、consumer-a 112（原 121）、consumer-b 108（原 117）。
+
+**3. 攻擊面預算。** 每個 fixture 的 `.github/workflows` 中，(a) 頂層或任一 job 的 `permissions` 有 `write` 或為 `write-all` 的 workflow 數，(b) 觸發條件含 `pull_request_target` 的 workflow 數，上限等於實測值、沒有緩衝：hosted 10／5、consumer-a 9／5、consumer-b 7／5、solo 0／0。新增一個具寫入權限或 `pull_request_target` 的 workflow 必須修訂本節並由擁有者核准。
+
+**4. Agent 文件 token 預算。** 量 `AGENTS.md` 加 `.csarc/docs/*.md` 的估計 token：中日韓字與全形標點每字 1 token，其餘字元每 4 個 1 token（無條件進位）。上限＝實作 head 實測值×1.05，向上取整到 500：solo-default 13,500、solo-python 13,500、hosted 15,500、consumer-a 15,000、consumer-b 15,000。它取代 #1058 文件預算中 solo `.csarc/docs` 60 KB 與 `agent-workflow.md` 12 KB 兩個 bytes 上限；行數上限（600、300、360、90、90 行）保留。
+
+**5. Runtime 能力分帳。** `scripts/generated_payload.py` 以封閉對照表把每支 `.csarc/scripts` 歸入一組：PR lifecycle 與 review、release、Milestone 與 Issue、verification、settings 與 drift、Dependabot。沒有歸組的 script 讓測試失敗，新功能因此必須記到某一組。每組上限＝實作 head 上該組在所有 fixture 中最大的 canonical code bytes ×1.03，向上取整到 1,000。以實作 base `096987b`（含 #1219、#1220、#1230）實測：PR lifecycle 257,000、release 166,000、Milestone 與 Issue 130,000、verification 101,000、settings 與 drift 87,000、Dependabot 18,000。PR lifecycle 之後經 #1248 調為 266,000：main 的 #1239（trusted base 以唯讀盤點判讀新設定，「先盤點、再動作」原則的第一個實作）在 `trusted_executor.py` 加入必要的新功能，它是 #1231 定案之後才加入的；第二次 main→delivery 同步（#1247）合併後，這組在 hosted、consumer-a、consumer-b 都是 257,655，超過原上限。新上限依同一算法計算：257,655×1.03＝265,384.65，向上取整到 266,000。擁有者 2026-10-24 核准這次上調；其他組與總閘都不變。只在 `documentation_mode: site` render 的網站引擎另記一組 docs-site；沒有任何 fixture 選這個模式，所以只量測、不設上限。組間不得自行挪用；調整任何一組的上限要修訂本節並由擁有者核准。分組加總可以略高於總閘，總量仍由總閘決定。
+
+**6. 餘裕提醒與底線。** #1177 的提醒保留，改用總閘的單位：任一 fixture 距離總閘不到 1 個檔案或 20,000 B 時印出 `WARNING`，不改變 exit status。Milestone 20 Checkpoint Scripts 的 hosted 至少保留 5,000 B（擁有者 2026-10-23 決定）同樣改用 canonical bytes 判斷。分項預算超過即失敗，沒有提醒區間。
+
+**7. 發版 churn（只提醒）。** `scripts/generated_payload.py churn --since <tag>` 用上一個 stable tag 的 `copier.yml` 與 `template/` 和目前的 working tree，以同一組 fixture 各 render 一次，列出新增、刪除、修改的檔案數與增刪行數。stable 的 `release_policy.py prepare-candidate` 在模板 repository 把結果放進候選報告的 `generated_payload_churn` 欄位；計算失敗只記 `available: false` 與原因，不改變 exit status，也不擋任何發版。量測程式只從執行中的 `release_policy.py` 所在的 `scripts/` 載入，而且只在這個目錄屬於 `--root` 時執行；以可信 base 對另一份 checkout 執行（例如 Dependabot 同步 job）時只記 `available: false`，不載入或 render candidate 的程式。生成專案的 `release_policy.py` 副本不含這段程式。
+
+**8. 與既有決定的關係。** #1227 的 docstring 摘要規則保留，本 Issue 不還原；在新度量下 docstring 與註解不再占預算，是否還原生成副本的完整 docstring 另開 Issue 決定。#1177 的 hosted sibling、#1208 的 Milestone script 規則與 #1129 的精簡規則都保留。每個預算都只能下調；任何上調都要修訂本節並由擁有者核准。
+
+#1058（Milestone 18 tracker）逐項處理如下：
+
+| #1058 項目 | 處理 | 說明 |
+| --- | --- | --- |
+| `Targets`「Payload 只以檔案數與總大小（bytes）衡量」（2026-10-15） | 部分取代 | 檔案數與總量保留；總量改以 canonical bytes 量測（第 1 點），另加第 3–5 點的分項預算。「腳本支數與行數不是預算」保留：分帳量的是 canonical bytes，不是支數或原始行數 |
+| `Targets` 表：檔案數 | 保留並收緊 | 第 2 點 |
+| `Targets` 表：bytes | 取代（換算，不調高） | 第 1 點；原始 bytes 數字凍結為換算來源 |
+| `Targets`「抵銷」（K1 的 `risk_controls.py`） | 保留 | `risk_controls.py` 記在 PR lifecycle 組 |
+| `Targets`「文件」 | 部分取代 | 兩個 bytes 上限改為 token 預算（第 4 點）；行數上限保留 |
+| `Targets`「參照」「可達性與命名空間」「import」「自測時間」 | 保留 | 不受影響 |
+| Kill criteria 4 | 保留 | Milestone 18 已關閉；「預算不放寬」原則以新單位延續 |
+| 決定 10（`server_enforcement=none`） | 保留 | 與度量無關 |
+| 決定 11（發版檢查 trailer） | 保留 | 與度量無關 |
+| 決定 12（證據期限） | 保留 | 與度量無關 |
+| 決定 13（generated verify 不跑模板自測） | 保留 | 自測仍不下發，`自測時間` 仍為 0 |
+| 決定 14（solo 優先與 preset 展開） | 保留 | fixture 定義不變 |
+| 決定 15（local 不 render `codeql.yml`） | 保留 | 攻擊面基準已反映 |
+| 決定 21（`Targets` 核准時固定、預算不放寬） | 保留 | bytes 只換單位、不調高；之後只能下調 |
+| 決定 22.1（`Targets` 不放寬，K1 增量由 P1、P2 抵銷） | 保留 | 歷史紀錄，不受影響 |
+| 決定 22.5（gate 只下發 `risk_controls.py`，不需要 CLI 也不下載程式） | 保留 | 不改成套件或執行時下載 |
+
+`scripts/generated_payload.py` 量測上述 fixture；`tests/test_generated_payload.py` 斷言每個量測不超過上限，上限只能下降。`.csarc/scripts` 支數、腳本行數與原始總 bytes 仍會量測並印出，但只供參考，不是預算。
 
 ## 四種 inventory
 

@@ -221,8 +221,8 @@ def test_pr_policy_without_milestones_rejects_a_milestone_promotion(
         timeout=60,
     )
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "A Milestone promotion needs lifecycle: milestones." in (
-        result.stdout
+    assert "Milestone promotion: needs lifecycle: milestones." in (
+        result.stderr
     )
 
 

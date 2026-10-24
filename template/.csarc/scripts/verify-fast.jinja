@@ -39,7 +39,7 @@ if [[ -z "$base" ]] && git rev-parse --verify --quiet "main^{commit}" >/dev/null
   base=main
 fi
 if [[ -z "$base" ]]; then
-  echo "Cannot determine the pull request base; set CSARC_CI_BASE explicitly." >&2
+  echo "ERROR: PR base is unknown: none is set. Set CSARC_CI_BASE." >&2
   exit 2
 fi
 base="${base#refs/heads/}"
@@ -54,7 +54,7 @@ for candidate in "refs/remotes/origin/$base" "refs/heads/$base" "$base"; do
   fi
 done
 if [[ -z "$base_ref" ]]; then
-  echo "Cannot resolve verification base '$base'; fetch it or set CSARC_CI_BASE." >&2
+  echo "ERROR: Unknown base: '$base'. Fetch it or set CSARC_CI_BASE." >&2
   exit 2
 fi
 {% if verification_mode == "local" -%}
@@ -62,7 +62,7 @@ verification_head_sha="$(git rev-parse HEAD)"
 verification_base_sha="$(git rev-parse "$base_ref^{commit}")"
 {% endif -%}
 if ! merge_base="$(git merge-base "$base_ref" HEAD)"; then
-  echo "Cannot find a merge base between '$base_ref' and HEAD." >&2
+  echo "ERROR: No merge base: '$base_ref' and HEAD. Fetch more history." >&2
   exit 2
 fi
 
@@ -102,7 +102,7 @@ suite="$plan_tier"
 for requested in "${CSARC_VERIFICATION_SUITE:-fast}" "${CSARC_CI_TIER:-}"; do
   [[ -z "$requested" ]] && continue
   if ! normalized_suite="$(normalize_suite "$requested")"; then
-    echo "Unknown verification suite: $requested" >&2
+    echo "ERROR: Unknown suite: '$requested'. Use fast or full." >&2
     exit 2
   fi
   requested="$normalized_suite"
@@ -124,9 +124,10 @@ if [[ "$channel_floor" == "full" && "$suite" != "full" ]]; then
     suite=full
   fi
 {% else -%}
-  echo "Release channel floor for base $base is full; hosted verify supplies that evidence."
+  echo "NOTICE: Base $base needs full; hosted verify supplies it."
 {% endif -%}
 fi
+# message-pattern: allow X1 key=value plan
 echo "Local verification plan: base=$base merge-base=$merge_base suite=$suite scopes=${scope_csv:-none}"
 {% if has_python %}export UV_PYTHON="${CSARC_PYTHON_VERSION:-{{ python_target }}}"
 {% endif -%}
@@ -138,7 +139,7 @@ case "$suite" in
     exit 0
     ;;
   *)
-    echo "Unknown verification suite: $suite" >&2
+    echo "ERROR: Unknown suite: '$suite'. Use 'fast' or 'full'." >&2
     exit 2
     ;;
 esac
@@ -146,6 +147,8 @@ esac
 verification_step "Changed-tree hygiene" git diff --check
 verification_step "Conflict-marker check" ./.csarc/scripts/check-update-conflicts
 verification_step "Secret scan" ./.csarc/scripts/scan-secrets
+verification_step "Message pattern check" \
+  ./.csarc/scripts/check-message-style --base "$merge_base"
 
 if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ||
   "$scopes" == *,template,* ]]; then

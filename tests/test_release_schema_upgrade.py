@@ -330,8 +330,7 @@ def test_hosted_route_reads_the_release_schema(
     refused = route("")
     assert refused.returncode == 1
     assert refused.stderr.startswith(
-        "ERROR: Trusted base cannot read the configuration: settings "
-        "future_flag come from a newer CSARC template release"
+        "ERROR: settings future_flag come from a newer CSARC template release"
     )
     assert "Inventory: future_flag not checked." in refused.stderr
 

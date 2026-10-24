@@ -51,10 +51,12 @@ set -Eeuo pipefail
 # run against any branch's worktree -- and so its regression test can run
 # it against an isolated fixture repository.
 if [[ $# -lt 2 || $# -gt 3 ]]; then
+  # message-pattern: allow X3 usage
   echo "usage: $(basename "$0") <own-verified-head> <new-base-tip> [<old-base-tip>]" >&2
   exit 2
 fi
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  # message-pattern: allow X1 status token verdict read by agents
   echo "REQUIRES-FULL-RERUN: not inside a Git working tree" >&2
   exit 2
 fi
@@ -68,10 +70,12 @@ else
 fi
 
 if ! git merge-base --is-ancestor "$old_base" "$own_head"; then
+  # message-pattern: allow X1 status token verdict read by agents
   echo "REQUIRES-FULL-RERUN: old-base-tip $old_base is not an ancestor of own-verified-head $own_head" >&2
   exit 1
 fi
 if ! git merge-base --is-ancestor "$old_base" "$new_base"; then
+  # message-pattern: allow X1 status token verdict read by agents
   echo "REQUIRES-FULL-RERUN: old-base-tip $old_base is not an ancestor of new-base-tip $new_base" >&2
   exit 1
 fi
@@ -80,12 +84,14 @@ own_files="$(git diff --name-only "$old_base" "$own_head")"
 incoming_files="$(git diff --name-only "$old_base" "$new_base")"
 
 if [[ -z "$incoming_files" ]]; then
+  # message-pattern: allow X1 status token verdict read by agents
   echo "QUALIFIES: new-base-tip has no changes beyond old-base-tip; nothing to re-verify"
   exit 0
 fi
 
 overlap="$(comm -12 <(sort -u <<<"$own_files") <(sort -u <<<"$incoming_files"))"
 if [[ -n "$overlap" ]]; then
+  # message-pattern: allow X1 status token verdict read by agents
   echo "REQUIRES-FULL-RERUN: incoming base changes touch files this branch's own commits also changed:" >&2
   printf '%s\n' "$overlap" >&2
   exit 1
@@ -99,16 +105,19 @@ fi
 high_risk_pattern='^(scripts/verify|scripts/ci_tier\.py$|scripts/pr_lifecycle\.py$|scripts/validate-pr-policy$|scripts/validate-issue-policy$|scripts/test-pr-policy$|scripts/test-issue-triage$|scripts/test-worktree-cleanup$|scripts/check-base-only-remerge$|scripts/sync-paired-files\.sh$|\.github/workflows/|policies/)'
 high_risk="$(grep -E "$high_risk_pattern" <<<"$incoming_files" || true)"
 if [[ -n "$high_risk" ]]; then
+  # message-pattern: allow X1 status token verdict read by agents
   echo "REQUIRES-FULL-RERUN: incoming base changes touch verification/CI/policy infrastructure:" >&2
   printf '%s\n' "$high_risk" >&2
   exit 1
 fi
 
 if ! git merge-tree --write-tree --merge-base "$old_base" "$own_head" "$new_base" >/dev/null; then
+  # message-pattern: allow X1 status token verdict read by agents
   echo "REQUIRES-FULL-RERUN: merging new-base-tip into own-verified-head would conflict" >&2
   exit 1
 fi
 
 incoming_count="$(grep -c . <<<"$incoming_files")"
+# message-pattern: allow X1 status token verdict read by agents
 echo "QUALIFIES: clean merge, zero file overlap with own-verified-head's changes, no verification-infrastructure movement, ${incoming_count} incoming file(s) will be reverified by hosted CI"
 exit 0

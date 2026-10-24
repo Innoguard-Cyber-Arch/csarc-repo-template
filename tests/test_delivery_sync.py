@@ -475,7 +475,7 @@ def test_sync_route_requires_the_recorded_authorized_request() -> None:
     )
 
     sync["body"] = "No recorded request"
-    with pytest.raises(RuntimeError, match="route is not authorized"):
+    with pytest.raises(RuntimeError, match="route not authorized"):
         validate_sync_route(
             FakeAPI([(200, sync)]),
             "acme/repo",
@@ -492,7 +492,7 @@ def test_sync_route_requires_the_recorded_authorized_request() -> None:
         "the delivery sync workflow; normal review applies."
     )
     sync["labels"] = []
-    with pytest.raises(RuntimeError, match="route is not authorized"):
+    with pytest.raises(RuntimeError, match="route not authorized"):
         validate_sync_route(
             FakeAPI([(200, sync)]),
             "acme/repo",
@@ -835,7 +835,9 @@ def test_conflict_stops_before_opening_a_pull_request() -> None:
             (409, {"message": "Merge conflict"}),
         ]
     )
-    with pytest.raises(RuntimeError, match="resolve it on sync/main-to-m7-ci"):
+    with pytest.raises(
+        RuntimeError, match="Resolve the conflicts on 'sync/main-to-m7-ci"
+    ):
         create_sync_pr(
             api,
             "acme/repo",

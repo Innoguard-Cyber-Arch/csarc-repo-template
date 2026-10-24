@@ -81,23 +81,22 @@ done
 
 if [[ -n "$facts_file" ]]; then
   if [[ ! -f "$facts_file" ]]; then
-    echo "check-repo-capabilities: no such file: $facts_file" >&2
+    echo "ERROR: Facts file '$facts_file' is missing: no such file. Pass an existing file." >&2
     exit 2
   fi
 else
-  command -v gh >/dev/null || { echo "Install and authenticate GitHub CLI first." >&2; exit 1; }
+  command -v gh >/dev/null || { echo "ERROR: GitHub CLI is missing: 'gh' is not on PATH. Install and authenticate 'gh'." >&2; exit 1; }
 
   if [[ -z "$repo" ]]; then
     if ! repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>&1)"; then
-      echo "Cannot identify the GitHub repository." >&2
-      echo "Run inside a Git repository with a GitHub remote, or pass --repo owner/repo." >&2
-      echo "GitHub CLI: $repo" >&2
+      echo "ERROR: Cannot identify the GitHub repository: 'gh repo view' failed. Pass --repo owner/repo." >&2
+      echo "$repo" >&2
       exit 1
     fi
   fi
 
   if ! repo_state_json="$(gh api "repos/$repo" 2>&1)"; then
-    echo "Cannot read repository metadata for $repo." >&2
+    echo "ERROR: Cannot read metadata for '$repo': gh failed. See below." >&2
     echo "$repo_state_json" >&2
     exit 1
   fi

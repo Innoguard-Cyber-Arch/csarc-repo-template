@@ -44,7 +44,9 @@ def _load_sibling(name: str) -> ModuleType:
         return cached
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
-        raise ModuleNotFoundError(f"Sibling module is unavailable: {path}")
+        raise ModuleNotFoundError(
+            f"Sibling module {path}: unavailable. Run 'csarc update'."
+        )
     module = importlib.util.module_from_spec(spec)
     # Register a first load so nested imports share it; a same-named module
     # from another directory keeps its registration.
@@ -60,15 +62,7 @@ def _load_sibling(name: str) -> ModuleType:
 
 
 class SiblingModule:
-    """Import one sibling script module only when a command first uses it.
-
-    A rendered command must not require modules that only other commands
-    use, so optional siblings stay unloaded until an attribute is read.
-    The sibling always comes from this file's own directory, as an eager
-    import beside it would, even if `sys.path` changed in the meantime.
-    Attribute writes and deletes reach the loaded module, which keeps
-    monkeypatching and module-level state on the real module.
-    """
+    """Import one sibling script module only when a command first uses it."""
 
     def __init__(self, name: str) -> None:
         """Remember the sibling module name without importing it."""
@@ -118,7 +112,7 @@ def require_milestones() -> None:
         promotion_gate.route_for  # noqa: B018 - loads the sibling
     except (FileNotFoundError, ModuleNotFoundError) as error:
         raise RuntimeError(
-            "This Milestone route needs `lifecycle: milestones`"
+            "Milestone route: needs 'lifecycle: milestones'. Set it."
         ) from error
 
 
@@ -154,7 +148,9 @@ def _hosted_globals(name: str) -> dict[str, Any]:
     try:
         shared = vars(hosted_checks._sibling())
     except (FileNotFoundError, ModuleNotFoundError) as error:
-        raise RuntimeError(f"{name} needs verification_mode: hosted") from error
+        raise RuntimeError(
+            f"{name}: needs verification_mode: hosted. Set it."
+        ) from error
     for key, value in globals().items():
         shared.setdefault(key, value)
     return shared
@@ -182,6 +178,7 @@ require_successful_checks = _hosted_only("require_successful_checks")
 require_trusted_dependabot_head = _hosted_only(
     "require_trusted_dependabot_head"
 )
+close_work_issue = _hosted_only("close_work_issue")
 
 
 LEASE_SCHEMA = 2
@@ -206,7 +203,6 @@ ISSUE_WORK_BRANCH = re.compile(
     r"([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$"
 )
 ADMIN_BYPASS_MARKER = "Admin bypass / 管理員略過審核"
-WORK_CLOSURE_MARKER = "Work Issue closure evidence"
 HOTFIX_POST_REVIEW_MARKER = "Emergency hotfix post-review"
 UNCHECKED = re.compile(r"(?m)^\s*[-*+]\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(
@@ -287,13 +283,20 @@ def canonical_json(value: object) -> str:
 def parse_time(value: object, label: str) -> datetime:
     """Parse an aware GitHub timestamp or fail closed."""
     if not isinstance(value, str):
-        raise RuntimeError(f"{label} has no timestamp")
+        raise RuntimeError(
+            f"{label}: no timestamp. Run 'gh auth status' and rerun."
+        )
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as error:
-        raise RuntimeError(f"{label} has an invalid timestamp") from error
+        raise RuntimeError(
+            f"{label}: invalid timestamp. Run 'gh auth status' and rerun."
+        ) from error
     if parsed.tzinfo is None:
-        raise RuntimeError(f"{label} timestamp has no timezone")
+        raise RuntimeError(
+            f"{label}: timestamp has no timezone. Run 'gh auth status' and "
+            "rerun."
+        )
     return parsed.astimezone(UTC)
 
 
@@ -314,7 +317,9 @@ def run(
     )
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip()
-        raise RuntimeError(f"Command failed: {' '.join(command)}: {detail}")
+        raise RuntimeError(
+            f"Command failed: {' '.join(command)}: {detail}. Fix it and retry."
+        )
     return result.stdout.strip()
 
 
@@ -332,7 +337,9 @@ class GitHub:
         """Return a verified user, or an explicitly supplied App actor."""
         if explicit_actor:
             if ACTOR.fullmatch(explicit_actor) is None:
-                raise RuntimeError("Explicit GitHub actor is invalid")
+                raise RuntimeError(
+                    "GitHub actor: invalid --actor. Pass a GitHub login."
+                )
             return explicit_actor
         try:
             payload = json.loads(run(["gh", "api", "user"]))
@@ -341,10 +348,10 @@ class GitHub:
                 return login
         except RuntimeError as error:
             raise RuntimeError(
-                "Authenticated GitHub actor is unavailable; GitHub App "
-                "callers must pass --actor from trusted action output"
+                "GitHub actor: unavailable. GitHub App callers pass --actor "
+                "from trusted action output."
             ) from error
-        raise RuntimeError("Authenticated GitHub actor is unavailable")
+        raise RuntimeError("GitHub actor: unavailable. Run 'gh auth login'.")
 
     def pages(self, repo: str, path: str) -> list[dict[str, Any]]:
         """Read and flatten every page of a REST collection."""
@@ -366,14 +373,18 @@ class GitHub:
             )
         )
         if not isinstance(payload, list):
-            raise RuntimeError(f"GitHub collection {endpoint} is not a list")
+            raise RuntimeError(
+                f"GitHub collection {endpoint}: not a list. Run 'gh auth "
+                "status' and rerun."
+            )
         pages = (
             payload if payload and isinstance(payload[0], list) else [payload]
         )
         items = [item for page in pages for item in page]
         if not all(isinstance(item, dict) for item in items):
             raise RuntimeError(
-                f"GitHub collection {endpoint} has invalid entries"
+                f"GitHub collection {endpoint}: invalid entries. Run 'gh auth "
+                "status' and rerun."
             )
         return items
 
@@ -399,21 +410,29 @@ class GitHub:
             )
         )
         if not isinstance(payload, list):
-            raise RuntimeError(f"GitHub collection {path} is not paginated")
+            raise RuntimeError(
+                f"GitHub collection {path}: not paginated. Run 'gh auth "
+                "status' and rerun."
+            )
         items: list[dict[str, Any]] = []
         for page in payload:
             if not isinstance(page, dict) or not isinstance(
                 page.get(key), list
             ):
-                raise RuntimeError(f"GitHub collection {path} has no {key}")
+                raise RuntimeError(
+                    f"GitHub collection {path}: no {key}. Run 'gh auth status' "
+                    "and rerun."
+                )
             if response_sha is not None and page.get("sha") != response_sha:
                 raise RuntimeError(
-                    f"GitHub collection {path} is for another SHA"
+                    f"GitHub collection {path}: another SHA. Run 'gh auth "
+                    "status' and rerun."
                 )
             entries = page[key]
             if not all(isinstance(item, dict) for item in entries):
                 raise RuntimeError(
-                    f"GitHub collection {path} has invalid entries"
+                    f"GitHub collection {path}: invalid entries. Run 'gh auth "
+                    "status' and rerun."
                 )
             items.extend(entries)
         return items
@@ -448,7 +467,9 @@ class GitHub:
         )
         result = json.loads(payload)
         if not isinstance(result, dict):
-            raise RuntimeError("GitHub merge response is invalid")
+            raise RuntimeError(
+                "GitHub merge: invalid response. Check the PR state on GitHub."
+            )
         return result
 
     def comment(self, repo: str, pr_number: int, body: str) -> dict[str, Any]:
@@ -467,7 +488,10 @@ class GitHub:
         )
         result = json.loads(payload)
         if not isinstance(result, dict):
-            raise RuntimeError("GitHub comment response is invalid")
+            raise RuntimeError(
+                "GitHub comment: invalid response. Run 'gh auth status' and "
+                "rerun."
+            )
         return result
 
     def edit_comment(
@@ -488,7 +512,10 @@ class GitHub:
         )
         result = json.loads(payload)
         if not isinstance(result, dict):
-            raise RuntimeError("GitHub comment response is invalid")
+            raise RuntimeError(
+                "GitHub comment: invalid response. Run 'gh auth status' and "
+                "rerun."
+            )
         return result
 
     def create_issue(
@@ -523,7 +550,10 @@ class GitHub:
         ]
         url = run(command).splitlines()[-1].strip()
         if not url.startswith(f"https://github.com/{repo}/issues/"):
-            raise RuntimeError("Hotfix post-review Issue URL is invalid")
+            raise RuntimeError(
+                "Hotfix post-review Issue: invalid URL. Run 'gh auth status' "
+                "and rerun."
+            )
         return {"html_url": url}
 
     def close_issue(self, repo: str, issue_number: int) -> dict[str, Any]:
@@ -544,7 +574,10 @@ class GitHub:
         )
         result = json.loads(payload)
         if not isinstance(result, dict):
-            raise RuntimeError("GitHub Issue close response is invalid")
+            raise RuntimeError(
+                "GitHub Issue close: invalid response. Run 'gh auth status' "
+                "and rerun."
+            )
         return result
 
 
@@ -559,14 +592,18 @@ def remote_repository(url: str) -> str:
         match = re.fullmatch(pattern, url)
         if match:
             return match.group(1)
-    raise RuntimeError("origin must be the requested github.com repository")
+    raise RuntimeError(
+        "origin: not the requested github.com repository. Fix the remote."
+    )
 
 
 def require_origin(repo: str) -> None:
     """Require local origin to be the requested GitHub repository."""
     origin = remote_repository(run(["git", "remote", "get-url", "origin"]))
     if origin.casefold() != repo.casefold():
-        raise RuntimeError("origin does not match the requested repository")
+        raise RuntimeError(
+            "origin: not the requested repository. Fix the remote."
+        )
 
 
 def pr_ref(pr_number: int) -> str:
@@ -586,7 +623,10 @@ def lease_refs(pull: dict[str, Any], default_branch: str) -> list[str]:
     base = pull.get("base") or {}
     base_ref = base.get("ref")
     if not isinstance(base_ref, str) or not base_ref:
-        raise RuntimeError("Pull request base branch is unavailable")
+        raise RuntimeError(
+            "Pull request: base branch unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     return [pr_ref(int(pull["number"])), base_lane_ref(base_ref)]
 
 
@@ -596,7 +636,10 @@ def live_pull(
     """Require one open pull request at the exact expected head."""
     payload = github.get(repo, f"pulls/{pr_number}")
     if not isinstance(payload, dict):
-        raise RuntimeError("Live pull request response is invalid")
+        raise RuntimeError(
+            "Live pull request: invalid response. Run 'gh auth status' and "
+            "rerun."
+        )
     head = payload.get("head") or {}
     if (
         payload.get("number") != pr_number
@@ -604,7 +647,9 @@ def live_pull(
         or payload.get("merged") is not False
         or head.get("sha") != head_sha
     ):
-        raise RuntimeError("Live pull request state or head has drifted")
+        raise RuntimeError(
+            "Live pull request: state or head drifted. Recheck it."
+        )
     return payload
 
 
@@ -619,7 +664,10 @@ def branch_sha(github: GitHub, repo: str, branch: str) -> str:
         else None
     )
     if not isinstance(sha, str) or SHA.fullmatch(sha) is None:
-        raise RuntimeError("Destination branch ref is unavailable")
+        raise RuntimeError(
+            "Destination branch: ref unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     return sha
 
 
@@ -630,20 +678,29 @@ def remote_ref(ref: str) -> str | None:
         return None
     lines = output.splitlines()
     if len(lines) != 1:
-        raise RuntimeError(f"Remote lease ref is ambiguous: {ref}")
+        raise RuntimeError(
+            f"Remote lease ref {ref}: ambiguous. Run 'git ls-remote origin "
+            "csarc/leases'."
+        )
     try:
         sha, observed_ref = lines[0].split("\t", 1)
     except ValueError as error:
-        raise RuntimeError(f"Remote lease ref is invalid: {ref}") from error
+        raise RuntimeError(
+            f"Remote lease ref {ref}: invalid. Run 'git ls-remote origin "
+            "csarc/leases'."
+        ) from error
     if observed_ref != ref or SHA.fullmatch(sha) is None:
-        raise RuntimeError(f"Remote lease ref is invalid: {ref}")
+        raise RuntimeError(
+            f"Remote lease ref {ref}: invalid. Run 'git ls-remote origin "
+            "csarc/leases'."
+        )
     return sha
 
 
 def write_json(path: Path, payload: dict[str, object]) -> None:
     """Atomically write evidence without following an output symlink."""
     if path.is_symlink() or (path.exists() and not path.is_file()):
-        raise RuntimeError(f"Output must be a regular file: {path}")
+        raise RuntimeError(f"Output {path}: not a regular file. Fix the path.")
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(
         dir=path.parent, prefix=f".{path.name}."
@@ -661,13 +718,15 @@ def write_json(path: Path, payload: dict[str, object]) -> None:
 def read_lease(path: Path) -> dict[str, Any]:
     """Load structurally valid lease evidence."""
     if path.is_symlink() or not path.is_file():
-        raise RuntimeError("Lease evidence must be a regular file")
+        raise RuntimeError("Lease evidence: not a regular file. Fix the path.")
     payload = json.loads(path.read_text(encoding="utf-8"))
     if (
         not isinstance(payload, dict)
         or payload.get("schema_version") != LEASE_SCHEMA
     ):
-        raise RuntimeError("Lease evidence schema is invalid")
+        raise RuntimeError(
+            "Lease evidence: invalid schema. Reacquire the lease."
+        )
     required = {
         "repository": str,
         "pull_request": int,
@@ -690,14 +749,14 @@ def read_lease(path: Path) -> dict[str, Any]:
     if any(
         not isinstance(payload.get(key), kind) for key, kind in required.items()
     ):
-        raise RuntimeError("Lease evidence is incomplete")
+        raise RuntimeError("Lease evidence: incomplete. Reacquire the lease.")
     if (
         SHA.fullmatch(payload["head_sha"]) is None
         or SHA.fullmatch(payload["head_tree"]) is None
         or SHA.fullmatch(payload["base_sha"]) is None
         or SHA.fullmatch(payload["lease_commit"]) is None
     ):
-        raise RuntimeError("Lease evidence has an invalid SHA")
+        raise RuntimeError("Lease evidence: invalid SHA. Reacquire the lease.")
     if (
         REPOSITORY.fullmatch(payload["repository"]) is None
         or OWNER.fullmatch(payload["owner"]) is None
@@ -708,29 +767,40 @@ def read_lease(path: Path) -> dict[str, Any]:
         or not payload["default_branch"]
         or payload["pull_request"] < 1
     ):
-        raise RuntimeError("Lease evidence has invalid identity fields")
+        raise RuntimeError(
+            "Lease evidence: invalid identity. Reacquire the lease."
+        )
     if set(payload) - {RENEWAL_FIELD} != {
         *LEASE_CORE_FIELDS,
         "capability",
         "lease_commit",
         "audit_url",
     }:
-        raise RuntimeError("Lease evidence contains unexpected fields")
+        raise RuntimeError(
+            "Lease evidence: unexpected fields. Reacquire the lease."
+        )
     if RENEWAL_FIELD in payload and (
         not isinstance(payload[RENEWAL_FIELD], str)
         or SHA.fullmatch(payload[RENEWAL_FIELD]) is None
     ):
-        raise RuntimeError("Lease renewal evidence is invalid")
+        raise RuntimeError(
+            "Lease renewal evidence: invalid. Reacquire the lease."
+        )
     if (
         hashlib.sha256(payload["capability"].encode()).hexdigest()
         != payload["capability_digest"]
     ):
-        raise RuntimeError("Lease capability does not match its remote digest")
+        raise RuntimeError(
+            "Lease capability: remote digest differs. Reacquire the lease."
+        )
     if not all(
         isinstance(commit, str) and SHA.fullmatch(commit)
         for commit in payload["reclaimed_commits"]
     ):
-        raise RuntimeError("Lease reclaim history is invalid")
+        raise RuntimeError(
+            "Lease reclaim history: invalid. Run 'git ls-remote origin "
+            "csarc/leases'."
+        )
     validate_audit_url(payload)
     validate_refs(payload)
     return payload
@@ -748,7 +818,9 @@ def validate_refs(lease: dict[str, Any]) -> None:
         or not all(isinstance(ref, str) for ref in refs)
         or refs != expected
     ):
-        raise RuntimeError("Lease refs are invalid")
+        raise RuntimeError(
+            "Lease refs: invalid. Run 'git ls-remote origin csarc/leases'."
+        )
 
 
 def audit_comment_id(lease: dict[str, Any]) -> str:
@@ -762,7 +834,9 @@ def audit_comment_id(lease: dict[str, Any]) -> str:
         or parsed.path.casefold() != expected.casefold()
         or match is None
     ):
-        raise RuntimeError("Lease audit URL is invalid")
+        raise RuntimeError(
+            "Lease audit URL: invalid. Run 'git ls-remote origin csarc/leases'."
+        )
     return match.group(1)
 
 
@@ -786,7 +860,10 @@ def validate_audit_comment(lease: dict[str, Any], comment: object) -> None:
         != str(lease["actor"]).casefold()
         or user.get("type") != expected_type
     ):
-        raise RuntimeError("Remote lease audit comment is invalid")
+        raise RuntimeError(
+            "Remote lease audit comment: invalid. Run 'git ls-remote origin "
+            "csarc/leases'."
+        )
 
 
 def lease_core(lease: dict[str, Any]) -> dict[str, object]:
@@ -840,14 +917,12 @@ def require_lease(
         or lease["pull_request"] != pr_number
         or lease["head_sha"] != head_sha
     ):
-        raise RuntimeError("Lease does not match the requested pull request")
+        raise RuntimeError("Lease: not for this pull request. Use its lease.")
     validate_refs(lease)
     if parse_time(lease["expires_at"], "Lease") <= datetime.now(
         UTC
     ) + timedelta(seconds=MIN_OPERATION_SECONDS):
-        raise RuntimeError(
-            "Lease expired; fail closed and inspect it before release"
-        )
+        raise RuntimeError("Lease: expired. Inspect it before release.")
     require_committed_lease(github, lease)
     pull = live_pull(github, repo, pr_number, head_sha)
     repository = github.get(repo, "")
@@ -860,10 +935,10 @@ def require_lease(
         or lease["refs"] != lease_refs(pull, lease["default_branch"])
     ):
         raise RuntimeError(
-            "Pull request base or destination lease scope drifted"
+            "Lease scope: base or destination drifted. Reacquire the lease."
         )
     if branch_sha(github, repo, lease["base_ref"]) != lease["base_sha"]:
-        raise RuntimeError("Pull request destination branch advanced")
+        raise RuntimeError("Destination branch: advanced. Update the branch.")
 
 
 def require_committed_lease(github: GitHub, lease: dict[str, Any]) -> None:
@@ -871,17 +946,23 @@ def require_committed_lease(github: GitHub, lease: dict[str, Any]) -> None:
     capability = str(lease.get("capability", ""))
     digest = hashlib.sha256(capability.encode()).hexdigest()
     if not secrets.compare_digest(digest, str(lease["capability_digest"])):
-        raise RuntimeError("Lease capability is invalid")
+        raise RuntimeError("Lease capability: invalid. Reacquire the lease.")
     refs = lease["refs"]
     for ref in refs:
         if remote_ref(ref) != lease["lease_commit"]:
-            raise RuntimeError(f"Lease ownership changed or is missing: {ref}")
+            raise RuntimeError(
+                f"Lease ownership {ref}: changed or missing. Run 'git "
+                "ls-remote origin csarc/leases'."
+            )
     repo = lease["repository"]
     head_sha = lease["head_sha"]
     lease_commit = github.get(repo, f"git/commits/{lease['lease_commit']}")
     head_commit = github.get(repo, f"git/commits/{head_sha}")
     if not isinstance(lease_commit, dict) or not isinstance(head_commit, dict):
-        raise RuntimeError("Remote lease commit metadata is unavailable")
+        raise RuntimeError(
+            "Remote lease commit: metadata unavailable. Run 'gh auth status' "
+            "and rerun."
+        )
     parents = lease_commit.get("parents")
     tree = lease_commit.get("tree") or {}
     head_tree = head_commit.get("tree") or {}
@@ -895,7 +976,8 @@ def require_committed_lease(github: GitHub, lease: dict[str, Any]) -> None:
         or head_tree.get("sha") != lease["head_tree"]
     ):
         raise RuntimeError(
-            "Remote lease commit does not match canonical evidence"
+            "Remote lease commit: not canonical. Run 'git ls-remote origin "
+            "csarc/leases'."
         )
     comment_id = audit_comment_id(lease)
     comment = github.get(repo, f"issues/comments/{comment_id}")
@@ -907,10 +989,12 @@ def require_caller(
 ) -> None:
     """Require the task owner and actor that acquired the lease."""
     if lease["owner"] != owner:
-        raise RuntimeError("Task owner does not hold this lifecycle lease")
+        raise RuntimeError(
+            "Lifecycle lease: held by another owner. Use your lease."
+        )
     if str(lease["actor"]).casefold() != github.viewer(actor).casefold():
         raise RuntimeError(
-            "Authenticated GitHub actor changed after lease acquisition"
+            "GitHub actor: changed after the lease. Reacquire the lease."
         )
 
 
@@ -930,7 +1014,9 @@ def confirm_refs(lease: dict[str, Any]) -> None:
     """CAS every lease ref immediately before the merge mutation."""
     validate_refs(lease)
     if parse_time(lease["expires_at"], "Lease") <= datetime.now(UTC):
-        raise RuntimeError("Lease expired before the merge mutation")
+        raise RuntimeError(
+            "Lease: expired before the merge. Reacquire the lease."
+        )
     commit = lease["lease_commit"]
     refs = lease["refs"]
     command = ["git", "push", "--atomic", "--porcelain"]
@@ -962,7 +1048,9 @@ def expired_remote_lease(
     """Validate one canonical expired lease before an atomic reclaim."""
     core = canonical_remote_lease(github, repo, commit_sha, held_ref)
     if parse_time(core["expires_at"], "Existing lease") > datetime.now(UTC):
-        raise RuntimeError("Another owner already holds the PR lifecycle lease")
+        raise RuntimeError(
+            "PR lifecycle lease: held by another owner. Wait for its release."
+        )
     return core
 
 
@@ -972,15 +1060,24 @@ def canonical_remote_lease(
     """Validate one remote lease commit's canonical message, parent, tree."""
     payload = github.get(repo, f"git/commits/{commit_sha}")
     if not isinstance(payload, dict) or payload.get("sha") != commit_sha:
-        raise RuntimeError("Existing lease commit is unavailable")
+        raise RuntimeError(
+            "Existing lease commit: unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     message = payload.get("message")
     if not isinstance(message, str) or "\n\n" not in message:
-        raise RuntimeError("Existing lease commit is not canonical")
+        raise RuntimeError(
+            "Existing lease commit: not canonical. Run 'git ls-remote origin "
+            "csarc/leases'."
+        )
     _, encoded = message.split("\n\n", 1)
     try:
         core = json.loads(encoded)
     except json.JSONDecodeError as error:
-        raise RuntimeError("Existing lease commit is not canonical") from error
+        raise RuntimeError(
+            "Existing lease commit: not canonical. Run 'git ls-remote origin "
+            "csarc/leases'."
+        ) from error
     if (
         not isinstance(core, dict)
         or set(core) - {RENEWAL_FIELD} != set(LEASE_CORE_FIELDS)
@@ -1007,16 +1104,25 @@ def canonical_remote_lease(
         or SHA256.fullmatch(str(core.get("capability_digest", ""))) is None
         or payload.get("message") != lease_message(core)
     ):
-        raise RuntimeError("Existing lease commit is not canonical")
+        raise RuntimeError(
+            "Existing lease commit: not canonical. Run 'git ls-remote origin "
+            "csarc/leases'."
+        )
     try:
         validate_refs(core)
         acquired_at = parse_time(core.get("acquired_at"), "Existing lease")
         expires_at = parse_time(core.get("expires_at"), "Existing lease")
     except (KeyError, RuntimeError) as error:
-        raise RuntimeError("Existing lease commit is not canonical") from error
+        raise RuntimeError(
+            "Existing lease commit: not canonical. Run 'git ls-remote origin "
+            "csarc/leases'."
+        ) from error
     ttl = (expires_at - acquired_at).total_seconds()
     if not 60 <= ttl <= MAX_TTL_SECONDS:
-        raise RuntimeError("Existing lease commit is not canonical")
+        raise RuntimeError(
+            "Existing lease commit: not canonical. Run 'git ls-remote origin "
+            "csarc/leases'."
+        )
     parents = payload.get("parents")
     tree = payload.get("tree") or {}
     head = github.get(repo, f"git/commits/{core['head_sha']}")
@@ -1028,7 +1134,10 @@ def canonical_remote_lease(
         or not isinstance(head, dict)
         or (head.get("tree") or {}).get("sha") != core["head_tree"]
     ):
-        raise RuntimeError("Existing lease commit parent or tree is invalid")
+        raise RuntimeError(
+            "Existing lease commit: invalid parent or tree. Run 'git ls-remote "
+            "origin csarc/leases'."
+        )
     return core
 
 
@@ -1048,16 +1157,7 @@ RENEWAL_IDENTITY_FIELDS = (
 
 
 def authorization_anchor(github: GitHub, lease: dict[str, Any]) -> datetime:
-    """Return the earliest time an exact-head authorization may carry.
-
-    An ordinary lease anchors at its own `acquired_at`. An explicit renewal
-    (Issue #1017) walks its `renews` chain and anchors at the first lease,
-    but only while every predecessor is a canonical remote lease commit with
-    the identical repository, PR, head, base, owner, actor, and capability
-    digest, and was still live when its successor replaced it. A released,
-    expired, or differently owned lease breaks the chain, so an
-    authorization posted before every lease on this exact head never counts.
-    """
+    """Return the earliest time an exact-head authorization may carry."""
     anchor = parse_time(lease["acquired_at"], "Lease")
     current: dict[str, Any] = lease
     for _ in range(MAX_RENEWAL_CHAIN):
@@ -1075,33 +1175,24 @@ def authorization_anchor(github: GitHub, lease: dict[str, Any]) -> datetime:
             for field in RENEWAL_IDENTITY_FIELDS
         ):
             raise RuntimeError(
-                "Lease renewal chain changed head, base, owner, actor, "
-                "or capability"
+                "Lease renewal chain: identity changed. Acquire a fresh lease."
             )
         renewed_at = parse_time(current["acquired_at"], "Lease")
         started_at = parse_time(predecessor["acquired_at"], "Renewed lease")
         ended_at = parse_time(predecessor["expires_at"], "Renewed lease")
         if not started_at < renewed_at <= ended_at:
             raise RuntimeError(
-                "Lease renewal chain is not contiguous; a renewal must "
-                "replace a still-live lease"
+                "Lease renewal chain: not contiguous. Renew a still-live lease."
             )
         anchor = started_at
         current = predecessor
-    raise RuntimeError("Lease renewal chain is too long")
+    raise RuntimeError("Lease renewal chain: too long. Acquire a fresh lease.")
 
 
 def renewable_lease(
     args: argparse.Namespace, github: GitHub
 ) -> dict[str, Any] | None:
-    """Return the still-live lease an explicit `--renew` replaces, if any.
-
-    Renewal (Issue #1017) is only for the caller that already holds the
-    exact lease: same evidence capability, owner, actor, PR, and head, with
-    the remote refs, base, and destination still unchanged and the lease not
-    yet expired. Anything else must release and acquire a fresh lease, which
-    requires a new exact-head authorization.
-    """
+    """Return the still-live lease an explicit `--renew` replaces, if any."""
     path = getattr(args, "renew", None)
     if path is None:
         return None
@@ -1113,8 +1204,8 @@ def renewable_lease(
         )
     except RuntimeError as error:
         raise RuntimeError(
-            f"Lease cannot be renewed ({error}); release it and acquire a "
-            "fresh lease, which requires a new exact-head authorization"
+            f"Lease renewal: failed ({error}). Release it, acquire a fresh "
+            "lease, and reauthorize the exact head."
         ) from error
     return previous
 
@@ -1123,13 +1214,16 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     """Atomically acquire, or explicitly renew, the PR and lane refs."""
     if SHA.fullmatch(args.head_sha) is None:
         raise RuntimeError(
-            "Head SHA must be 40 lowercase hexadecimal characters"
+            "Head SHA: not 40 lowercase hex characters. Pass 'git rev-parse "
+            "HEAD'."
         )
     if OWNER.fullmatch(args.owner) is None:
-        raise RuntimeError("Owner must be a stable task or human identifier")
+        raise RuntimeError(
+            "Owner: not a stable task or human ID. Pass --owner task/<name>."
+        )
     if not 60 <= args.ttl_seconds <= MAX_TTL_SECONDS:
         raise RuntimeError(
-            f"Lease TTL must be between 60 and {MAX_TTL_SECONDS} seconds"
+            f"Lease TTL: out of range. Use 60 to {MAX_TTL_SECONDS} seconds."
         )
     require_origin(args.repo)
     previous = renewable_lease(args, github)
@@ -1138,17 +1232,24 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     if not isinstance(repository, dict) or not isinstance(
         repository.get("default_branch"), str
     ):
-        raise RuntimeError("Repository default branch is unavailable")
+        raise RuntimeError(
+            "Repository: default branch unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     refs = lease_refs(pull, repository["default_branch"])
     base = pull.get("base") or {}
     if (
         not isinstance(base.get("ref"), str)
         or SHA.fullmatch(str(base.get("sha", ""))) is None
     ):
-        raise RuntimeError("Pull request base identity is unavailable")
+        raise RuntimeError(
+            "Pull request: base identity unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     if branch_sha(github, args.repo, base["ref"]) != base["sha"]:
         raise RuntimeError(
-            "Pull request base does not match its destination ref"
+            "Pull request: base differs from its destination ref. Run 'git "
+            "fetch origin'."
         )
     observed = {ref: remote_ref(ref) for ref in refs}
     if previous is not None:
@@ -1156,7 +1257,10 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
             existing != previous["lease_commit"]
             for existing in observed.values()
         ):
-            raise RuntimeError("Lease ownership changed before renewal")
+            raise RuntimeError(
+                "Lease ownership: changed before renewal. Run 'git ls-remote "
+                "origin csarc/leases'."
+            )
     else:
         for ref, existing in observed.items():
             if existing is not None:
@@ -1196,7 +1300,7 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
             core[field] != previous[field] for field in RENEWAL_IDENTITY_FIELDS
         ):
             raise RuntimeError(
-                "Lease renewal cannot change head, base, owner, or actor"
+                "Lease renewal: identity changed. Acquire a fresh lease."
             )
         core[RENEWAL_FIELD] = previous["lease_commit"]
     commit_env = os.environ.copy()
@@ -1214,7 +1318,10 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         env=commit_env,
     )
     if SHA.fullmatch(commit) is None:
-        raise RuntimeError("Git did not create a valid lease commit")
+        raise RuntimeError(
+            "Lease commit: Git created an invalid one. Run 'pr_lifecycle.py "
+            "acquire' again."
+        )
     create_refs(commit, refs, observed)
     evidence = {**core, "capability": capability, "lease_commit": commit}
     try:
@@ -1231,7 +1338,10 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
             or str(audit_user.get("login", "")).casefold()
             != str(evidence["actor"]).casefold()
         ):
-            raise RuntimeError("Lease audit comment has invalid actor or URL")
+            raise RuntimeError(
+                "Lease audit comment: invalid actor or URL. Run 'git ls-remote "
+                "origin csarc/leases'."
+            )
         evidence["audit_url"] = audit_url
         validate_audit_url(evidence)
         validate_audit_comment(evidence, comment)
@@ -1262,8 +1372,8 @@ def warn_prior_authorization(github: GitHub, lease: dict[str, Any]) -> None:
         )
     except RuntimeError as error:
         sys.stderr.write(
-            "PR lifecycle notice: could not check earlier authorizations: "
-            f"{error}\n"
+            f"WARNING: Earlier authorizations: not checked ({error}). "
+            "Check the PR comments by hand.\n"
         )
         return
     if prior is None or parse_time(
@@ -1271,22 +1381,15 @@ def warn_prior_authorization(github: GitHub, lease: dict[str, Any]) -> None:
     ) >= parse_time(lease["acquired_at"], "Lease"):
         return
     sys.stderr.write(
-        "PR lifecycle warning: exact-head authorization "
-        f"{prior.get('html_url') or 'comment'} predates this fresh lease and "
-        "will not be accepted; a new authorization is required. To keep an "
-        "authorization valid, renew a still-live lease with "
-        "`acquire --renew <lease.json>` instead of releasing it.\n"
+        "WARNING: Authorization "
+        f"{prior.get('html_url') or 'comment'}: predates this fresh lease, "
+        "so it is void. Post a new one; next time renew a live lease with "
+        "'acquire --renew <lease.json>'.\n"
     )
 
 
 def live_repository_role(github: GitHub, repo: str, login: str) -> str:
-    """Return the live repository `role_name` of one user, or `unknown`.
-
-    Admin-only paths trust only `role_name` (#1058 decision 6, Issue
-    #1064). The legacy `permission` field is never read: it folds roles
-    together, so it cannot prove an admin. A failed, incomplete, or
-    mismatched response is `unknown` and every admin check fails closed.
-    """
+    """Return the live repository `role_name` of one user, or `unknown`."""
     try:
         permission = github.get(
             repo,
@@ -1309,26 +1412,14 @@ def live_repository_role(github: GitHub, repo: str, login: str) -> str:
 
 
 def is_maintainer(github: GitHub, repo: str, login: str) -> bool:
-    """Return whether a live `role_name` is `maintain` or `admin`.
-
-    #1058 decision 6: the legacy `permission` field folds `maintain` into
-    `write`, so it is never read; a missing role is `unknown` and fails.
-    """
+    """Return whether a live `role_name` is `maintain` or `admin`."""
     return live_repository_role(github, repo, login) in MAINTAINER_PERMISSIONS
 
 
 def authorization(
     github: GitHub, repo: str, pr_number: int, head_sha: str, url: str
 ) -> dict[str, Any]:
-    """Require a maintainer authorization bound to the exact PR head.
-
-    The `collaborators/{login}/permission` lookup below, not the comment's
-    `author_association`, is what proves the author is a maintainer (Issue
-    #785): `author_association` is computed relative to what the querying
-    credential can resolve, and a restricted `GITHUB_TOKEN` reports a real
-    org member as `COLLABORATOR` rather than `MEMBER` -- see #549 for the
-    identical problem, fixed the same way, in `sync_milestone_state.py`.
-    """
+    """Require a maintainer authorization bound to the exact PR head."""
     parsed = urllib.parse.urlparse(url)
     expected_path = f"/{repo}/pull/{pr_number}"
     if (
@@ -1338,12 +1429,15 @@ def authorization(
         or re.fullmatch(r"issuecomment-(\d+)", parsed.fragment) is None
     ):
         raise RuntimeError(
-            "Authorization URL must be a comment on this pull request"
+            "Authorization URL: not a comment on this PR. Fix the URL."
         )
     comment_id = parsed.fragment.removeprefix("issuecomment-")
     payload = github.get(repo, f"issues/comments/{comment_id}")
     if not isinstance(payload, dict):
-        raise RuntimeError("Authorization comment response is invalid")
+        raise RuntimeError(
+            "Authorization comment: invalid response. Run 'gh auth status' and "
+            "rerun."
+        )
     body = payload.get("body")
     user = payload.get("user") or {}
     expected_body = authorization_statement(repo, pr_number, head_sha)
@@ -1356,9 +1450,14 @@ def authorization(
         or user.get("type") != "User"
         or normalized_comment_body(body) != expected_body
     ):
-        raise RuntimeError("Authorization is not an exact maintainer statement")
+        raise RuntimeError(
+            "Authorization: not an exact maintainer statement. Run "
+            "'pr_lifecycle.py authorization-template'."
+        )
     if not is_maintainer(github, repo, user["login"]):
-        raise RuntimeError("Authorization actor lacks maintainer permission")
+        raise RuntimeError(
+            "Authorization actor: no maintainer permission. Ask a maintainer."
+        )
     parse_time(payload.get("created_at"), "Authorization")
     return payload
 
@@ -1371,14 +1470,7 @@ def find_exact_head_authorization(
     *,
     require_admin: bool = False,
 ) -> dict[str, Any] | None:
-    """Return the newest exact-head maintainer authorization, if one exists.
-
-    Unlike `authorization()`, this scans every PR comment so the shared
-    review decision needs no lease or comment URL. It ignores the
-    token-relative `author_association` (#785, #549); a live `role_name` of
-    `admin`/`maintain` proves the author, and `require_admin` accepts only
-    `admin` (Issue #1064).
-    """
+    """Return the newest exact-head maintainer authorization, if one exists."""
     expected_body = authorization_statement(repo, pr_number, head_sha)
     comments = github.pages(repo, f"issues/{pr_number}/comments?per_page=100")
     candidates: list[dict[str, Any]] = []
@@ -1409,12 +1501,7 @@ def find_exact_head_authorization(
 
 
 def normalized_comment_body(body: object) -> str | None:
-    """Return a comment body with web-UI line endings and padding removed.
-
-    GitHub stores a comment pasted through the web UI with CRLF line
-    endings (Issue #991), so the exact statement is compared after
-    normalizing CRLF to LF and stripping surrounding whitespace.
-    """
+    """Return a comment body with web-UI line endings and padding removed."""
     if not isinstance(body, str):
         return None
     return body.replace("\r\n", "\n").strip()
@@ -1447,7 +1534,9 @@ def hotfix_emergency_evidence(  # noqa: C901
         if isinstance(label, dict)
     }
     if "hotfix" not in labels:
-        raise RuntimeError("Emergency self-review is limited to hotfix PRs")
+        raise RuntimeError(
+            "Emergency self-review: hotfix PRs only. Use normal review."
+        )
     issue_numbers = sorted(
         {
             int(value)
@@ -1456,12 +1545,14 @@ def hotfix_emergency_evidence(  # noqa: C901
     )
     if len(issue_numbers) != 1:
         raise RuntimeError(
-            "Emergency hotfix merge requires exactly one closing Issue"
+            "Emergency hotfix: needs one closing Issue. Fix the PR body."
         )
     issue_number = issue_numbers[0]
     issue = github.get(repo, f"issues/{issue_number}")
     if not isinstance(issue, dict) or issue.get("pull_request") is not None:
-        raise RuntimeError("Emergency hotfix work item is not an Issue")
+        raise RuntimeError(
+            "Emergency hotfix work item: not an Issue. Fix the PR body."
+        )
     issue_labels = {
         str(label.get("name") or "").casefold()
         for label in issue.get("labels", [])
@@ -1473,17 +1564,18 @@ def hotfix_emergency_evidence(  # noqa: C901
         or "hotfix" not in issue_labels
     ):
         raise RuntimeError(
-            "Emergency hotfix requires one open, standalone hotfix Issue"
+            "Emergency hotfix: needs one open standalone hotfix Issue. Link it "
+            "in the PR body."
         )
     actor = str((authorization_payload.get("user") or {}).get("login") or "")
     proposer = str((issue.get("user") or {}).get("login") or "")
     if not actor or actor.casefold() != proposer.casefold():
         raise RuntimeError(
-            "Emergency hotfix authorization must come from the Issue proposer"
+            "Emergency hotfix authorization: not the Issue proposer. Ask them."
         )
     if live_repository_role(github, repo, actor) != "admin":
         raise RuntimeError(
-            "Emergency hotfix authorization requires admin permission"
+            "Emergency hotfix authorization: no admin permission. Ask an admin."
         )
     reasons: list[tuple[datetime, str, str]] = []
     for comment in github.pages(
@@ -1515,7 +1607,7 @@ def hotfix_emergency_evidence(  # noqa: C901
             )
     if not reasons:
         raise RuntimeError(
-            "Emergency hotfix requires `Admin-approve: <reason>` on its Issue"
+            "Emergency hotfix Issue: no 'Admin-approve: <reason>'. Add it."
         )
     _, reason, reason_url = max(reasons)
     return {
@@ -1583,11 +1675,14 @@ def ensure_hotfix_post_review(
     problems: list[str] = []
     risk_controls.parse_risks(body, problems)
     if problems or not risk_controls.parse_acs(body, problems):
-        raise RuntimeError("Hotfix post-review risk block is invalid")
+        raise RuntimeError(
+            "Hotfix post-review: invalid risk block. Edit the Issue's "
+            "risk table."
+        )
     created = github.create_issue(repo, title, body, actor)
     url = created.get("html_url")
     if not isinstance(url, str):
-        raise RuntimeError("Hotfix post-review Issue was not created")
+        raise RuntimeError("Hotfix post-review Issue: not created. Create it.")
     return url
 
 
@@ -1601,7 +1696,9 @@ def require_routine_route(  # noqa: C901
     base_ref = (pull.get("base") or {}).get("ref")
     head = pull.get("head")
     if not isinstance(head, dict):
-        raise RuntimeError("Routine pull request head is invalid")
+        raise RuntimeError(
+            "Routine pull request: invalid head. Fix the branch."
+        )
     head_ref = head.get("ref")
     head_repo_payload = head.get("repo")
     head_repo = (
@@ -1611,7 +1708,7 @@ def require_routine_route(  # noqa: C901
     )
     if base_ref == lease["default_branch"]:
         raise RuntimeError(
-            "Routine fallback is forbidden for default-branch routes"
+            "Routine fallback: forbidden on default-branch routes. Use review."
         )
     if (
         not isinstance(base_ref, str)
@@ -1621,7 +1718,8 @@ def require_routine_route(  # noqa: C901
         or head_repo.casefold() != repo.casefold()
     ):
         raise RuntimeError(
-            "Routine fallback requires a same-repository delivery route"
+            "Routine fallback: needs a same-repository delivery route. Push "
+            "the branch here."
         )
     work = ISSUE_WORK_BRANCH.fullmatch(head_ref)
     if work:
@@ -1632,7 +1730,7 @@ def require_routine_route(  # noqa: C901
         ]
         if closing_issues != [issue_number]:
             raise RuntimeError(
-                "Routine work branch must close its matching Issue exactly"
+                "Routine work branch: does not close its Issue. Fix the body."
             )
         issue = github.get(repo, f"issues/{issue_number}")
         if (
@@ -1642,7 +1740,9 @@ def require_routine_route(  # noqa: C901
             or issue.get("pull_request") is not None
             or issue.get("state") != "open"
         ):
-            raise RuntimeError("Routine work branch Issue is not open")
+            raise RuntimeError(
+                "Routine work branch Issue: not open. Reopen it."
+            )
         delivery = DELIVERY_BRANCH.fullmatch(base_ref)
         expected_milestone = int(delivery.group(1)) if delivery else None
         milestone = issue.get("milestone")
@@ -1653,10 +1753,14 @@ def require_routine_route(  # noqa: C901
         ):
             actual_milestone = milestone["number"]
         else:
-            raise RuntimeError("Routine work branch Issue Milestone is invalid")
+            raise RuntimeError(
+                "Routine work branch Issue: invalid Milestone. Set its "
+                "Milestone."
+            )
         if actual_milestone != expected_milestone:
             raise RuntimeError(
-                "Routine work branch Issue Milestone does not match its base"
+                "Routine work Issue: Milestone differs from the base. Retarget "
+                "the PR."
             )
         return "issue"
     main_sha = branch_sha(github, repo, str(lease["default_branch"]))
@@ -1666,8 +1770,8 @@ def require_routine_route(  # noqa: C901
     )
     if head_ref != expected_sync:
         raise RuntimeError(
-            "Routine fallback requires a work branch or the exact "
-            "current-main sync branch"
+            "Routine fallback: needs a work branch or the current-main "
+            "sync branch. Fix the head."
         )
     head_sha = head.get("sha")
     base_sha = (pull.get("base") or {}).get("sha")
@@ -1677,7 +1781,10 @@ def require_routine_route(  # noqa: C901
         or not isinstance(base_sha, str)
         or SHA.fullmatch(base_sha) is None
     ):
-        raise RuntimeError("Routine sync commit identity is invalid")
+        raise RuntimeError(
+            "Routine sync commit: invalid identity. Recreate the sync branch "
+            "from main."
+        )
     comparison = github.get(
         repo,
         f"compare/{urllib.parse.quote(main_sha, safe='')}..."
@@ -1687,9 +1794,11 @@ def require_routine_route(  # noqa: C901
         comparison.get("status") if isinstance(comparison, dict) else None
     )
     if not isinstance(compare_status, str):
-        raise RuntimeError("Routine sync comparison is invalid")
+        raise RuntimeError(
+            "Routine sync: invalid comparison. Run 'gh auth status' and rerun."
+        )
     if not promotion_gate.delivery_sync.includes_main(compare_status):
-        raise RuntimeError("Routine sync head does not contain current main")
+        raise RuntimeError("Routine sync head: lacks current main. Merge main.")
     commit = github.get(repo, f"git/commits/{head_sha}")
     parents = commit.get("parents") if isinstance(commit, dict) else None
     parent_shas = (
@@ -1699,7 +1808,8 @@ def require_routine_route(  # noqa: C901
     )
     if parent_shas != [base_sha, main_sha]:
         raise RuntimeError(
-            "Routine sync head must merge current main into the exact base"
+            "Routine sync head: not main merged into the base. Recreate the "
+            "sync branch from main."
         )
     return "sync"
 
@@ -1710,22 +1820,12 @@ def require_default_branch_issue_route(
     lease: dict[str, Any],
     pull: dict[str, Any],
 ) -> None:
-    """Require a same-repository, Milestone-less Issue route into default.
-
-    Deliberately separate from `require_routine_route`: that function is
-    shared with `require_routine_quota_fallback` (the unrelated Actions
-    quota/billing required-check fallback from #325), and its default-branch
-    prohibition must stay intact for that path -- quota-fallback gaining
-    reach onto `main` would bypass required status checks there, a much
-    larger and unrelated risk. This checks the same "real, open, exactly
-    one Issue" shape `require_routine_route`'s issue branch checks, but a
-    Milestone-tracked Issue must use its `dev/mN` delivery branch instead
-    (`AGENTS.md` working-loop step 8), so this route requires the opposite:
-    no Milestone at all.
-    """
+    """Require a same-repository, Milestone-less Issue route into default."""
     head = pull.get("head")
     if not isinstance(head, dict):
-        raise RuntimeError("Routine pull request head is invalid")
+        raise RuntimeError(
+            "Routine pull request: invalid head. Fix the branch."
+        )
     head_ref = head.get("ref")
     head_repo_payload = head.get("repo")
     head_repo = (
@@ -1738,12 +1838,13 @@ def require_default_branch_issue_route(
         or head_repo.casefold() != repo.casefold()
     ):
         raise RuntimeError(
-            "Default-branch stable route requires a same-repository head"
+            "Stable route: head is in another repository. Push the branch here."
         )
     work = ISSUE_WORK_BRANCH.fullmatch(str(head_ref)) if head_ref else None
     if work is None:
         raise RuntimeError(
-            "Default-branch stable route requires an Issue work branch"
+            "Stable route: head is not an Issue work branch. Use "
+            "type/<Issue>-<slug>."
         )
     issue_number = int(work.group(1))
     closing_issues = [
@@ -1752,7 +1853,7 @@ def require_default_branch_issue_route(
     ]
     if closing_issues != [issue_number]:
         raise RuntimeError(
-            "Default-branch stable route must close its matching Issue exactly"
+            "Stable route: does not close its Issue. Fix the body."
         )
     issue = github.get(repo, f"issues/{issue_number}")
     if (
@@ -1762,11 +1863,9 @@ def require_default_branch_issue_route(
         or issue.get("pull_request") is not None
         or issue.get("state") != "open"
     ):
-        raise RuntimeError("Default-branch stable route Issue is not open")
+        raise RuntimeError("Stable route Issue: not open. Reopen it.")
     if issue.get("milestone") is not None:
-        raise RuntimeError(
-            "Default-branch stable route requires a Milestone-less Issue"
-        )
+        raise RuntimeError("Stable route Issue: has a Milestone. Remove it.")
 
 
 def admin_bypass_opt_in(
@@ -1782,7 +1881,9 @@ def admin_bypass_opt_in(
     if marker_count == 0:
         return False
     if marker_count != 1:
-        raise RuntimeError("Admin bypass marker must appear exactly once")
+        raise RuntimeError(
+            "Admin bypass marker: not exactly once. Fix the body."
+        )
     base_ref = (pull.get("base") or {}).get("ref")
     if base_ref == lease["default_branch"]:
         head = pull.get("head") or {}
@@ -1798,8 +1899,8 @@ def admin_bypass_opt_in(
             head_repo_name = str(head_repo.get("full_name") or "")
             if head_repo_name.casefold() != repo.casefold():
                 raise RuntimeError(
-                    "Admin-bypassed release or promotion requires a "
-                    "same-repository head"
+                    "Admin bypass: release or promotion head is in another "
+                    "repository. Push the branch here."
                 )
             return True
         require_default_branch_issue_route(github, repo, lease, pull)
@@ -1807,7 +1908,7 @@ def admin_bypass_opt_in(
     route = require_routine_route(github, repo, lease, pull)
     if route not in {"issue", "sync"}:
         raise RuntimeError(
-            "Admin bypass is only available for routine Issue or sync routes"
+            "Admin bypass: routine Issue or sync routes only. Use review."
         )
     return True
 
@@ -1868,13 +1969,7 @@ def exact_head_approval(
     head_sha: str,
     actor: str | set[str],
 ) -> dict[str, Any] | None:
-    """Return the newest independent maintainer approval for this head.
-
-    ``actor`` names every account that cannot approve: the author and the
-    head's last pusher (#1211), never the merger by itself.
-    Ignores `author_association` for the same reason `authorization()`
-    does (Issue #785): the live `role_name` is the source of truth.
-    """
+    """Return the newest independent maintainer approval for this head."""
     excluded = {actor} if isinstance(actor, str) else actor
     approved: list[dict[str, Any]] = []
     for login, review in reviews.items():
@@ -1910,11 +2005,7 @@ def effective_protection(
     local_mode: bool = False,
     local_fallback: bool = False,
 ) -> tuple[str, str, set[tuple[str, int]], bool, bool]:
-    """Prove review and check enforcement for an exact-head merge.
-
-    In local mode an incomplete Ruleset read is `inconclusive` (Issue
-    #1064): it never proves the E1 fallback or any wider shape.
-    """
+    """Prove review and check enforcement for an exact-head merge."""
     result = _effective_protection(
         github,
         repo,
@@ -1939,11 +2030,7 @@ RULES_PLAN_UNSUPPORTED = (
 
 
 def rules_plan_unsupported(error: RuntimeError) -> bool:
-    """Return whether a rules read failed only because the plan lacks it.
-
-    Only GitHub's exact plan-unsupported 403 qualifies; every other 403,
-    404, 5xx, or unrecognized failure stays unknown and fails closed.
-    """
+    """Return whether a rules read failed only because the plan lacks it."""
     return str(error).endswith(f"gh: {RULES_PLAN_UNSUPPORTED}")
 
 
@@ -2299,20 +2386,7 @@ def merge_identity(
     authorization_source: str,
     approver: str = "",
 ) -> tuple[str, str]:
-    """Classify the merge actor; return a refusal reason when it is unfit.
-
-    #1058 decision 27 (Issue #1076) separates the merge actor from the
-    authorizer. On the ordinary Ruleset agent route (an exact-head review
-    or Copilot review authorizes) the actor must hold `write` and neither
-    `maintain` nor `admin`, read from the live `role_name`; anything else,
-    including an unknown role, is refused. A GitHub App actor holds
-    installation permissions, never a repository role. On the admin-bypass
-    and emergency-hotfix routes the actor is the live admin authorizer
-    itself, and the single-writer route runs as the sole maintainer.
-    #1211 revises decision 27: the independent exact-head ``approver`` may
-    merge with `maintain` or `admin` (`approver`), and a multi-writer
-    repository without a Ruleset merges on that approval.
-    """
+    """Classify the merge actor; return a refusal reason when it is unfit."""
     if protection == "single-writer":
         return "sole-maintainer", ""
     if protection == "independent-approval":
@@ -2415,15 +2489,7 @@ def single_writer_eligibility(
     actor: str,
     observed: dict[str, list[str]] | None = None,
 ) -> tuple[str, str]:
-    """Classify the `server_enforcement=none` route (Issue #1076).
-
-    #1058 decisions 10 and 27: only a complete, paginated readback that
-    observes exactly one writer -- the merge actor itself -- is `eligible`.
-    Another writer (a collaborator, a write-capable team member, or a
-    write deploy key) is `multiple-writers`; any failed, malformed, or
-    partial read is `inconclusive`. Both leave a manual merge only.
-    A complete readback fills ``observed`` with every writer (#1233).
-    """
+    """Classify the `server_enforcement=none` route (#1076, #1233)."""
     try:
         repository = github.get(repo, "")
         collaborators = github.pages(
@@ -2468,12 +2534,7 @@ def single_writer_eligibility(
 def single_writer_opt_in(
     github: GitHub, repo: str, actor: str, merger: str, state: str, reason: str
 ) -> tuple[str, str]:
-    """Apply the owner's `single_writer_merger` opt-in (Issue #1233).
-
-    After a complete writer readback, only the configured merger holding a
-    live `write`, `maintain`, or `admin` role is eligible while other
-    writers exist; any other actor or role stays manual-only.
-    """
+    """Apply the owner's `single_writer_merger` opt-in (Issue #1233)."""
     if state not in {"eligible", "multiple-writers"}:
         return state, reason
     refused = state if state == "multiple-writers" else "inconclusive"
@@ -2511,11 +2572,7 @@ def configured_verification_mode() -> str:
 
 
 def trusted_executor_module() -> ModuleType:
-    """Load the base-policy module beside this lifecycle (Issue #1069).
-
-    The import is lazy so commands that never decide a merge keep their
-    small import set.
-    """
+    """Load the base-policy module beside this lifecycle (Issue #1069)."""
     if __package__ in {None, ""}:
         return importlib.import_module("trusted_executor")
     return importlib.import_module(f"{__package__}.trusted_executor")
@@ -2527,13 +2584,7 @@ def subject_repository_root() -> Path:
 
 
 def run_from_trusted_base(args: argparse.Namespace) -> int | None:
-    """Re-execute a merge decision from the lease's trusted base commit.
-
-    Issue #1069: the gate, router, config reader, and entry point that
-    decide a local merge come from the lease-bound base commit, never from
-    the candidate checkout. The current process only bootstraps that base;
-    a process already running from it (marked by the environment) proceeds.
-    """
+    """Re-execute a merge decision from the lease's trusted base commit."""
     lease = read_lease(args.lease)
     base_sha = str(lease["base_sha"])
     executor = trusted_executor_module()
@@ -2545,10 +2596,10 @@ def run_from_trusted_base(args: argparse.Namespace) -> int | None:
         script = base / entry
         if not script.is_file():
             raise RuntimeError(
-                "The trusted base has no PR lifecycle entry point"
+                "Trusted base: no PR lifecycle entry point. Update the base."
             )
         sys.stdout.write(
-            f"PR lifecycle {args.handler_name} runs from trusted base "
+            f"NOTICE: PR lifecycle {args.handler_name} runs from trusted base "
             f"{base_sha}.\n"
         )
         sys.stdout.flush()
@@ -2601,7 +2652,9 @@ def base_policy_decision(
         check=False,
     )
     if listing.returncode:
-        raise RuntimeError("Cannot list the candidate's changed paths")
+        raise RuntimeError(
+            "Changed paths: cannot list them. Run 'gh auth status' and rerun."
+        )
     base_config = repository_root() / ".csarc/config.yml"
     labels_csv = ",".join(sorted(labels))
     with tempfile.TemporaryDirectory(prefix="csarc-base-policy-") as scratch:
@@ -2630,7 +2683,8 @@ def base_policy_decision(
             )
         except (OSError, ValueError) as error:
             raise RuntimeError(
-                f"The trusted base cannot read the configuration: {error}"
+                f"Trusted base: cannot read the configuration: {error}. Fix "
+                "'.csarc/config.yml'."
             ) from error
         executor.require_route(decision, labels)
         changed_files = Path(scratch) / "changed-files"
@@ -2731,12 +2785,17 @@ def authenticated_dependabot_commit(
         dependabot_auth.validated_dependabot_snapshot(pull, repo)
     )
     if not eligible or live_base_sha != base_sha or live_head_sha != head_sha:
-        raise RuntimeError(f"Dependabot merge identity is invalid: {reason}")
+        raise RuntimeError(
+            f"Dependabot merge identity: invalid: {reason}. Merge it manually."
+        )
 
     commit = github.get(repo, f"commits/{head_sha}")
     comparison = github.get(repo, f"compare/{base_sha}...{head_sha}")
     if not isinstance(commit, dict) or not isinstance(comparison, dict):
-        raise RuntimeError("Dependabot head metadata is unavailable")
+        raise RuntimeError(
+            "Dependabot head: metadata unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     direct, direct_reason = dependabot_auth.authenticated_dependabot_head(
         pull, commit, repo, base_sha
     )
@@ -2757,7 +2816,9 @@ def authenticated_dependabot_commit(
                 or SHA.fullmatch(parent_sha) is None
             ):
                 raise RuntimeError(
-                    "Dependabot head is not authenticated: " + direct_reason
+                    "Dependabot head: not authenticated: "
+                    + direct_reason
+                    + ". Merge it manually."
                 )
             parent = github.get(repo, f"commits/{parent_sha}")
             current = parent if isinstance(parent, dict) else {}
@@ -2786,8 +2847,8 @@ def authenticated_dependabot_commit(
         )
         if not child:
             raise RuntimeError(
-                "Dependabot head is not authenticated: "
-                f"{direct_reason}; {child_reason}"
+                "Dependabot head: not authenticated: "
+                f"{direct_reason}; {child_reason}. Merge it manually."
             )
         kind = "sync-child"
         commit = chain[1]
@@ -2795,26 +2856,20 @@ def authenticated_dependabot_commit(
 
 
 def dependabot_update_scope(message: str) -> list[str]:
-    """Return the minor/patch update types a signed Dependabot commit states.
-
-    Issue #1076: local mode has no hosted eligibility workflow, so the
-    update scope comes from the GitHub-signed commit's own
-    `updated-dependencies` metadata; a major, unknown, or missing type
-    leaves only a manual merge.
-    """
+    """Return the minor/patch update types a signed Dependabot commit states."""
     _, separator, metadata = message.partition("updated-dependencies:")
     types = DEPENDABOT_UPDATE_TYPE.findall(metadata) if separator else []
     if not types:
         raise RuntimeError(
-            "Dependabot update scope is missing from the signed commit; "
-            "merge it manually"
+            "Dependabot update scope: missing in the signed commit. "
+            "Merge it manually."
         )
     unsupported = sorted(set(types) - LOCAL_DEPENDABOT_UPDATE_TYPES)
     if unsupported:
         raise RuntimeError(
             "Dependabot update scope "
             + ", ".join(unsupported)
-            + " needs a manual review and merge"
+            + ": not automatic. Review and merge it manually."
         )
     return sorted(set(types))
 
@@ -2844,26 +2899,6 @@ def commit_tree_sha(github: GitHub, repo: str, sha: str) -> str | None:
     return tree_sha if isinstance(tree_sha, str) else None
 
 
-def actions_run_url(details_url: str, repo: str) -> str:
-    """Normalize an exact-repository Actions check URL to its run URL."""
-    parsed = urllib.parse.urlparse(details_url)
-    match = re.fullmatch(
-        rf"/{re.escape(repo)}/actions/runs/(\d+)(?:/job/\d+)?",
-        parsed.path,
-    )
-    if (
-        parsed.scheme != "https"
-        or parsed.netloc.casefold() != "github.com"
-        or match is None
-        or parsed.query
-        or parsed.fragment
-    ):
-        raise RuntimeError(
-            "Failed check has no exact-repository Actions run URL"
-        )
-    return f"https://github.com/{repo}/actions/runs/{match.group(1)}"
-
-
 def require_routine_quota_fallback(
     github: GitHub,
     lease: dict[str, Any],
@@ -2873,9 +2908,8 @@ def require_routine_quota_fallback(
 ) -> set[str]:
     """Validate a canonical routine-PR quota note and every bound run."""
     raise RuntimeError(
-        "The Actions quota fallback was retired with actions_fallback "
-        "(SPEC-009); an Actions outage uses the "
-        "governance-switch route with its required checks"
+        "Quota fallback: retired by SPEC-009. Use the "
+        "governance-switch route for an Actions outage."
     )
 
 
@@ -2890,7 +2924,9 @@ def requirement_trace(
         return None
     issue = github.get(repo, f"issues/{numbers[0]}")
     if len(numbers) != 1 or not isinstance(issue, dict):
-        raise RuntimeError("A traced pull request closes exactly one Issue")
+        raise RuntimeError(
+            "Traced pull request: must close one Issue. Fix the body."
+        )
     files = github.pages(repo, f"pulls/{pull['number']}/files?per_page=100")
     keys = ("filename", "previous_filename")
 
@@ -2923,8 +2959,9 @@ def requirement_trace(
         problems += [f"RK31 check did not pass: {n}" for n in names - passed]
     if problems:
         raise RuntimeError(
-            "Requirement trace is incomplete (SPEC-010):\n"
+            "Requirement trace: incomplete (SPEC-010).\n"
             + "\n".join(f"requirement-trace: {line}" for line in problems)
+            + "\nFix each listed item."
         )
     sys.stdout.writelines(f"requirement-trace: {line}\n" for line in notes)
     return trace
@@ -2964,9 +3001,11 @@ def merge_snapshot(  # noqa: C901
             github, repo, pull, str(head_sha), str(lease["base_sha"])
         )
     if pull.get("draft") is not False:
-        raise RuntimeError("Pull request is Draft at merge time")
+        raise RuntimeError("Pull request: Draft at merge time. Mark it ready.")
     if UNCHECKED.search(str(pull.get("body") or "")):
-        raise RuntimeError("Pull request has an unchecked checklist item")
+        raise RuntimeError(
+            "Pull request: unchecked checklist item. Complete it."
+        )
     level_decision = resolve_release_level(github, repo, pull)
     label_names = {
         str(label.get("name") or "").casefold()
@@ -2994,8 +3033,9 @@ def merge_snapshot(  # noqa: C901
     blocker = unresolved_blocker(comments)
     if blocker is not None:
         raise RuntimeError(
-            "An unresolved blocking comment prevents merge: "
+            "Merge blocked by an unresolved comment: "
             + str(blocker.get("html_url") or "unknown URL")
+            + ". Resolve it."
         )
     review_states = current_reviews(reviews)
     blockers = sorted(
@@ -3005,12 +3045,12 @@ def merge_snapshot(  # noqa: C901
     )
     if blockers:
         raise RuntimeError(
-            "Changes are still requested by: " + ", ".join(blockers)
+            "Changes requested: by " + ", ".join(blockers) + ". Resolve them."
         )
     actor = github.viewer(explicit_actor).casefold()
     if actor != str(lease["actor"]).casefold():
         raise RuntimeError(
-            "Authenticated GitHub actor changed after lease acquisition"
+            "GitHub actor: changed after the lease. Reacquire the lease."
         )
     # Issue #1082: the `review` check, `status`, and merge share one
     # decision. A bot-authored Dependabot body cannot carry the marker, so
@@ -3052,8 +3092,8 @@ def merge_snapshot(  # noqa: C901
     elif source == "admin-bypass":
         if not authorization_url:
             raise RuntimeError(
-                "Admin bypass requires an exact maintainer "
-                "authorization comment"
+                "Admin bypass: no exact maintainer authorization comment. "
+                "Post one."
             )
         auth = authorization(
             github, repo, pr_number, head_sha, authorization_url
@@ -3062,22 +3102,25 @@ def merge_snapshot(  # noqa: C901
             auth.get("created_at"), "Authorization"
         ) < authorization_anchor(github, lease):
             raise RuntimeError(
-                "Authorization predates the active lifecycle lease; renew a "
-                "live lease with `acquire --renew` to keep an authorization"
+                "Authorization: predates the active lease. Renew a live lease "
+                "with 'acquire --renew' to keep it."
             )
         auth_actor = str((auth.get("user") or {}).get("login") or "")
         if auth_actor.casefold() != actor:
             raise RuntimeError(
-                "Admin-bypass authorization actor must be the merge actor"
+                "Admin bypass: authorizer is not the merge actor. Merge as the "
+                "authorizer."
             )
         if live_repository_role(github, repo, actor) != "admin":
-            raise RuntimeError("Admin bypass requires live admin permission")
+            raise RuntimeError(
+                "Admin bypass: no live admin permission. Ask an admin."
+            )
         authorization_source = "comment"
     else:
         if not authorization_url:
             raise RuntimeError(
-                "Emergency hotfix merge requires an exact-head "
-                "authorization comment"
+                "Emergency hotfix: no exact-head authorization comment. "
+                "Post one."
             )
         auth = authorization(
             github, repo, pr_number, head_sha, authorization_url
@@ -3086,12 +3129,13 @@ def merge_snapshot(  # noqa: C901
             auth.get("created_at"), "Authorization"
         ) < authorization_anchor(github, lease):
             raise RuntimeError(
-                "Emergency hotfix authorization predates the active lease"
+                "Hotfix authorization: predates the lease. Reauthorize."
             )
         auth_actor = str((auth.get("user") or {}).get("login") or "")
         if auth_actor.casefold() != actor:
             raise RuntimeError(
-                "Emergency hotfix authorization actor must be the merge actor"
+                "Emergency hotfix authorization: not the merge actor. Merge as "
+                "the authorizer."
             )
         hotfix_evidence = hotfix_emergency_evidence(github, repo, pull, auth)
         authorization_source = "hotfix-emergency"
@@ -3103,7 +3147,7 @@ def merge_snapshot(  # noqa: C901
         for item in timeline
     ):
         raise RuntimeError(
-            "A newer Draft event invalidated merge authorization"
+            "Merge authorization: a newer Draft event voids it. Reauthorize."
         )
     for issue_number in sorted(
         {
@@ -3114,20 +3158,26 @@ def merge_snapshot(  # noqa: C901
         issue = github.get(repo, f"issues/{issue_number}")
         if not isinstance(issue, dict) or issue.get("pull_request") is not None:
             raise RuntimeError(
-                f"Closing reference #{issue_number} is not an Issue"
+                f"Closing reference #{issue_number}: not an Issue. Edit the PR "
+                "body."
             )
         if UNCHECKED.search(str(issue.get("body") or "")):
             raise RuntimeError(
-                f"Issue #{issue_number} has an unchecked checklist item"
+                f"Issue #{issue_number}: unchecked checklist item. Complete it."
             )
 
     base = pull.get("base") or {}
     base_ref = base.get("ref")
     if not isinstance(base_ref, str):
-        raise RuntimeError("Pull request base branch is unavailable")
+        raise RuntimeError(
+            "Pull request: base branch unavailable. Run 'gh auth status' and "
+            "rerun."
+        )
     title = pull.get("title")
     if not isinstance(title, str) or not title.strip():
-        raise RuntimeError("Pull request title is unavailable")
+        raise RuntimeError(
+            "Pull request: title unavailable. Run 'gh auth status' and rerun."
+        )
     if verification_mode == "local":
         require_local_pull_policy(repo, pull)
     (
@@ -3236,8 +3286,8 @@ def merge_snapshot(  # noqa: C901
     )
     if quota_run_urls and policy["route"] != "ordinary":
         raise RuntimeError(
-            "A governance switch keeps its required checks; quota fallback "
-            "cannot replace them"
+            "Governance switch: quota fallback cannot replace its required "
+            "checks. Run them."
         )
     # The release-channel floor and the trusted path tier both bind local
     # evidence; the stronger one wins (Issue #1069).
@@ -3252,7 +3302,9 @@ def merge_snapshot(  # noqa: C901
     hosted_evidence: dict[str, Any] = {}
     if verification_mode == "local":
         if quota_run_urls:
-            raise RuntimeError("Local verification cannot use quota fallback")
+            raise RuntimeError(
+                "Quota fallback: not for local verification. Run it."
+            )
         local_evidence = local_verification.require(
             head_sha=str(head_sha),
             tree_sha=str(lease["head_tree"]),
@@ -3358,7 +3410,9 @@ def mutate_state(args: argparse.Namespace, github: GitHub) -> None:
     current = bool(pull.get("draft"))
     desired = args.state == "draft"
     if current == desired:
-        raise RuntimeError(f"Pull request is already {args.state}")
+        raise RuntimeError(
+            f"Pull request: already {args.state}. No change needed."
+        )
     if not desired:
         requirement_trace(github, args.repo, pull, args.head_sha, None)
     command = ["gh", "pr", "ready", str(args.pr_number), "--repo", args.repo]
@@ -3369,7 +3423,7 @@ def mutate_state(args: argparse.Namespace, github: GitHub) -> None:
     updated = live_pull(github, args.repo, args.pr_number, args.head_sha)
     if bool(updated.get("draft")) != desired:
         raise RuntimeError(
-            "Pull request Draft state did not change as requested"
+            "Pull request: Draft state did not change. Run 'gh pr view'."
         )
 
 
@@ -3381,7 +3435,7 @@ def read_body_file(body_file: Path | None) -> str | None:
         return body_file.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as error:
         raise RuntimeError(
-            "Pull request body file is not valid UTF-8"
+            "Pull request body file: not UTF-8. Save it as UTF-8."
         ) from error
 
 
@@ -3390,25 +3444,29 @@ def create_draft_pull(  # noqa: C901
 ) -> None:
     """Create one clean, pushed pull request directly in Draft state."""
     if REPOSITORY.fullmatch(args.repo) is None:
-        raise RuntimeError("Repository identity is invalid")
+        raise RuntimeError(
+            "Repository: invalid identity. Pass --repo owner/name."
+        )
     if not args.title.strip() or "\n" in args.title:
-        raise RuntimeError("Pull request title must be one non-empty line")
+        raise RuntimeError(
+            "Pull request title: not one non-empty line. Pass one line."
+        )
     body = read_body_file(args.body_file)
     if body is None or not body.strip():
-        raise RuntimeError("Pull request body must not be empty")
+        raise RuntimeError("Pull request body: empty. Write it.")
     require_origin(args.repo)
     for branch in (args.base, args.head):
         run(["git", "check-ref-format", "--branch", branch])
     current_branch = run(["git", "branch", "--show-current"])
     if current_branch != args.head:
-        raise RuntimeError("Current branch does not match --head")
+        raise RuntimeError("Current branch: differs from --head. Check it out.")
     if run(["git", "status", "--porcelain"]):
-        raise RuntimeError("Pull request creation requires a clean worktree")
+        raise RuntimeError("Worktree: not clean. Commit or stash changes.")
     head_sha = run(["git", "rev-parse", "HEAD"])
     if SHA.fullmatch(head_sha) is None:
-        raise RuntimeError("Current head commit is invalid")
+        raise RuntimeError("Current head commit: invalid. Run 'git log -1'.")
     if branch_sha(github, args.repo, args.head) != head_sha:
-        raise RuntimeError("Remote pull request branch is not at current HEAD")
+        raise RuntimeError("Remote branch: not at current HEAD. Push it.")
     branch_sha(github, args.repo, args.base)
     output = run(
         [
@@ -3435,7 +3493,10 @@ def create_draft_pull(  # noqa: C901
         url,
     )
     if match is None:
-        raise RuntimeError("GitHub did not return a pull request URL")
+        raise RuntimeError(
+            "GitHub: no pull request URL returned. Run 'gh pr list --head "
+            "<branch>'."
+        )
     pull = github.get(args.repo, f"pulls/{int(match.group(1))}")
     head = pull.get("head") if isinstance(pull, dict) else None
     base = pull.get("base") if isinstance(pull, dict) else None
@@ -3453,18 +3514,15 @@ def create_draft_pull(  # noqa: C901
         or not isinstance(base, dict)
         or base.get("ref") != args.base
     ):
-        raise RuntimeError("Created pull request did not match requested Draft")
+        raise RuntimeError(
+            "Created pull request: not Draft. Convert it to Draft."
+        )
+    # message-pattern: allow X1 URL output for callers
     sys.stdout.write(url + "\n")
 
 
 def admin_bypass_marker_body(body: str, present: bool) -> str:
-    """Insert or remove the one exact admin-bypass marker line.
-
-    Issue #1076: the managed entry normalizes near-miss copies (a list
-    bullet or stray whitespace) so the body carries the marker exactly once
-    or not at all; the template's guidance comment is kept and anchors the
-    inserted line.
-    """
+    """Insert or remove the one exact admin-bypass marker line."""
     lines = [
         line
         for line in body.replace("\r\n", "\n").split("\n")
@@ -3497,7 +3555,7 @@ def requested_edit_body(
         return read_body_file(body_file)
     if body_file is not None:
         raise RuntimeError(
-            "Use either --body-file or --admin-bypass-marker, not both"
+            "Options: --body-file and --admin-bypass-marker conflict. Use one."
         )
     return admin_bypass_marker_body(
         str(pull.get("body") or ""), marker == "add"
@@ -3529,13 +3587,15 @@ def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
         )
     ):
         raise RuntimeError(
-            "At least one body, label, or milestone edit is required"
+            "Edit: nothing requested. Give a body, label, or milestone."
         )
     if any(
         "\n" in label or not label
         for label in args.add_label + args.remove_label
     ):
-        raise RuntimeError("Label names must be non-empty single-line values")
+        raise RuntimeError(
+            "Label names: empty or multi-line. Pass one-line names."
+        )
     expected_labels = (labels | set(args.add_label)) - set(args.remove_label)
     command = ["gh", "pr", "edit", str(args.pr_number), "--repo", args.repo]
     if requested_body is not None:
@@ -3569,7 +3629,9 @@ def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
         or not milestone_matches
         or not body_matches
     ):
-        raise RuntimeError("Pull request metadata did not change as requested")
+        raise RuntimeError(
+            "Pull request metadata: did not change. Run 'gh pr view'."
+        )
 
 
 def check(args: argparse.Namespace, github: GitHub) -> None:
@@ -3584,6 +3646,7 @@ def check(args: argparse.Namespace, github: GitHub) -> None:
         getattr(args, "quota_fallback_note_url", ""),
         getattr(args, "require_dependabot_head", False),
     )
+    # message-pattern: allow X1 JSON output
     sys.stdout.write(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
 
 
@@ -3614,7 +3677,9 @@ def revalidate_release_candidate(
     if head_ref.startswith("sync/main-to-"):
         pull = live_pull(github, repo, pr_number, head_sha)
         if require_routine_route(github, repo, lease, pull) != "sync":
-            raise RuntimeError("Release bypass requires a formal sync route")
+            raise RuntimeError(
+                "Release bypass: needs a formal sync route. Use one."
+            )
         return ""
     if promotion is not None:
         source_sha = run(["git", "-C", str(root), "rev-parse", f"{head_sha}^1"])
@@ -3722,11 +3787,9 @@ def require_head_contains_base(
     status = comparison.get("status") if isinstance(comparison, dict) else None
     if status not in {"ahead", "identical"}:
         raise RuntimeError(
-            "The pull request head does not contain the current base "
-            f"{lease['base_sha']} (compare status {status!r}); merge the "
-            "latest base into the branch and obtain fresh evidence: hosted "
-            "`verify` reruns on the new head, local mode reruns "
-            "`verify-fast`"
+            "Pull request head: lacks the base "
+            f"{lease['base_sha']} (compare status {status!r}). Merge the "
+            "base and rerun 'verify' or 'verify-fast'."
         )
 
 
@@ -3742,15 +3805,16 @@ def merge_evidence(
         payload, trust = hosted, "github-hosted"
     else:
         raise RuntimeError(
-            "evidence-missing: no exact-head verification evidence can be "
-            "recorded for this merge"
+            "evidence-missing: no exact-head verification evidence. "
+            "Rerun verification."
         )
     if (
         payload.get("head_sha") != lease["head_sha"]
         or payload.get("tree_sha") != lease["head_tree"]
     ):
         raise RuntimeError(
-            "Verification evidence is not bound to the leased head tree"
+            "Verification evidence: not bound to the leased tree. Rerun "
+            "'verify' on the exact head."
         )
     trace = snapshot.get("requirement_trace")
     if isinstance(trace, dict):
@@ -3758,14 +3822,18 @@ def merge_evidence(
     try:
         return merge_trace.canonical_bytes(payload), trust
     except merge_trace.EvidenceError as error:
-        raise RuntimeError(f"Verification evidence: {error}") from error
+        raise RuntimeError(
+            f"Verification evidence: {error}. Rerun verification."
+        ) from error
 
 
 def comment_id(url: str) -> int:
     """Return the numeric ID of one PR-comment locator."""
     match = merge_trace.COMMENT_LOCATOR.fullmatch(url)
     if match is None:
-        raise RuntimeError("Merge evidence summary URL is invalid")
+        raise RuntimeError(
+            "Merge evidence summary: invalid URL. Delete the marker comment."
+        )
     return int(match.group("comment"))
 
 
@@ -3776,12 +3844,7 @@ def ensure_summary(
     record: dict[str, object],
     data: bytes,
 ) -> str:
-    """Create, or replace in place, the PR's single evidence summary.
-
-    Before the merge the latest attempt replaces the payload of the one
-    marker comment; a summary whose status left `attempt` belongs to a
-    completed merge and is never rewritten.
-    """
+    """Create, or replace in place, the PR's single evidence summary."""
     summaries = [
         comment
         for comment in github.pages(
@@ -3791,8 +3854,8 @@ def ensure_summary(
     ]
     if len(summaries) > 1:
         raise RuntimeError(
-            "More than one merge evidence summary exists on the pull "
-            "request; remove the extra marker comments before merging"
+            "Merge evidence summary: more than one. Remove the extra "
+            "marker comments."
         )
     body = merge_trace.summary_comment(record, data)
     if not summaries:
@@ -3809,8 +3872,8 @@ def ensure_summary(
         current = None
     if current is not None and current.status != "attempt":
         raise RuntimeError(
-            "The merge evidence summary records a completed merge "
-            f"({current.status}) and is immutable"
+            "Merge evidence summary: records a completed merge "
+            f"({current.status}). Do not change it."
         )
     if current is None or current.record != record or current.data != data:
         github.edit_comment(repo, comment_id(url), body)
@@ -3945,15 +4008,15 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     )
     if snapshot["merge_mode"] != "agent":
         permission = str(snapshot.get("merge_permission") or "blocked")
+        step = (
+            "A human maintainer must merge it manually, untraced"
+            if permission == "manual-only"
+            else "Fix the condition before a merge"
+        )
         raise RuntimeError(
             f"Agent merge is {permission}: "
             f"{snapshot.get('protection_reason') or 'protection is unproven'}"
-            + (
-                "; a human maintainer must merge manually and the merge is "
-                "recorded as untraced"
-                if permission == "manual-only"
-                else "; fix the condition before any merge"
-            )
+            f". {step}."
         )
     print_policy_self_test(snapshot)
     candidate_evidence = revalidate_release_candidate(
@@ -3963,6 +4026,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         str(snapshot.get("release_level") or ""),
     )
     if candidate_evidence:
+        # message-pattern: allow X2 release_policy output without change
         sys.stdout.write(candidate_evidence.rstrip() + "\n")
     snapshot = merge_snapshot(
         github,
@@ -3978,8 +4042,8 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     # read it back before merging and bind it to the evidence.
     if commit_tree_sha(github, args.repo, args.head_sha) != lease["head_tree"]:
         raise RuntimeError(
-            "tree-mismatch: the head commit tree differs from the leased "
-            "verified tree"
+            "tree-mismatch: the head tree differs from the verified "
+            "tree. Rerun verification."
         )
     data, trust = merge_evidence(snapshot, lease)
     route = str(snapshot.get("trailer_route") or "issue")
@@ -4000,7 +4064,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     confirm_refs(lease)
     if branch_sha(github, args.repo, lease["base_ref"]) != lease["base_sha"]:
         raise RuntimeError(
-            "Pull request destination branch advanced before merge"
+            "Destination branch: advanced before merge. Update the branch."
         )
     result = github.merge(
         args.repo, args.pr_number, args.head_sha, title, message
@@ -4008,7 +4072,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     merge_sha = result.get("sha")
     if result.get("merged") is not True or not isinstance(merge_sha, str):
         raise RuntimeError(
-            "GitHub did not synchronously merge the pull request"
+            "Merge: GitHub did not merge it synchronously. Check the PR."
         )
     merged = github.get(args.repo, f"pulls/{args.pr_number}")
     merge_commit = github.get(args.repo, f"git/commits/{merge_sha}")
@@ -4026,7 +4090,8 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         != [lease["base_sha"]]
     ):
         raise RuntimeError(
-            "Merged pull request state does not match the response"
+            "Merged pull request: state differs from the response. Run 'gh pr "
+            "view'."
         )
     commit = merge_commit if isinstance(merge_commit, dict) else {}
     merged_tree = (commit.get("tree") or {}).get("sha")
@@ -4058,8 +4123,8 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     )
     if status != "merged":
         raise RuntimeError(
-            f"{status}: merge commit {merge_sha} does not carry the "
-            "verified tree and the computed trailers"
+            f"{status}: merge commit {merge_sha} lacks the verified tree "
+            "or trailers. Run 'git show --stat' on it."
         )
     hotfix_evidence = snapshot.get("hotfix_evidence")
     if isinstance(hotfix_evidence, dict):
@@ -4088,7 +4153,7 @@ def release(args: argparse.Namespace, github: GitHub) -> None:
         lease["repository"].casefold() != args.repo.casefold()
         or lease["pull_request"] != args.pr_number
     ):
-        raise RuntimeError("Lease does not match the requested pull request")
+        raise RuntimeError("Lease: not for this pull request. Use its lease.")
     require_origin(args.repo)
     require_committed_lease(github, lease)
     release_refs(lease)
@@ -4109,7 +4174,7 @@ def issue_body_arguments(body_file: Path | None) -> list[str]:
     if body_file is None:
         return []
     if not body_file.is_file():
-        raise RuntimeError("Issue body file does not exist")
+        raise RuntimeError("Issue body file: missing. Create it.")
     return ["--body-file", str(body_file)]
 
 
@@ -4122,12 +4187,14 @@ def edit_standalone_issue(args: argparse.Namespace, github: GitHub) -> None:
         *([args.issue_type] if args.issue_type else []),
     ]
     if REPOSITORY.fullmatch(args.repo) is None or args.issue_number < 1:
-        raise RuntimeError("Issue identity is invalid")
+        raise RuntimeError(
+            "Issue: invalid identity. Pass a positive Issue number."
+        )
     if (not values and not args.remove_type and args.body_file is None) or any(
         not value or "\n" in value for value in values
     ):
         raise RuntimeError(
-            "Issue metadata must use non-empty single-line values"
+            "Issue metadata: empty or multi-line. Pass one-line values."
         )
     issue = github.get(args.repo, f"issues/{args.issue_number}")
     if (
@@ -4135,7 +4202,7 @@ def edit_standalone_issue(args: argparse.Namespace, github: GitHub) -> None:
         or issue.get("number") != args.issue_number
         or issue.get("pull_request") is not None
     ):
-        raise RuntimeError("Target must be a standalone Issue")
+        raise RuntimeError("Target: not a standalone Issue. Choose one.")
     command = [
         "gh",
         "issue",
@@ -4156,132 +4223,6 @@ def edit_standalone_issue(args: argparse.Namespace, github: GitHub) -> None:
     elif args.remove_type:
         command.append("--remove-type")
     run(command)
-
-
-def work_closure_message(binding: dict[str, object]) -> str:
-    """Return exact, replay-safe evidence for one work Issue closure."""
-    return f"{WORK_CLOSURE_MARKER}\n\n`{canonical_json(binding)}`"
-
-
-def close_work_issue(  # noqa: C901
-    args: argparse.Namespace, github: GitHub
-) -> None:
-    """Close one Issue only after its exact work PR reaches its dev branch."""
-    if (
-        REPOSITORY.fullmatch(args.repo) is None
-        or args.pr_number < 1
-        or SHA.fullmatch(args.head_sha) is None
-    ):
-        raise RuntimeError("Work Issue closure input is invalid")
-    repository = github.get(args.repo, "")
-    pull = github.get(args.repo, f"pulls/{args.pr_number}")
-    if not isinstance(repository, dict) or not isinstance(pull, dict):
-        raise RuntimeError("Work Issue closure state is unavailable")
-    head = pull.get("head") or {}
-    base = pull.get("base") or {}
-    head_repo = head.get("repo") or {} if isinstance(head, dict) else {}
-    merge_sha = pull.get("merge_commit_sha")
-    if (
-        pull.get("number") != args.pr_number
-        or pull.get("state") != "closed"
-        or pull.get("merged") is not True
-        or not isinstance(pull.get("merged_at"), str)
-        or not isinstance(head, dict)
-        or head.get("sha") != args.head_sha
-        or not isinstance(head_repo, dict)
-        or str(head_repo.get("full_name", "")).casefold()
-        != args.repo.casefold()
-        or not isinstance(base, dict)
-        or not isinstance(merge_sha, str)
-        or SHA.fullmatch(merge_sha) is None
-    ):
-        raise RuntimeError(
-            "Merged pull request identity or head SHA is invalid"
-        )
-    parse_time(pull["merged_at"], "Pull request merge")
-    default_branch = repository.get("default_branch")
-    base_ref = base.get("ref")
-    head_ref = head.get("ref")
-    if not isinstance(default_branch, str) or not isinstance(base_ref, str):
-        raise RuntimeError("Pull request destination is unavailable")
-    if base_ref == default_branch:
-        sys.stdout.write(
-            f"PR #{args.pr_number}: default-branch closing remains "
-            "GitHub-native\n"
-        )
-        return
-    delivery = DELIVERY_BRANCH.fullmatch(base_ref)
-    work = ISSUE_WORK_BRANCH.fullmatch(str(head_ref or ""))
-    if delivery is None or work is None:
-        raise RuntimeError("Merged pull request is not a Milestone work route")
-    issue_number = int(work.group(1))
-    closing_issues = [
-        int(value)
-        for value in CLOSING_ISSUE.findall(str(pull.get("body") or ""))
-    ]
-    if closing_issues != [issue_number]:
-        raise RuntimeError(
-            "Work pull request must close its matching Issue exactly"
-        )
-    issue = github.get(args.repo, f"issues/{issue_number}")
-    if (
-        not isinstance(issue, dict)
-        or issue.get("number") != issue_number
-        or issue.get("pull_request") is not None
-    ):
-        raise RuntimeError("Work Issue identity is invalid")
-    expected_milestone = int(delivery.group(1))
-    issue_milestone = issue.get("milestone") or {}
-    pull_milestone = pull.get("milestone") or {}
-    if (
-        not isinstance(issue_milestone, dict)
-        or not isinstance(pull_milestone, dict)
-        or issue_milestone.get("number") != expected_milestone
-        or pull_milestone.get("number") != expected_milestone
-    ):
-        raise RuntimeError("Work Issue, pull request, and dev branch disagree")
-    binding: dict[str, object] = {
-        "base_ref": base_ref,
-        "head_sha": args.head_sha,
-        "issue": issue_number,
-        "merge_commit_sha": merge_sha,
-        "pull_request": args.pr_number,
-        "repository": args.repo,
-        "schema_version": 1,
-    }
-    message = work_closure_message(binding)
-    comments = github.pages(args.repo, f"issues/{issue_number}/comments")
-    evidence = [
-        str(comment.get("body") or "")
-        for comment in comments
-        if str(comment.get("body") or "").startswith(WORK_CLOSURE_MARKER)
-    ]
-    if len(evidence) > 1 or (evidence and evidence != [message]):
-        raise RuntimeError("Work Issue has conflicting closure evidence")
-    state = issue.get("state")
-    if state == "closed":
-        if issue.get("state_reason") != "completed" or evidence != [message]:
-            raise RuntimeError(
-                "Work Issue was closed without matching evidence"
-            )
-        sys.stdout.write(
-            f"Issue #{issue_number}: already closed by PR #{args.pr_number}\n"
-        )
-        return
-    if state != "open":
-        raise RuntimeError("Work Issue state is invalid")
-    if not evidence:
-        github.comment(args.repo, issue_number, message)
-    result = github.close_issue(args.repo, issue_number)
-    if (
-        result.get("number") != issue_number
-        or result.get("state") != "closed"
-        or result.get("state_reason") != "completed"
-    ):
-        raise RuntimeError("GitHub did not confirm completed Issue closure")
-    sys.stdout.write(
-        f"Issue #{issue_number}: closed by merged PR #{args.pr_number}\n"
-    )
 
 
 def compact_tokens(text: str) -> str:
@@ -4667,22 +4608,7 @@ def canonical_scanner_helper(root: Path, path: Path) -> bool:
 
 
 def dependabot_auto_merge_exemption(root: Path, path: Path) -> bool:
-    """Trust the two exact dependabot-auto-merge.yml paths (see #602).
-
-    The only unleased write left in this workflow is the major-update
-    `needs-manual-review` label/comment. It never authorizes or performs a
-    merge; minor and patch updates use the separate exact-head workflow and
-    `pr_lifecycle.py` lease. Keeping this narrow exemption avoids taking the
-    shared main-lane lease for a non-merge classification notice.
-
-    This is a positive list, not a pattern relaxation: only these two exact
-    paths are trusted. A different file reusing the same unleased
-    `gh pr edit --add-label` command text is still caught by scan_writers.
-
-    Every scanner exemption must have its own tracking Issue (#602 is this
-    one's), and all exemptions are re-reviewed once the project leaves
-    beta — see .csarc/docs/ci-policy.md's "PR lifecycle single-writer" section.
-    """
+    """Trust the two exact dependabot-auto-merge.yml paths (see #602)."""
     return _trusted_exact_path(
         root,
         path,
@@ -4719,13 +4645,15 @@ def scan_writers(root: Path) -> None:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError as error:
             raise RuntimeError(
-                f"Automation file is not valid UTF-8: {relative}"
+                f"Automation file {relative}: not UTF-8. Save it as UTF-8."
             ) from error
         found = writer_violations(text)
         violations.extend(f"{relative}: {item}" for item in found)
     if violations:
         raise RuntimeError(
-            "Unleased PR lifecycle writer:\n" + "\n".join(violations)
+            "Unleased PR lifecycle writer: found.\n"
+            + "\n".join(violations)
+            + "\nRoute each write through 'pr_lifecycle.py'."
         )
 
 
@@ -4844,7 +4772,7 @@ def main() -> None:
         else:
             release(args, github)
     except (RuntimeError, json.JSONDecodeError) as error:
-        sys.stderr.write(f"PR lifecycle blocked: {error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         raise SystemExit(1) from error
 
 

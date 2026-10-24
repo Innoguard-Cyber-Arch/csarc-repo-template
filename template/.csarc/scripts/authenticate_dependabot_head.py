@@ -234,16 +234,7 @@ def trusted_sync_child_candidate(
     base_repo: str,
     expected_base_sha: str,
 ) -> tuple[bool, str, str, str]:
-    """Recognize a release -> sync -> Dependabot chain for reconstruction.
-
-    Issue #1052: the trusted synchronizer commits the template sync as a
-    release-worthy ``fix(deps)`` commit and then materializes the stable
-    candidate as a release-only commit, so the current head is the release
-    commit, its parent is the sync commit, and its grandparent is the signed
-    Dependabot commit built directly on the trusted base. Metadata only
-    selects this candidate; the workflow still has to reconstruct both trees
-    with trusted base code before anything is authorized.
-    """
+    """Recognize a release -> sync -> Dependabot chain for reconstruction."""
     eligible, reason, base_sha, head_ref, head_sha = (
         validated_dependabot_snapshot(pull_request, base_repo)
     )

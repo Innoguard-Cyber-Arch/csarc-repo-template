@@ -88,4 +88,4 @@ test -e "$unmerged"
 test -e "$detached"
 test -e "$locked"
 
-echo "Worktree cleanup cases passed: 8"
+echo "OK: Worktree cleanup cases passed: 8."

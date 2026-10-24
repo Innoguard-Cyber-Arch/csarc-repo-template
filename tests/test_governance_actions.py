@@ -166,7 +166,7 @@ def test_reviewer_assignment_rejects_invalid_api_data(
     result = run_reviewer_assignment(tmp_path, "not a login")
 
     assert result.returncode == 1
-    assert "Invalid collaborator login" in result.stderr
+    assert "Bad login" in result.stderr
     assert "requested_reviewers" not in (tmp_path / "gh-arguments").read_text(
         encoding="utf-8"
     )

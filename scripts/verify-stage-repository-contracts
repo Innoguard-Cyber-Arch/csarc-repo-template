@@ -2,9 +2,10 @@
 set -Eeuo pipefail
 
 # "Repository contracts" stage of scripts/verify-template.sh: changed-tree
-# hygiene, unresolved Copier/merge conflict markers, secret scanning, and
-# known-vulnerability scanning of dependency lockfiles. Runnable standalone
-# to re-check just this stage without paying for the full run; aggregated
+# hygiene, unresolved Copier/merge conflict markers, secret scanning, script
+# message patterns on changed lines, and known-vulnerability scanning of
+# dependency lockfiles. Runnable standalone to re-check just this stage
+# without paying for the full run; aggregated
 # in order by scripts/verify-template.sh. See docs/ci-policy.md.
 
 control_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -17,4 +18,5 @@ cd "$repo_root"
 verification_step "Changed-tree hygiene" git diff --check
 verification_step "Conflict-marker check" ./scripts/check-update-conflicts
 verification_step "Secret scan" ./scripts/scan-secrets
+verification_step "Message pattern check" ./scripts/check-message-style
 verification_step "Dependency scan" ./scripts/verify-dependencies

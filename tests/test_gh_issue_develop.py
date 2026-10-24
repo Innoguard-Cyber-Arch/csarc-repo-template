@@ -64,7 +64,7 @@ def test_rejects_zero_leading_zero_and_non_numeric(
         script, tmp_path, issue, "--base", "main", "--name", "feat/1-short-slug"
     )
     assert result.returncode == 1
-    assert "provide an Issue number or GitHub Issue URL" in result.stderr
+    assert "Pass an Issue number or URL" in result.stderr
     assert not (tmp_path / "gh.log").exists()
 
 

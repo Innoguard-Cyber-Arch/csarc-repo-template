@@ -72,6 +72,6 @@ dirty_out="$(
 dirty_status=$?
 set -e
 [[ "$dirty_status" -eq 2 ]]
-grep -Fq 'announce requires a clean worktree' <<<"$dirty_out"
+grep -Fq 'it requires a clean worktree' <<<"$dirty_out"
 
-echo "Finalization queue cases passed: 6"
+echo "OK: Finalization queue cases passed: 6."

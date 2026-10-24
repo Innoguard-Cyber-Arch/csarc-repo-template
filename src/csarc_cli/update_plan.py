@@ -184,9 +184,11 @@ def require_stable_old_inputs(
     if set(first) != set(second):
         changed = sorted(set(first) ^ set(second))
         raise UpdatePlanningError(
-            "The old template asks different questions once unused answers "
-            "are removed (" + ", ".join(changed) + "); its baseline cannot "
-            "be rebuilt from trusted inputs. The target was not changed."
+            "Old template baseline cannot be rebuilt: it asks different "
+            "questions once unused answers are removed ("
+            + ", ".join(changed)
+            + "). The target was not changed. Pass each listed answer with "
+            "'--data KEY=VALUE', then run 'csarc update --check' again."
         )
 
 

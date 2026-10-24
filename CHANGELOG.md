@@ -7,6 +7,36 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.44.0] - 2026-10-24
+
+### Included prereleases
+
+* v0.41.0-beta.1
+* v0.42.0-beta.1
+* v0.43.0-beta.1
+
+### Features
+
+* feat(scripts): check script message patterns in CI (f9b2b8e)
+* feat(scripts): split hosted-only lifecycle paths out of local renders (096987b)
+* feat(payload): budget generated payload beyond total bytes (4999894)
+* feat(scripts): rewrite script and CLI messages to the writing guide (9549b46)
+* feat(lifecycle): prompt a review of project docs against the writing guide (3ea2c26)
+
+## [0.43.0-beta.1] - 2026-10-24
+
+### Features
+
+* feat(lifecycle): prompt a review of project docs against the writing guide (f3cf2a3)
+
+## [0.42.0-beta.1] - 2026-10-23
+
+### Features
+
+* feat(scripts): split hosted-only lifecycle paths out of local renders (096987b)
+* feat(payload): budget generated payload beyond total bytes (4999894)
+* feat(scripts): run the message check in generated verify and on the CLI (41258b2)
+
 ## [0.41.1] - 2026-10-23
 
 ### Bug Fixes
@@ -24,6 +54,18 @@ CHANGELOG 的 tag。
 ### Bug Fixes
 
 * fix(settings): list the merger in the answers template (bd45f52)
+
+## [0.41.0-beta.1] - 2026-10-23
+
+### Features
+
+* feat(scripts): check script message patterns in CI (8d15865)
+* feat(scripts): judge exception text and allow X5 report blocks (fa4fff8)
+
+### Bug Fixes
+
+* fix(scripts): fall through an unresolvable environment base (787c17c)
+* fix(template): defer generated message check wiring to #1221 (bc942b1)
 
 ## [0.40.0] - 2026-10-23
 

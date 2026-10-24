@@ -158,7 +158,9 @@ def add_scopes(plan: Plan, extra_scopes: set[str]) -> Plan:
     """Add explicitly requested checks without weakening the computed plan."""
     unknown = extra_scopes - VALID_SCOPES
     if unknown:
-        raise ValueError(f"unknown CI scope(s): {', '.join(sorted(unknown))}")
+        raise ValueError(
+            f"Unknown CI scope: {', '.join(sorted(unknown))}. Use VALID_SCOPES."
+        )
     scopes = tuple(sorted(set(plan.scopes) | extra_scopes))
     full = plan.tier == "full"
     return replace(

@@ -39,8 +39,8 @@ def validate_review(body: str, head_sha: str, mode: str) -> str:
     status = fields.get("status", "")
     if status not in PASSING | BLOCKING:
         raise ValueError(
-            "Documentation review status must be aligned, drift, "
-            "not-applicable, or inconclusive."
+            "Documentation review status is invalid: it must be aligned, "
+            "drift, not-applicable, or inconclusive. Edit the PR body."
         )
     reviewed_head = fields.get("reviewed_head", "").casefold()
     if (
@@ -48,19 +48,21 @@ def validate_review(body: str, head_sha: str, mode: str) -> str:
         or reviewed_head != head_sha.casefold()
     ):
         raise ValueError(
-            "Documentation review must name the exact 40-character PR head."
+            "Documentation review head is wrong: not the exact 40-character "
+            "PR head. Set 'Reviewed head' to it."
         )
     reason = fields.get("reason", "")
     if status == "not-applicable" and (
         not reason or reason.casefold().startswith(("replace", "todo", "tbd"))
     ):
         raise ValueError(
-            "A not-applicable documentation review needs a concrete reason."
+            "Documentation review is incomplete: no concrete reason. "
+            "Fill 'Reason'."
         )
     if status in BLOCKING:
         raise ValueError(
-            f"Documentation review is {status}; update the project content "
-            "or resolve the uncertainty before release."
+            f"Documentation review is {status}: release is blocked. Fix the "
+            "content or the doubt."
         )
     return f"Documentation review is {status} for {reviewed_head}."
 
@@ -78,9 +80,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         message = validate_review(args.body, args.head, args.mode)
-        sys.stdout.write(message + "\n")
+        if args.mode == "off":
+            sys.stdout.write(f"NOTICE: {message}\n")
+        else:
+            sys.stdout.write(f"OK: {message}\n")
     except ValueError as error:
-        sys.stderr.write(f"{error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         return 1
     return 0
 

@@ -12,7 +12,7 @@ verification_subject_root() {
   local subject="${CSARC_VERIFICATION_SUBJECT_ROOT:-$control_root}"
 
   if [[ "$subject" != /* || ! -d "$subject" ]]; then
-    printf 'CSARC_VERIFICATION_SUBJECT_ROOT must be an existing absolute directory: %s\n' \
+    printf "ERROR: 'CSARC_VERIFICATION_SUBJECT_ROOT' is invalid: it must be an existing absolute directory, not '%s'. Set it to such a directory.\n" \
       "$subject" >&2
     return 2
   fi
@@ -39,7 +39,7 @@ verification_step() {
   local command
 
   if [[ ! "$heartbeat_seconds" =~ ^[1-9][0-9]*$ ]]; then
-    echo "CSARC_VERIFICATION_HEARTBEAT_SECONDS must be a positive integer." >&2
+    echo "ERROR: Bad heartbeat: not a positive integer. Fix CSARC_VERIFICATION_HEARTBEAT_SECONDS." >&2
     return 2
   fi
 

@@ -45,6 +45,7 @@ FORWARDED: dict[str, frozenset[str]] = {
     "authenticate_dependabot_head.py": frozenset({"main"}),
     "pr_lifecycle.py": frozenset(
         {
+            "close_work_issue",
             "declared_required_contexts",
             "require_successful_checks",
             "require_trusted_dependabot_head",
@@ -270,3 +271,37 @@ def test_adr_payload_rules_match_copier() -> None:
         if match and match.group(2).startswith((".csarc/", ".github/")):
             rendered[match.group(2)] = match.group(1)
     assert documented == rendered
+
+
+def paired_copies() -> set[str]:
+    """Return generated scripts kept byte-identical to a root copy."""
+    pairs = (ROOT / "scripts/sync-paired-files.sh").read_text(encoding="utf-8")
+    return set(re.findall(r'\|template/\.csarc/scripts/([^"]+)"', pairs))
+
+
+def test_generated_python_keeps_summary_docstrings() -> None:
+    """Generated copies keep one-line def and class docstrings (#1227).
+
+    The root module keeps the full explanation once; a generated copy that
+    is not byte-paired with root ships only each summary line, so the same
+    text is not paid for again in every project's payload.
+    """
+    paired = paired_copies()
+    assert paired, "no paired copies found"
+    long_docstrings = []
+    for path in sorted(GENERATED.iterdir()):
+        if not path.is_file() or path.name in paired:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if path.suffix != ".py" and not text.startswith(
+            "#!/usr/bin/env python"
+        ):
+            continue
+        for node in ast.walk(ast.parse(text)):
+            if isinstance(
+                node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+            ):
+                docstring = ast.get_docstring(node)
+                if docstring and "\n" in docstring.strip():
+                    long_docstrings.append(f"{path.name}:{node.lineno}")
+    assert long_docstrings == []

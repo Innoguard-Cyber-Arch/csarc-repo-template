@@ -109,9 +109,8 @@ class SettingsError(ValueError):
 def settings_error(path: Path, detail: str) -> SettingsError:
     """Return one stable fail-closed error that names the recovery path."""
     return SettingsError(
-        f"{SETTINGS_ERROR_PREFIX}: {detail} in {path}. Settings change only "
-        f"through `{MIGRATION_COMMAND} --data KEY=VALUE`; restore a hand "
-        f"edit with `git checkout -- {CONFIG_FILE}` first."
+        f"{SETTINGS_ERROR_PREFIX}: {detail} in {path}. Run 'git checkout "
+        f"-- {CONFIG_FILE}', then '{MIGRATION_COMMAND} --data KEY=VALUE'."
     )
 
 
@@ -145,22 +144,29 @@ def parse_settings_text(text: str, path: Path) -> dict[str, object]:
             continue
         if raw_line.startswith("- "):
             if active_key is None:
-                raise ValueError(f"Unexpected list item in {path}: {raw_line}")
+                raise ValueError(
+                    f"Bad item in {path}: '{raw_line}'. Put it under 'key:'."
+                )
             active_list = result[active_key]
             if not isinstance(active_list, list):
-                raise ValueError(f"Unexpected list item in {path}: {raw_line}")
+                raise ValueError(
+                    f"Bad item in {path}: '{raw_line}'. Put it under 'key:'."
+                )
             active_list.append(_scalar(raw_line[2:].strip()))
             continue
         if raw_line[0].isspace():
             if active_key is None or not isinstance(result[active_key], str):
                 raise ValueError(
-                    f"Unexpected indentation in {path}: {raw_line}"
+                    f"Bad indentation in {path}: '{raw_line}'. "
+                    "Unindent the line."
                 )
             result[active_key] = f"{result[active_key]} {raw_line.strip()}"
             continue
         key, separator, raw_value = raw_line.partition(":")
         if not separator or not key:
-            raise ValueError(f"Invalid setting in {path}: {raw_line}")
+            raise ValueError(
+                f"Bad setting in {path}: '{raw_line}'. Use 'key: value'."
+            )
         raw_value = raw_value.strip()
         result[key] = _scalar(raw_value) if raw_value else []
         active_key = key
@@ -171,10 +177,9 @@ def declared_schema(values: dict[str, object], path: Path) -> int:
     """Return the declared schema or fail closed for a legacy file."""
     if SCHEMA_KEY not in values:
         raise SettingsError(
-            f"{SETTINGS_ERROR_PREFIX}: {path} has no {SCHEMA_KEY}; it uses a "
-            f"legacy settings schema. Run `{MIGRATION_COMMAND}` with the "
-            "pinned CLI to migrate it; repository scripts never read legacy "
-            "settings."
+            f"{SETTINGS_ERROR_PREFIX}: {path} has no {SCHEMA_KEY}: it uses a "
+            f"legacy settings schema. Run '{MIGRATION_COMMAND}' with the "
+            "pinned CLI to migrate it."
         )
     schema = values[SCHEMA_KEY]
     if type(schema) is not int or schema != SCHEMA_VERSION:
@@ -293,8 +298,8 @@ def load_config(path: Path = CONFIG_FILE) -> dict[str, object]:
         text = path.read_text(encoding="utf-8")
     except OSError as error:
         raise SettingsError(
-            f"{SETTINGS_ERROR_PREFIX}: cannot read {path} ({error}); run "
-            f"`{MIGRATION_COMMAND}` to restore the managed settings."
+            f"{SETTINGS_ERROR_PREFIX}: cannot read {path}: {error}. Run "
+            f"'{MIGRATION_COMMAND}' to restore the managed settings."
         ) from error
     config = parse_settings_text(text, path)
     validate_config(config, path)
@@ -314,26 +319,24 @@ def resolve_release_ownership(
     if ownership is None:
         raise SettingsError(
             f"{SETTINGS_ERROR_PREFIX}: release_ownership is missing from "
-            f"{path}; run `csarc update --data release_ownership=<"
-            + "|".join(sorted(RELEASE_OWNERSHIPS))
-            + ">` to record the single release writer before any release "
-            "or settings write."
+            f"{path}: no release writer is saved. Run 'csarc update --data "
+            "release_ownership=<" + "|".join(sorted(RELEASE_OWNERSHIPS)) + ">'."
         )
     if not isinstance(ownership, str) or ownership not in RELEASE_OWNERSHIPS:
         raise SettingsError(
             f"{SETTINGS_ERROR_PREFIX}: release_ownership in {path} is "
-            f"{ownership!r}; expected "
+            f"{ownership!r}: expected "
             + ", ".join(sorted(RELEASE_OWNERSHIPS))
-            + "."
+            + ". Fix it with 'csarc update'."
         )
     # project_mode is provenance, not a setting; the CLI passes it when it
     # checks a resolved render context.
     if ownership == "product-owned" and config.get("project_mode") == "new":
         raise SettingsError(
             f"{SETTINGS_ERROR_PREFIX}: release_ownership product-owned "
-            f"contradicts project_mode new in {path}; a new project has no "
-            "product release writer. Run `csarc update --data "
-            "release_ownership=<csarc-owned|verification-only>`."
+            f"contradicts project_mode new in {path}: a new project has no "
+            "product release writer. Run 'csarc update --data "
+            "release_ownership=<csarc-owned|verification-only>'."
         )
     return ownership
 
@@ -456,7 +459,9 @@ def _repository_facts() -> ModuleType:
     path = Path(__file__).with_name("repository_facts.py")
     spec = importlib.util.spec_from_file_location("repository_facts", path)
     if spec is None or spec.loader is None:
-        raise ImportError(f"cannot load {path}")
+        raise ImportError(
+            f"Cannot load {path}: no spec. Run 'git restore' on it."
+        )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -499,6 +504,7 @@ def main(argv: list[str] | None = None) -> int:
     """Print one configuration value for shell callers."""
     arguments = sys.argv[1:] if argv is None else argv
     if len(arguments) != 1:
+        # message-pattern: allow X3 usage
         sys.stderr.write("Usage: csarc_config.py <key>\n")
         return 2
     key = arguments[0]
@@ -508,20 +514,23 @@ def main(argv: list[str] | None = None) -> int:
             value: object = resolve_release_ownership(config)
         elif key not in INTENT_SETTINGS and key not in DECISION_SETTINGS:
             raise KeyError(
-                f"{key} is not a schema {SCHEMA_VERSION} setting; see "
-                "SPEC-009 for its native source"
+                f"{key} is not a schema {SCHEMA_VERSION} setting: it has "
+                "a native source. Read SPEC-009."
             )
         else:
             value = config.get(key, OPTIONAL_DEFAULTS.get(key))
     except (OSError, KeyError, ValueError) as error:
         message = error.args[0] if isinstance(error, KeyError) else error
-        sys.stderr.write(f"{message}\n")
+        sys.stderr.write(f"ERROR: {message}\n")
         return 1
     if isinstance(value, list):
+        # message-pattern: allow X1 value for shell callers
         sys.stdout.write(",".join(str(item) for item in value) + "\n")
     elif isinstance(value, bool):
+        # message-pattern: allow X1 value for shell callers
         sys.stdout.write(f"{str(value).lower()}\n")
     elif value is not None:
+        # message-pattern: allow X1 value for shell callers
         sys.stdout.write(f"{value}\n")
     return 0
 

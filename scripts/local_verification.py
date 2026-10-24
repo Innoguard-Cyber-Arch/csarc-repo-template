@@ -70,10 +70,14 @@ def normalized_record(evidence: dict[str, Any], trust: str) -> dict[str, Any]:
     validation are identical, and the trust label is kept as given.
     """
     if trust not in {TRUST_LOCAL, TRUST_HOSTED}:
-        raise RuntimeError(f"Unknown verification trust label: {trust}")
+        raise RuntimeError(
+            f"Bad trust label: '{trust}' is unknown. Use 'local' or 'hosted'."
+        )
     declared = evidence.get("trust")
     if declared is not None and declared != trust:
-        raise RuntimeError("Verification evidence trust label does not match")
+        raise RuntimeError(
+            "Bad trust label: evidence differs. Run verify again."
+        )
     base_ref = evidence.get("base_ref", evidence.get("base"))
     base_sha = evidence.get("base_sha")
     scopes = evidence.get("scopes")
@@ -112,15 +116,18 @@ def normalized_record(evidence: dict[str, Any], trust: str) -> dict[str, Any]:
         or not record["command"]
         or not isinstance(record["completed_at"], str)
     ):
-        raise RuntimeError("Verification evidence does not fit the record")
+        raise RuntimeError(
+            "Bad evidence: a field is invalid. Run verify again."
+        )
     try:
         completed_at = datetime.fromisoformat(record["completed_at"])
     except ValueError as error:
         raise RuntimeError(
-            "Verification record completion time is malformed"
+            "Record completion time is malformed: not ISO 8601. "
+            "Run verify again."
         ) from error
     if completed_at.tzinfo is None:
-        raise RuntimeError("Verification record completion time has no zone")
+        raise RuntimeError("Bad completion time: no zone. Run verify again.")
     return record
 
 
@@ -167,7 +174,9 @@ def config_path(root: Path) -> Path:
 def evidence_path(head_sha: str) -> Path:
     """Keep per-commit evidence in Git metadata, outside the worktree."""
     if SHA.fullmatch(head_sha) is None:
-        raise RuntimeError("Local verification commit identity is malformed")
+        raise RuntimeError(
+            "Bad commit identity: not a SHA. Pass a 40-character SHA."
+        )
     common = Path(git("rev-parse", "--git-common-dir"))
     if not common.is_absolute():
         common = repository_root() / common
@@ -219,7 +228,7 @@ def resolve_base(base: str = "") -> tuple[str, str]:
     selected = selected.removeprefix("refs/remotes/origin/")
     selected = selected.removeprefix("origin/")
     if not selected:
-        raise RuntimeError("Local verification base is unavailable")
+        raise RuntimeError("Base is unavailable: none is set. Pass '--base'.")
     for candidate in (
         f"refs/remotes/origin/{selected}",
         f"refs/heads/{selected}",
@@ -237,7 +246,7 @@ def resolve_base(base: str = "") -> tuple[str, str]:
         )
         if result.returncode == 0:
             return selected, result.stdout.strip()
-    raise RuntimeError(f"Local verification base '{selected}' is unavailable")
+    raise RuntimeError(f"Unknown base: '{selected}'. Run 'git fetch'.")
 
 
 def record(
@@ -252,36 +261,43 @@ def record(
     if verification_mode(root) != "local":
         return None
     if tier not in VALID_TIERS:
-        raise RuntimeError(f"Invalid local verification tier: {tier}")
+        raise RuntimeError(f"Tier is invalid: '{tier}'. Use 'fast' or 'full'.")
     normalized_scopes = sorted(set(scopes))
     if not normalized_scopes or any(
         scope not in VALID_SCOPES for scope in normalized_scopes
     ):
-        raise RuntimeError("Invalid local verification scopes")
+        raise RuntimeError("Bad scopes: one is unknown. Fix '--scopes'.")
     if (tier == "full" and normalized_scopes != ["all"]) or (
         tier == "fast" and "all" in normalized_scopes
     ):
-        raise RuntimeError("Local verification tier and scopes disagree")
+        raise RuntimeError(
+            "Local tier and scopes disagree: 'full' needs 'all'. "
+            "Pass '--scopes all' with '--tier full'."
+        )
     if not is_git_repository():
         sys.stdout.write(
-            "Local verification passed; evidence was not recorded because "
+            "NOTICE: Local verification passed; evidence is not recorded: "
             "the candidate has no Git commit.\n"
         )
         return None
     if git("status", "--porcelain"):
         sys.stdout.write(
-            "Local verification passed; evidence was not recorded because "
-            "the worktree is not clean. Commit the exact candidate and run "
-            "the suite once more.\n"
+            "NOTICE: Local verification passed; evidence is not recorded: "
+            "the worktree is not clean. Commit the candidate and run the "
+            "suite again.\n"
         )
         return None
     head_sha = git("rev-parse", "HEAD")
     if expected_head_sha and head_sha != expected_head_sha:
-        raise RuntimeError("HEAD changed while local verification was running")
+        raise RuntimeError(
+            "HEAD changed during verification: stale. Run verify again."
+        )
     tree_sha = git("rev-parse", "HEAD^{tree}")
     base_ref, base_sha = resolve_base(base)
     if expected_base_sha and base_sha != expected_base_sha:
-        raise RuntimeError("Base changed while local verification was running")
+        raise RuntimeError(
+            "Base changed during verification: stale. Run verify again."
+        )
     command_root = (
         ".csarc/scripts"
         if (root / ".csarc/scripts/verify").is_file()
@@ -317,8 +333,8 @@ def record(
     )
     temporary.replace(path)
     sys.stdout.write(
-        "Recorded self-attested local verification for "
-        f"{head_sha} ({tier}; {','.join(normalized_scopes)}).\n"
+        "OK: Recorded self-attested local verification for "
+        f"'{head_sha}' ({tier}; {','.join(normalized_scopes)}).\n"
     )
     return payload
 
@@ -337,20 +353,24 @@ def require(
     # Issue #1075: reject a widened window before reading candidate evidence.
     max_age_hours = evidence_freshness.policy_max_age_hours(max_age_hours)
     if required_tier not in VALID_TIERS:
-        raise RuntimeError("Required local verification tier is invalid")
+        raise RuntimeError("Bad required tier: unknown. Use 'fast' or 'full'.")
     if any(
         SHA.fullmatch(value) is None for value in (head_sha, tree_sha, base_sha)
     ):
-        raise RuntimeError("Local verification commit identity is malformed")
+        raise RuntimeError(
+            "Bad commit identity: not a SHA. Pass a 40-character SHA."
+        )
     path = evidence_path(head_sha)
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise RuntimeError(
-            "Self-attested local verification evidence is unavailable"
+            "Local evidence is unavailable: unreadable. Run verify again."
         ) from error
     if not isinstance(payload, dict) or set(payload) != RECORD_KEYS:
-        raise RuntimeError("Local verification evidence is malformed")
+        raise RuntimeError(
+            "Local evidence is malformed: bad keys. Run verify again."
+        )
     tier = payload.get("tier")
     scopes = payload.get("scopes")
     command = payload.get("command")
@@ -380,7 +400,7 @@ def require(
         or command not in expected_commands.get(str(tier), set())
     ):
         raise RuntimeError(
-            "Local verification evidence does not match the candidate"
+            "Local evidence does not match: wrong candidate. Run verify again."
         )
     evidence_freshness.require_fresh(
         payload["completed_at"],
@@ -392,9 +412,14 @@ def require(
         git("rev-parse", "HEAD") != head_sha
         or git("rev-parse", "HEAD^{tree}") != tree_sha
     ):
-        raise RuntimeError("The current worktree is not the verified candidate")
+        raise RuntimeError(
+            "Bad current worktree: HEAD moved. Run verify on the new HEAD."
+        )
     if git("status", "--porcelain"):
-        raise RuntimeError("Local verification requires a clean worktree")
+        raise RuntimeError(
+            "Worktree is dirty: needs a clean worktree. "
+            "Commit or stash the changes."
+        )
     return payload
 
 
@@ -417,7 +442,7 @@ def main() -> None:
             args.base_sha,
         )
     except (RuntimeError, subprocess.CalledProcessError) as error:
-        sys.stderr.write(f"Local verification evidence blocked: {error}\n")
+        sys.stderr.write(f"ERROR: {error}\n")
         raise SystemExit(1) from error
 
 

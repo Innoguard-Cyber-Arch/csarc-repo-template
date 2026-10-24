@@ -11,7 +11,7 @@ Milestone 18 之前，local merge 會讀 candidate PR 自己的設定與 gate，
 
 已確認的限制：
 
-- `pull_request_target` gate 的 workflow YAML 永遠來自 default branch，delivery branch 上的 gate 變更需要先在 `main` 落地（#1086 因此以 standalone 先於 Milestone 18 完成）。
+- `pull_request_target` gate 的 workflow YAML 永遠來自 default branch，delivery branch 上的 gate 變更需要先在 `main` 生效（#1086 因此以 standalone 先於 Milestone 18 完成）。
 - trusted base 防的是 candidate 改 gate 讓自己通過，不是惡意測試碼的 sandbox；最終仍靠 required checks、唯讀權限與人工審查。
 - 啟動 lifecycle 的入口仍由操作者執行；要完全不經 candidate 程式碼，操作者需從 detached base worktree 執行（步驟見 `docs/ci-policy.md`）。
 

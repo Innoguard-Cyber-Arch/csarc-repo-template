@@ -24,7 +24,7 @@ def run(*arguments: str, cwd: Path) -> str:
     """Run one trusted local build command."""
     executable = shutil.which(arguments[0])
     if executable is None:
-        raise ValueError(f"required executable is unavailable: {arguments[0]}")
+        raise ValueError(f"Missing tool: {arguments[0]}. Install it on PATH.")
     return subprocess.run(  # noqa: S603
         [executable, *arguments[1:]],
         cwd=cwd,
@@ -79,7 +79,9 @@ def annotate_sbom(root: Path, sbom_path: Path, version: str) -> None:
     package_id = "SPDXRef-CSARCProject"
     packages = sbom.setdefault("packages", [])
     if not isinstance(packages, list):
-        raise ValueError("release SBOM packages must be a list")
+        raise ValueError(
+            "Bad SBOM: packages is not a list. Rerun the 'release' workflow."
+        )
     packages[:] = [
         package for package in packages if package.get("SPDXID") != package_id
     ]
@@ -97,14 +99,18 @@ def annotate_sbom(root: Path, sbom_path: Path, version: str) -> None:
     )
     described = sbom.setdefault("documentDescribes", [])
     if not isinstance(described, list):
-        raise ValueError("release SBOM documentDescribes must be a list")
+        raise ValueError(
+            "Bad SBOM: documentDescribes is no list. "
+            "Rerun the 'release' workflow."
+        )
     if package_id not in described:
         described.append(package_id)
     if declared == "LicenseRef-Proprietary":
         extracted = sbom.setdefault("hasExtractedLicensingInfos", [])
         if not isinstance(extracted, list):
             raise ValueError(
-                "release SBOM hasExtractedLicensingInfos must be a list"
+                "Bad SBOM: hasExtractedLicensingInfos is no list. "
+                "Rerun the 'release' workflow."
             )
         extracted[:] = [
             item for item in extracted if item.get("licenseId") != declared
@@ -130,19 +136,21 @@ def identity(root: Path, tag: str) -> tuple[str, str]:
     regex that could drift from it.
     """
     if not tag.startswith("v") or not is_valid_version(tag):
-        raise ValueError(f"invalid release tag: {tag}")
+        raise ValueError(f"invalid release tag: {tag}. Use 'vX.Y.Z'.")
     version = verify_release_version(root, tag.removeprefix("v"))
     commit = run("git", "rev-parse", "HEAD", cwd=root)
     tagged = run("git", "rev-parse", f"{tag}^{{commit}}", cwd=root)
     if tagged != commit:
-        raise ValueError(f"{tag} does not identify the checked-out commit")
+        raise ValueError(f"Wrong commit: {tag} is not HEAD. Check out the tag.")
     return version, commit
 
 
 def build_artifacts(root: Path, output: Path, version: str) -> None:
     """Build source and each detected language-native package."""
     if output == root or root in output.parents:
-        raise ValueError("release output must be outside the repository")
+        raise ValueError(
+            "Bad output: it is in the repo. Pass an '--output' outside it."
+        )
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True)
@@ -153,7 +161,7 @@ def build_artifacts(root: Path, output: Path, version: str) -> None:
     source = output / f"{component}-{version}.tar"
     git = shutil.which("git")
     if git is None:
-        raise ValueError("required executable is unavailable: git")
+        raise ValueError("Missing tool: git. Install Git on PATH.")
     with source.open("wb") as target:
         subprocess.run(  # noqa: S603
             [
@@ -180,7 +188,10 @@ def build_artifacts(root: Path, output: Path, version: str) -> None:
         run("cargo", "package", "--locked", cwd=root)
         crates = sorted((root / "target" / "package").glob("*.crate"))
         if len(crates) != 1:
-            raise ValueError("expected exactly one Rust package")
+            raise ValueError(
+                "Bad Rust workspace: not one package. "
+                "Package one crate at the root."
+            )
         shutil.copy2(crates[0], output / crates[0].name)
 
 
@@ -200,7 +211,10 @@ def finalize(root: Path, output: Path, tag: str) -> None:
     version, commit = identity(root, tag)
     sbom = output / "sbom.spdx.json"
     if not sbom.is_file():
-        raise ValueError("sbom.spdx.json is missing")
+        raise ValueError(
+            "Bundle is incomplete: no sbom.spdx.json. "
+            "Rerun the 'release' workflow."
+        )
     annotate_sbom(root, sbom, version)
     files = sorted(path for path in output.iterdir() if path.is_file())
     evidence = {
@@ -244,21 +258,30 @@ def verify(root: Path, output: Path, tag: str) -> None:
             or not path.is_file()
             or digest(path) != expected
         ):
-            raise ValueError(f"invalid checksum entry: {line}")
+            raise ValueError(
+                f"invalid checksum entry: {line}. Rerun the 'release' workflow."
+            )
         observed.add(name)
     if observed != expected_files:
-        raise ValueError("SHA256SUMS does not cover the exact release bundle")
+        raise ValueError(
+            "Bad SHA256SUMS: bundle not covered. Rerun the 'release' workflow."
+        )
     required = {"release-evidence.json", "sbom.spdx.json"}
     if not required.issubset(observed) or not any(
         name.endswith(".tar") for name in observed
     ):
-        raise ValueError("release bundle is missing required evidence")
+        raise ValueError(
+            "Bundle lacks evidence: a file is missing. "
+            "Rerun the 'release' workflow."
+        )
     sbom = json.loads((output / "sbom.spdx.json").read_text(encoding="utf-8"))
     if (
         sbom.get("spdxVersion") != "SPDX-2.3"
         or sbom.get("SPDXID") != "SPDXRef-DOCUMENT"
     ):
-        raise ValueError("release SBOM is not an SPDX 2.3 document")
+        raise ValueError(
+            "Bad SBOM: not SPDX 2.3. Rerun the 'release' workflow."
+        )
     license_metadata = project_license_metadata(root)
     if license_metadata is not None:
         _, expected_license, _ = license_metadata
@@ -271,7 +294,10 @@ def verify(root: Path, output: Path, tag: str) -> None:
             len(project_packages) != 1
             or project_packages[0].get("licenseDeclared") != expected_license
         ):
-            raise ValueError("release SBOM license does not match config")
+            raise ValueError(
+                "Bad SBOM: wrong license. "
+                "Check the project license, then rerun the 'release' workflow."
+            )
     evidence = json.loads(
         (output / "release-evidence.json").read_text(encoding="utf-8")
     )
@@ -280,7 +306,9 @@ def verify(root: Path, output: Path, tag: str) -> None:
         or evidence.get("version") != version
         or evidence.get("commit") != commit
     ):
-        raise ValueError("release evidence does not match the exact tag")
+        raise ValueError(
+            "Bad evidence: it is for another tag. Rerun the 'release' workflow."
+        )
     bound = evidence.get("artifacts")
     if (
         not isinstance(bound, dict)
@@ -288,7 +316,10 @@ def verify(root: Path, output: Path, tag: str) -> None:
         or any(Path(name).name != name for name in bound)
         or any(digest(output / name) != value for name, value in bound.items())
     ):
-        raise ValueError("release evidence artifact binding is invalid")
+        raise ValueError(
+            "Bad evidence: wrong artifact binding. "
+            "Rerun the 'release' workflow."
+        )
 
 
 def main() -> None:
@@ -308,11 +339,13 @@ def main() -> None:
         if args.action == "candidate":
             candidate(root, args.output.resolve())
         elif args.tag is None:
-            raise ValueError(f"--tag is required for {args.action}")
+            raise ValueError(
+                f"No '--tag': {args.action} needs it. Pass '--tag <tag>'."
+            )
         else:
             globals()[args.action](root, args.output.resolve(), args.tag)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
-        raise SystemExit(str(error)) from error
+        raise SystemExit(f"ERROR: {error}") from error
 
 
 if __name__ == "__main__":

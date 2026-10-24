@@ -72,7 +72,7 @@ class GitHubAPI:
     ) -> None:
         """Create a client restricted to an HTTPS API origin."""
         if urllib.parse.urlparse(base_url).scheme != "https":
-            raise ValueError("GitHub API URL must use HTTPS")
+            raise ValueError("GitHub API URL: not HTTPS. Use HTTPS.")
         self.token = token
         self.base_url = base_url.rstrip("/")
 
@@ -211,9 +211,11 @@ def release_follow_up_errors(  # noqa: C901
         component = package["component"]
         release_type = package.get("release-type", config.get("release-type"))
         if not isinstance(component, str) or not component:
-            raise ValueError("release component is missing")
+            raise ValueError("Release component: missing. Add it.")
         if release_type not in {"simple", "python", "node", "rust"}:
-            raise ValueError("release type is unsupported")
+            raise ValueError(
+                "Release type: unsupported. Edit 'release-please-config.json'."
+            )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
         errors.append(f"release-please configuration is invalid: {error}")
         return errors
@@ -285,12 +287,7 @@ FOOTER_TOKEN = re.compile(r"^[A-Za-z][A-Za-z0-9-]*(?:: | #)")
 
 
 def _breaking_notes(body: str) -> list[str]:
-    """Return the migration text of each BREAKING CHANGE footer in a body.
-
-    A footer continues until a blank line or the next footer token, so a
-    later trailer such as ``Co-Authored-By:`` or a squash ``CSARC-*`` line
-    never becomes migration text (Issue #1104).
-    """
+    """Return the migration text of each BREAKING CHANGE footer in a body."""
     notes: list[str] = []
     current: list[str] | None = None
     for line in [*body.splitlines(), ""]:
@@ -324,20 +321,13 @@ def _main_ref(root: Path) -> str:
 
 
 def project_maturity(root: Path) -> str | None:
-    """Return the ``project_maturity`` declared by current main.
-
-    The trusted base owns the bump rule, so a candidate cannot change its
-    own version policy by editing ``.csarc/config.yml`` (Issue #1085). A
-    main without the file declares no maturity. When main is unavailable
-    but the candidate declares a config, or main's config is unreadable,
-    planning fails closed instead of guessing a default.
-    """
+    """Return the ``project_maturity`` declared by current main."""
     main_ref = _main_ref(root)
     if not main_ref:
         if (root / ".csarc/config.yml").is_file():
             raise ValueError(
-                "cannot determine the authoritative project_maturity: "
-                "origin/main and main are unavailable"
+                "project_maturity: origin/main and main are unavailable. "
+                "Run 'git fetch origin main'."
             )
         return None
     listed = git_output(
@@ -362,11 +352,13 @@ def project_maturity(root: Path) -> str | None:
                 # main without one fails closed (Issue #1071).
                 value = declared.get("project_maturity")
                 if value not in {"early", "formal"}:
-                    raise ValueError("legacy main declares no project_maturity")
+                    raise ValueError(
+                        "Legacy main: no project_maturity. Declare it."
+                    )
     except (subprocess.CalledProcessError, ValueError) as error:
         raise ValueError(
-            "cannot read the authoritative project_maturity from "
-            f"{main_ref}:.csarc/config.yml"
+            "project_maturity: unreadable in "
+            f"{main_ref}:.csarc/config.yml. Fix the file."
         ) from error
     return None if value is None else str(value)
 
@@ -374,27 +366,14 @@ def project_maturity(root: Path) -> str | None:
 def bump_version(
     version: str, messages: list[str], *, maturity: str | None = None
 ) -> str | None:
-    """Calculate the next CORE version from merged Conventional Commits.
-
-    ``version`` may carry a phase suffix (e.g. ``0.16.0-beta.1``); only its
-    ``major.minor.patch`` core is used for the bump arithmetic, and the
-    result is always a bare core version with no suffix -- callers apply
-    the declared phase afterward via ``release_phase.phase_version``.
-
-    While ``maturity`` is ``early`` and the core is still ``0.y.z``, a
-    breaking change advances MINOR to ``0.(y+1).0`` instead of leaving 0.x
-    (Issue #1085). Every other maturity keeps the SemVer MAJOR bump.
-
-    While ``maturity`` is ``formal`` and the core is still ``0.y.z``, any
-    releasable change graduates the line to ``1.0.0`` (Issue #1105). The
-    maturity comes from trusted main, so the PR that switches ``early`` to
-    ``formal`` still plans under ``early``; the first release planned after
-    that switch merges is ``1.0.0`` instead of an invalid formal ``0.x``.
-    """
+    """Calculate the next CORE version from merged Conventional Commits."""
     try:
         parsed = release_phase.parse_version(version)
     except release_phase.ReleasePhaseError as error:
-        raise ValueError(f"invalid semantic version: {version}") from error
+        raise ValueError(
+            f"Semantic version {version}: invalid. Use "
+            "'<major>.<minor>.<patch>'."
+        ) from error
     bump = "no-release"
     for message in messages:
         subject, _, body = message.partition("\n")
@@ -420,17 +399,7 @@ def bump_version(
 def detect_runtime_capabilities(
     api: GitHubAPI, repo: str, sha: str, branch: str
 ) -> dict[str, Capability]:
-    """Probe current workflow-token behavior without creating resources.
-
-    Issue #770 removed the `immutable_releases` pre-flight probe
-    (`GET repos/{repo}/immutable-releases`) that used to run here: it
-    requires repository Administration (read), which the Actions
-    `GITHUB_TOKEN` can never obtain, so it was permanently `blocked` or
-    `unknown` for every hosted run. Whether Immutable Releases was actually
-    enabled is now proven post-hoc, after a Release is published, by
-    .csarc/scripts/publish-release verifying GitHub's own signed release
-    attestation instead of guessing about it here.
-    """
+    """Probe current workflow-token behavior without creating resources."""
     capabilities = unknown_capabilities("probe did not run")
     status, _ = api.request(
         "POST",
@@ -531,7 +500,8 @@ def fetch_all_releases(api: GitHubAPI, repo: str) -> list[dict[str, object]]:
         if not (200 <= status < 300) or not isinstance(payload, list):
             detail = status or "unavailable"
             raise RuntimeError(
-                f"cannot list releases for {repo} (HTTP {detail})"
+                f"Releases of {repo}: cannot list them (HTTP {detail}). Run "
+                "'gh auth status' and rerun."
             )
         if not payload:
             break
@@ -543,12 +513,7 @@ def fetch_all_releases(api: GitHubAPI, repo: str) -> list[dict[str, object]]:
 
 
 def retention_report(api: GitHubAPI, repo: str) -> dict[str, object]:
-    """Build the dry-run keep/delete listing for Issue #744 decision 5.
-
-    Never deletes anything itself -- lists only. Draft Releases are not yet
-    published and are excluded from the listing entirely, not treated as
-    "delete" candidates.
-    """
+    """Build the dry-run keep/delete listing for Issue #744 decision 5."""
     releases = [
         release
         for release in fetch_all_releases(api, repo)
@@ -606,7 +571,7 @@ def git_output(arguments: list[str], root: Path) -> str:
     """Run a read-only Git query."""
     executable = shutil.which("git")
     if executable is None:
-        raise RuntimeError("Git is required for release planning")
+        raise RuntimeError("Git: not found. Install Git for release planning.")
     result = subprocess.run(  # noqa: S603
         [executable, *arguments],
         cwd=root,
@@ -620,14 +585,7 @@ def git_output(arguments: list[str], root: Path) -> str:
 def release_plan(  # noqa: C901
     root: Path, sha: str, *, phase: str | None = None
 ) -> tuple[str, str] | None:
-    """Return the next tag/version, or None when HEAD needs no release.
-
-    ``phase`` is the route-selected release channel (``beta`` or ``stable``)
-    applied to a freshly computed core version. It is never consulted when
-    a tag already exists at ``sha`` or
-    when this commit is already a prepared version-bump candidate -- those
-    paths report the version that was already decided, unsuffixed or not.
-    """
+    """Return the next tag/version, or None when HEAD needs no release."""
     pointed_tags = git_output(["tag", "--points-at", sha], root).splitlines()
     released = release_phase.sort_by_precedence(
         tag for tag in pointed_tags if release_phase.is_valid_version(tag)
@@ -719,8 +677,8 @@ def release_plan(  # noqa: C901
             ]
             if higher_stable_tags:
                 raise ValueError(
-                    "cannot determine the authoritative stable version: "
-                    "origin/main and main are unavailable"
+                    "Stable version: origin/main and main are unavailable. "
+                    "Run 'git fetch origin main'."
                 )
         if main_ref:
             try:
@@ -743,8 +701,7 @@ def release_plan(  # noqa: C901
                 release_phase.ReleasePhaseError,
             ) as error:
                 raise ValueError(
-                    "cannot determine the authoritative stable version "
-                    "from main"
+                    "Stable version: unreadable from main. Fix main."
                 ) from error
             main_tag = f"v{main_version}"
             main_tags = git_output(
@@ -773,8 +730,7 @@ def release_plan(  # noqa: C901
             if stable.is_prerelease or tag_version != main_version:
                 if stable.core > release_phase.parse_version(base_core).core:
                     raise ValueError(
-                        "authoritative main version has no matching reachable "
-                        "stable tag"
+                        "Main version: no reachable stable tag. Fetch tags."
                     )
             elif stable.core > release_phase.parse_version(base_core).core:
                 base_core = stable.core_string()
@@ -797,12 +753,7 @@ def release_plan_report(
     checkpoint_role: str = "none",
     source_sha: str | None = None,
 ) -> dict[str, object]:
-    """Describe the one local release decision without changing the repo.
-
-    A squash merge can hide the reviewed history that owns a materialized
-    version, so selected promotion or Dependabot sources are planned from
-    their exact head, which must carry the same tree (#1027, #1056).
-    """
+    """Describe the one local release decision without changing the repo."""
     if source_sha:
         trees = {
             git_output(["rev-parse", f"{revision}^{{tree}}"], root)
@@ -810,7 +761,8 @@ def release_plan_report(
         }
         if len(trees) != 1:
             raise ValueError(
-                "release source tree does not match the merged commit"
+                "Release source tree: differs from merge. Compare 'git "
+                "rev-parse <merge>^{tree}'."
             )
     planned = release_plan(root, source_sha or sha, phase=phase)
     if planned is None:
@@ -836,7 +788,7 @@ def release_plan_report(
         if checkpoint_role == "deferred":
             if materialized:
                 raise ValueError(
-                    "deferred checkpoint work must not materialize a version"
+                    "Deferred checkpoint work: has a version. Remove it."
                 )
             status = "deferred"
             reason = "checkpoint work defers its release to the terminal Issue"
@@ -853,7 +805,7 @@ def verify_candidate_version(root: Path, base_sha: str) -> tuple[str, str, str]:
     """Recompute the candidate version from its current base commit."""
     executable = shutil.which("git")
     if executable is None:
-        raise RuntimeError("Git is required for release planning")
+        raise RuntimeError("Git: not found. Install Git for release planning.")
     candidate_sha = git_output(["rev-parse", "HEAD"], root)
     source_sha = git_output(["merge-base", candidate_sha, base_sha], root)
     new_base_log = git_output(
@@ -877,9 +829,9 @@ def verify_candidate_version(root: Path, base_sha: str) -> tuple[str, str, str]:
             f"{sha[:12]} {subject}" for sha, subject in release_worthy
         )
         raise ValueError(
-            f"release candidate {candidate_sha} was built from {source_sha}, "
-            f"but current base {base_sha} adds release-worthy commits: "
-            f"{commits}; update the same Release PR and revalidate"
+            f"Release candidate {candidate_sha}: built from {source_sha}, "
+            f"but base {base_sha} adds release-worthy commits: "
+            f"{commits}. Update the same Release PR and revalidate."
         )
     with tempfile.TemporaryDirectory(prefix="csarc-release-base-") as path:
         worktree = Path(path) / "worktree"
@@ -915,7 +867,9 @@ def verify_candidate_version(root: Path, base_sha: str) -> tuple[str, str, str]:
                 text=True,
             )
     if planned is None:
-        raise ValueError("candidate base has no release-worthy commits")
+        raise ValueError(
+            "Candidate base: no release-worthy commits. Do not release."
+        )
     _, expected = planned
     verify_release_version(root, expected)
     return expected, candidate_sha, source_sha
@@ -939,7 +893,7 @@ def _replace_toml_version(
         )
     updated, count = block.subn(rf"\g<1>{version}\g<2>", source, count=1)
     if count != 1:
-        raise ValueError(f"cannot locate governed version in {path.name}")
+        raise ValueError(f"Governed version: not found in {path.name}. Add it.")
     path.write_text(updated, encoding="utf-8")
 
 
@@ -952,19 +906,7 @@ def _pep440_equivalent(version: str) -> str:
 
 
 def _target_version(version: str, relative_path: str) -> str:
-    """Return the version string to write into one governed surface.
-
-    Every surface gets the canonical SemVer string except a Python
-    packaging surface (Issue #744): `pyproject.toml`, `uv.lock`, and the
-    package's own `src/<package_name>/__init__.py` marker. PEP 440 has no
-    hyphenated `-beta.N` pre-release segment, so those get the normalized
-    form (`0.16.0b1`) regardless of whether they are the primary
-    governed surface or a synced extra-file entry (e.g. a
-    typescript+python project's `package.json` stays primary while
-    `pyproject.toml` is still an extra-file that needs the same
-    normalization). See `_is_pep440_surface` for why `__init__.py` needs it
-    too.
-    """
+    """Return the version string to write into one governed surface."""
     return (
         _pep440_equivalent(version)
         if _is_pep440_surface(relative_path)
@@ -1001,7 +943,10 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
     elif release_type == "rust":
         _replace_toml_version(root / "Cargo.toml", "package", version)
     else:
-        raise ValueError(f"unsupported release type: {release_type}")
+        raise ValueError(
+            f"Release type {release_type}: unsupported. Edit "
+            "'release-please-config.json'."
+        )
 
     for item in package.get("extra-files", []):
         if isinstance(item, str):
@@ -1011,9 +956,15 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
             value = item.get("path")
             jsonpath = str(item.get("jsonpath", ""))
         else:
-            raise ValueError("release extra-file entry is invalid")
+            raise ValueError(
+                "Release extra-file: invalid entry. Edit "
+                "'release-please-config.json'."
+            )
         if not isinstance(value, str):
-            raise ValueError("release extra-file path is invalid")
+            raise ValueError(
+                "Release extra-file: invalid path. Edit "
+                "'release-please-config.json'."
+            )
         path = root / value
         target_version = _target_version(version, value)
         if kind == "generic":
@@ -1032,7 +983,7 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
                     changed = changed or count == 1
                 lines.append(line)
             if not changed:
-                raise ValueError(f"{value} has no release version marker")
+                raise ValueError(f"{value}: no release version marker. Add it.")
             path.write_text("".join(lines), encoding="utf-8")
         elif kind == "toml" and jsonpath == "$.project.version":
             _replace_toml_version(path, "project", target_version)
@@ -1041,12 +992,18 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
         elif kind == "toml" and jsonpath.startswith("$.package["):
             match = re.search(r'name\.value=="([^"]+)"', jsonpath)
             if match is None:
-                raise ValueError(f"unsupported release jsonpath: {jsonpath}")
+                raise ValueError(
+                    f"Release jsonpath {jsonpath}: unsupported. Edit "
+                    "'release-please-config.json'."
+                )
             _replace_toml_version(
                 path, "package", target_version, package_name=match.group(1)
             )
         else:
-            raise ValueError(f"unsupported release extra-file: {value}")
+            raise ValueError(
+                f"Release extra-file {value}: unsupported. Edit "
+                "'release-please-config.json'."
+            )
 
     cargo_manifest = root / "Cargo.toml"
     cargo_lock = root / "Cargo.lock"
@@ -1055,7 +1012,7 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
             cargo_package = tomllib.load(source).get("package", {})
         cargo_name = cargo_package.get("name")
         if not isinstance(cargo_name, str) or not cargo_name:
-            raise ValueError("Cargo.toml has no package name")
+            raise ValueError("Cargo.toml: no package name. Add it.")
         _replace_toml_version(
             cargo_lock, "package", version, package_name=cargo_name
         )
@@ -1064,14 +1021,7 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
 def _changelog_boundary(
     root: Path, tags: list[str], version: str
 ) -> tuple[str, list[str]]:
-    """Return the notes' starting tag and any prereleases a stable covers.
-
-    A prerelease section starts at the latest tag of any kind. A stable
-    section starts at the previous stable tag and so aggregates every beta
-    since then (Issue #1018). Included prereleases are chosen by Git
-    reachability, not version precedence: a Milestone beta can carry a lower
-    version than a stable that main published meanwhile.
-    """
+    """Return the notes' starting tag and any prereleases a stable covers."""
     valid = [tag for tag in tags if release_phase.is_valid_version(tag)]
     if release_phase.parse_version(version).is_prerelease:
         ordered = release_phase.sort_by_precedence(valid)
@@ -1096,13 +1046,7 @@ def _changelog_boundary(
 
 
 def _changelog_heads(root: Path, sha: str) -> list[str]:
-    """Return the commits whose history the notes for ``sha`` describe.
-
-    A promotion bridge is a merge that is amended in place with its own
-    candidate, so its id and committer date differ between local preparation
-    and hosted verification. Its parents are stable across that amend, so a
-    merge contributes its parents' history and its first parent's date.
-    """
+    """Return the commits whose history the notes for ``sha`` describe."""
     parents = git_output(
         ["rev-list", "--parents", "-n", "1", sha], root
     ).split()[1:]
@@ -1208,10 +1152,14 @@ def prepare_release_candidate(
     """Write a local candidate; never create a PR, tag, or GitHub Release."""
     planned = release_plan(root, sha, phase=phase)
     if planned is None:
-        raise ValueError("no release-worthy Conventional Commits")
+        raise ValueError(
+            "Release: no release-worthy Conventional Commits. Do not release."
+        )
     tag, version = planned
     if tag in git_output(["tag", "--points-at", sha], root).splitlines():
-        raise ValueError(f"{tag} already identifies this commit")
+        raise ValueError(
+            f"Tag {tag}: already on this commit. Do not release again."
+        )
     _write_release_version(root, version)
     _write_changelog(root, changelog_sha or sha, version)
     errors = release_version_errors(root, version)
@@ -1236,12 +1184,13 @@ def _promotion_baseline_tree(root: Path, source_sha: str, head_sha: str) -> str:
         return source_tree
     if len(parents) != 3 or parents[1] != source_sha:
         raise ValueError(
-            "promotion head must have the delivery source as its first parent"
+            "Promotion head: first parent is not the delivery source. Recreate "
+            "the bridge."
         )
 
     executable = shutil.which("git")
     if executable is None:
-        raise RuntimeError("Git is required for release planning")
+        raise RuntimeError("Git: not found. Install Git for release planning.")
     merged = subprocess.run(  # noqa: S603
         [executable, "merge-tree", "--write-tree", source_sha, parents[2]],
         cwd=root,
@@ -1254,7 +1203,9 @@ def _promotion_baseline_tree(root: Path, source_sha: str, head_sha: str) -> str:
         return git_output(["rev-parse", f"{first_line}^{{tree}}"], root)
     if re.fullmatch(r"[0-9a-f]{40,64}", first_line):
         return source_tree
-    raise RuntimeError("Git could not reconstruct the promotion baseline")
+    raise RuntimeError(
+        "Promotion baseline: Git cannot rebuild it. Fetch full history."
+    )
 
 
 def verify_promotion_version(
@@ -1279,8 +1230,8 @@ def verify_promotion_version(
     if planned is None:
         if head_tree != baseline_tree:
             raise ValueError(
-                f"a no-release {context} must preserve its deterministic "
-                "baseline tree"
+                f"No-release {context}: baseline tree changed. Revert the "
+                "non-release changes."
             )
         return {
             "status": "no-release",
@@ -1291,7 +1242,7 @@ def verify_promotion_version(
 
     executable = shutil.which("git")
     if executable is None:
-        raise RuntimeError("Git is required for release planning")
+        raise RuntimeError("Git: not found. Install Git for release planning.")
     with tempfile.TemporaryDirectory(prefix="csarc-promotion-version-") as path:
         worktree = Path(path) / "worktree"
         subprocess.run(  # noqa: S603
@@ -1353,9 +1304,10 @@ def verify_promotion_version(
             ["diff", "--name-only", baseline_tree, head_sha], root
         ).splitlines()
         raise ValueError(
-            f"{context} release materialization is not exact; expected "
+            f"{context} release materialization: not exact: expected "
             f"{expected_paths or ['no changed files']}, got "
-            f"{actual_paths or ['no changed files']}"
+            f"{actual_paths or ['no changed files']}. Rerun "
+            "'prepare-candidate'."
         )
     return {
         **payload,
@@ -1394,12 +1346,7 @@ def branch_release_intent(root: Path, base_sha: str, head_sha: str) -> str:
 def pull_request_title_errors(
     root: Path, base_sha: str, head_sha: str, title: str
 ) -> list[str]:
-    """Reject a PR title whose release intent differs from its commits.
-
-    A squash merge keeps only the PR title, so release planning after the
-    merge reads the title's type while materialization on the branch reads
-    every branch commit. Both must express the same intent.
-    """
+    """Reject a PR title whose release intent differs from its commits."""
     title_intent = release_intent(title)
     commit_intent = branch_release_intent(root, base_sha, head_sha)
     if title_intent == commit_intent:
@@ -1417,13 +1364,7 @@ def pull_request_title_errors(
 def breaking_migration_errors(
     root: Path, base_sha: str, head_sha: str, title: str
 ) -> list[str]:
-    """Reject a breaking pull request that records no migration text.
-
-    The squash merge keeps only the title and the branch commits'
-    ``BREAKING CHANGE:`` footers, so a breaking marker (``!`` on the title
-    or a commit, or a footer) without footer text would publish an empty
-    Migration notes entry (Issue #1104).
-    """
+    """Reject a breaking pull request that records no migration text."""
     raw = git_output(
         ["log", "--format=%s%x1f%b%x1e", f"{base_sha}..{head_sha}"], root
     )
@@ -1455,16 +1396,7 @@ def verify_delivery_version(
     checkpoint_role: str = "none",
     pr_title: str | None = None,
 ) -> dict[str, object]:
-    """Require release-worthy work to end in one exact release-only commit.
-
-    Deferred checkpoint work is the exception: it must leave the version
-    untouched so only the checkpoint's terminal Issue publishes the beta.
-    When ``pr_title`` is given, the title's release intent must equal the
-    highest branch commit intent, because the squash merge keeps only the
-    title. A breaking title or commit must also carry migration text in a
-    ``BREAKING CHANGE:`` footer, for deferred work too. Callers that omit
-    it keep the earlier interface.
-    """
+    """Require release-worthy work to end in one exact release-only commit."""
     if pr_title is not None:
         migration_errors = breaking_migration_errors(
             root, base_sha, head_sha, pr_title
@@ -1490,8 +1422,8 @@ def verify_delivery_version(
             root, base_sha
         ):
             raise ValueError(
-                "deferred checkpoint work must not materialize a version; "
-                "only the checkpoint's terminal Issue releases the beta"
+                "Deferred checkpoint work: materializes a version. Only the "
+                "terminal Issue releases the beta."
             )
         return {
             "status": "deferred",
@@ -1501,15 +1433,15 @@ def verify_delivery_version(
         }
     if git_output(["merge-base", base_sha, head_sha], root) != base_sha:
         raise ValueError(
-            "release-worthy delivery must contain the current destination "
-            "base before materialization"
+            "Release-worthy delivery: lacks the destination base. Merge "
+            "it before materialization."
         )
     parents = git_output(
         ["rev-list", "--parents", "-n", "1", head_sha], root
     ).split()
     if len(parents) != 2:
         raise ValueError(
-            "release-worthy delivery must end in one release-only commit"
+            "Release-worthy delivery: no final release-only commit. Add it."
         )
     payload = verify_promotion_version(
         root,
@@ -1727,7 +1659,10 @@ def dispatch(args: argparse.Namespace) -> int:  # noqa: C901
             or any(not isinstance(commit, dict) for commit in page)
             for page in commit_pages
         ):
-            raise SystemExit("release follow-up commit response is invalid")
+            raise SystemExit(
+                "ERROR: Release follow-up commit: invalid response. Run 'gh "
+                "auth status' and rerun."
+            )
         commits = [commit for page in commit_pages for commit in page]
         errors = release_follow_up_errors(
             args.root.resolve(),
@@ -1742,7 +1677,7 @@ def dispatch(args: argparse.Namespace) -> int:  # noqa: C901
         )
         if errors:
             raise SystemExit("; ".join(errors))
-        print("Release follow-up source is verified.")  # noqa: T201
+        print("OK: Release follow-up source is verified.")  # noqa: T201
         return 0
     if args.command == "plan":
         try:
@@ -1770,8 +1705,8 @@ def dispatch(args: argparse.Namespace) -> int:  # noqa: C901
         token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
         if not token:
             raise SystemExit(
-                "retention-plan requires GH_TOKEN or GITHUB_TOKEN to list "
-                "Releases"
+                "ERROR: retention-plan: no token to list Releases. Set "
+                "GH_TOKEN or GITHUB_TOKEN."
             )
         api = GitHubAPI(
             token, os.environ.get("GITHUB_API_URL", "https://api.github.com")
@@ -1792,7 +1727,7 @@ def dispatch(args: argparse.Namespace) -> int:  # noqa: C901
         ) as error:
             raise SystemExit(str(error)) from error
         print(  # noqa: T201
-            f"Release candidate {candidate_sha} from source {source_sha} "
+            f"OK: Release candidate {candidate_sha} from source {source_sha} "
             f"matches current base {args.base_sha} decision {version}."
         )
         return 0
@@ -1802,10 +1737,13 @@ def dispatch(args: argparse.Namespace) -> int:  # noqa: C901
             if args.tag is not None:
                 version = args.tag.removeprefix("v")
                 if not release_phase.is_valid_version(version):
-                    raise ValueError(f"invalid release tag: {args.tag}")
+                    raise ValueError(
+                        f"Release tag {args.tag}: invalid. Use "
+                        "'v<major>.<minor>.<patch>'."
+                    )
                 phase = release_phase.parse_version(version).release_kind
             if phase is None:
-                raise ValueError("release phase is required")
+                raise ValueError("Release phase: missing. Pass --phase.")
             if args.command == "verify-delivery-version":
                 payload = verify_delivery_version(
                     args.root.resolve(),
@@ -1824,8 +1762,8 @@ def dispatch(args: argparse.Namespace) -> int:  # noqa: C901
                 )
             if args.tag is not None and payload.get("tag") != args.tag:
                 raise ValueError(
-                    f"{args.command} planned {payload.get('tag')}, "
-                    f"expected {args.tag}"
+                    f"{args.command}: planned {payload.get('tag')}, "
+                    f"expected {args.tag}. Fix the tag."
                 )
         except (
             ValueError,
@@ -1842,7 +1780,10 @@ def dispatch(args: argparse.Namespace) -> int:  # noqa: C901
         if tag is not None:
             candidate_version = tag.removeprefix("v")
             if not release_phase.is_valid_version(candidate_version):
-                raise SystemExit(f"invalid release tag: {tag}")
+                raise SystemExit(
+                    f"ERROR: Release tag {tag}: invalid. Use "
+                    "'v<major>.<minor>.<patch>'."
+                )
             expected = candidate_version
         try:
             version = verify_release_version(args.root.resolve(), expected)
@@ -1852,7 +1793,7 @@ def dispatch(args: argparse.Namespace) -> int:  # noqa: C901
             tomllib.TOMLDecodeError,
         ) as error:
             raise SystemExit(str(error)) from error
-        print(f"Release version {version} is consistent.")  # noqa: T201
+        print(f"OK: Release version {version} is consistent.")  # noqa: T201
         return 0
 
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
@@ -1880,4 +1821,6 @@ def dispatch(args: argparse.Namespace) -> int:  # noqa: C901
             args.github_output,
         )
         return 0
-    raise SystemExit(f"unsupported command: {args.command}")
+    raise SystemExit(
+        f"ERROR: Command {args.command}: unsupported. Run with --help."
+    )

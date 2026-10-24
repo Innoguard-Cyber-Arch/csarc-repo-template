@@ -151,11 +151,12 @@ def test_adopt_and_update_share_one_closed_schema(tmp_path: Path) -> None:
     adopt = adopt_report(tmp_path)
     update = update_report(tmp_path)
 
-    assert set(adopt) == set(update) == lifecycle_report.REPORT_KEYS_2_1
+    assert set(adopt) == set(update) == lifecycle_report.REPORT_KEYS_2_3
     for key in ("plan", "target", "release", "product", "verification"):
         assert set(adopt[key]) == set(update[key])  # type: ignore[arg-type]
     assert adopt["report_format_version"] == update["report_format_version"]
-    assert adopt["report_format_version"] == "2.2.0"
+    assert adopt["report_format_version"] == "2.3.0"
+    assert adopt["writing_guide"] is update["writing_guide"] is None
     assert update["setup"] is None
     assert adopt["operation"] == "adopt"
     assert update["operation"] == "update"
@@ -181,7 +182,7 @@ def test_markdown_round_trips_from_report_json_only(
     assert headings(markdown, "##") == list(lifecycle_report.SECTION_HEADINGS)
     title = "adoption" if operation == "adopt" else "update"
     assert markdown.startswith(f"# CSARC {title} report\n")
-    assert "Report format version: `2.2.0`" in markdown
+    assert "Report format version: `2.3.0`" in markdown
     summary_rows = re.findall(r"^\| `([a-z]+)` \| (\d+) \|$", markdown, re.M)
     assert [name for name, _count in summary_rows] == list(
         lifecycle_report.FILE_ACTIONS
@@ -269,7 +270,7 @@ def test_unredacted_secret_fails_closed(tmp_path: Path) -> None:
         (("settings", 0, "class"), "broadened", "unknown value"),
         (("settings", 0, "source"), "guessed", "unknown value"),
         (("target", "working_tree"), "dirty", "unknown value"),
-        (("report_format_version",), "2.3.0", "unsupported version"),
+        (("report_format_version",), "2.4.0", "unsupported version"),
         (("report_format_version",), "1.1.0", "unsupported version"),
         (("operation",), "init", "unknown value"),
     ],
@@ -328,6 +329,7 @@ def as_2_0_0(report: dict[str, object]) -> dict[str, object]:
     """Return the report as a 2.0.0 writer produced it (no setup field)."""
     previous = dict(report)
     previous.pop("setup")
+    previous.pop("writing_guide")
     previous["report_format_version"] = "2.0.0"
     return previous
 
@@ -769,7 +771,7 @@ def test_writer_replaces_regular_legacy_report_and_keeps_symlink(
     assert not (regular / cli.LEGACY_ADOPTION_REPORT_NAME).exists()
     assert (linked / cli.LEGACY_ADOPTION_REPORT_NAME).is_symlink()
     assert outside.read_text(encoding="utf-8") == "keep\n"
-    assert "kept non-regular legacy report" in capsys.readouterr().err
+    assert "Legacy report was kept" in capsys.readouterr().err
 
 
 def test_spec_documents_the_closed_contract() -> None:

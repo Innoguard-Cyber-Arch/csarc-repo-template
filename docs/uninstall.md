@@ -2,11 +2,11 @@
 
 本頁給決定不再採用 CSARC 的 repository owner：不用考古就能判斷哪些檔案、workflow 與
 repository 設定是 CSARC 加入的、哪些可以刪、哪些必須用「移除 CSARC 相關內容」取代「整檔
-刪除」，以及移除後如何確認乾淨。CSARC 沒有內建的 `csarc uninstall` 指令——移除永遠是
+刪除」，以及移除後如何確認乾淨。CSARC 沒有內建的 `csarc uninstall` 指令；移除永遠是
 repository owner 自己審閱後的手動操作，這份文件只負責讓判斷不必逐檔案考古。
 
 適用對象：已用 `csarc init` 或 `csarc adopt` 導入過公版的 repository。若只是評估中、還沒
-實際套用任何 `init`/`adopt`/`update`，不需要本頁——回退未提交的變更即可。
+實際套用任何 `init`/`adopt`/`update`，不需要本頁，回退未提交的變更即可。
 
 ## 開始之前
 
@@ -18,21 +18,21 @@ grep '^project_mode:' .csarc/config.yml
 grep '^languages:' -A4 .csarc/config.yml
 ```
 
-- `project_mode: new` — repository 是 CSARC `init` 建立的，本頁列出的所有路徑都是 CSARC
+- `project_mode: new`：repository 是 CSARC `init` 建立的，本頁列出的所有路徑都是 CSARC
   管理的內容，可以直接刪除。
-- `project_mode: existing`（`csarc adopt` 到既有 repository）— `README.md`、
+- `project_mode: existing`（`csarc adopt` 到既有 repository）：`README.md`、
   `SECURITY.md`、`CHANGELOG.md`、`pyproject.toml`、`package.json`、`Cargo.toml`、
   `go.mod` 這幾個檔案在既有專案上是**產品自己的檔案**，CSARC 只做選擇性合併、從不整檔覆寫或整檔
   刪除；見下方「產品自己的檔案：只移除 CSARC 加的部分」。
 
-`languages:` 決定下面第 3 節裡哪些語言專屬路徑真的存在於這個 repository。
+`languages:` 決定下面第 4 節裡哪些語言專屬路徑存在於這個 repository。
 
 ## 1. 先處理 repository 設定（GitHub 上、不在 Git 裡的部分）
 
 `./scripts/apply-repository-settings.sh apply` 曾經寫入的內容不在檔案系統裡，刪檔案不會
 連帶移除，要單獨處理：
 
-- **Rulesets**：GitHub 上會有兩條名稱固定的 ruleset——`CSARC protected branches`（分支
+- **Rulesets**：GitHub 上會有兩條名稱固定的 ruleset：`CSARC protected branches`（分支
   保護：擋 force-push、要求 PR、要求 `verify` 之類的 status check）與
   `CSARC required checks`（required checks 清單）。到 repository 的
   **Settings → Rules → Rulesets** 刪除這兩條，或用
@@ -43,14 +43,14 @@ grep '^languages:' -A4 .csarc/config.yml
   不需要維持這個限制的話，到 **Settings → Actions → General** 依需求調整回組織預設值。
   這一步只影響權限寬鬆度，不影響能否移除公版，不確定就先保留。
   Runner 是否還在使用其中任何一支 `.github/workflows/*.yml`，以第 3 節的清單為準，不要
-  只看這個政策檔案本身有沒有刪。
+  只看這個政策檔案有沒有刪。
 - **Issue 建立政策 / repository 選項**：`.csarc/policies/issue-creation.json`
   （`issue_creation_policy: COLLABORATORS_ONLY`）與 `.csarc/policies/repository.json`
   （merge 策略、`delete_branch_on_merge`、Issues/Projects/Wiki 開關）都是套用到
   repository 設定頁的一般選項，不是 CSARC 專屬的鎖，通常不需要因為移除 CSARC 而改回去；
   除非你確定要恢復到套用前的行為，否則跳過。
 - **Pages / Security scanning**：`.csarc/policies/pages.json`、
-  `.csarc/policies/security-scanning.json` 同理——這些是一般 repository 設定，不是 CSARC 留下
+  `.csarc/policies/security-scanning.json` 同理，這些是一般 repository 設定，不是 CSARC 留下
   的殘留物，只有你自己知道套用前的值時才需要手動改回去。
 
 以上都是 **GitHub 平台設定**，`git rm` 不會動到；判斷「要不要改回去」看你自己需不需要那個
@@ -143,12 +143,12 @@ docs/site/content/*、docs/site/data/navigation.json、docs/site/theme.css
 
 ### 只在你開了對應功能時才存在，才需要一併刪
 
-- `.csarc/scripts/pre-commit` — 只在舊版 `enable_precommit: true` 時存在；設定已退役（SPEC-009），新版不再產生，不持久保存 `.pre-commit-config.yaml`。
-- `.github/workflows/template-update.yml`、`.csarc/scripts/check-template-update` — 只在
+- `.csarc/scripts/pre-commit`：只在舊版 `enable_precommit: true` 時存在；設定已退役（SPEC-009），新版不再產生，不持久保存 `.pre-commit-config.yaml`。
+- `.github/workflows/template-update.yml`、`.csarc/scripts/check-template-update`：只在
   `scheduled_checks` 含 `template-update` 時存在。
-- `.github/workflows/governance-drift.yml`、`.csarc/scripts/check-governance-drift` — 只在
+- `.github/workflows/governance-drift.yml`、`.csarc/scripts/check-governance-drift`：只在
   `scheduled_checks` 含 `governance-drift` 時存在。
-- `.github/workflows/codeql.yml` — 只在 `enable_codeql: true` 時存在。
+- `.github/workflows/codeql.yml`：只在 `enable_codeql: true` 時存在。
 
 ### 只在 `project_mode: existing`（`csarc adopt` 到既有 repo）時，這幾個反而不存在
 
@@ -180,13 +180,13 @@ repository 是用 `adopt` 導入、且這三個檔案存在，代表它們是產
 只有 `project_mode: existing` 才會遇到這節；`project_mode: new` 時這些檔案本來就是
 CSARC 建立的，直接刪沒問題。
 
-- `README.md`、`SECURITY.md`、`CHANGELOG.md` — 產品原本就有的檔案，CSARC 從不覆寫；不需要
+- `README.md`、`SECURITY.md`、`CHANGELOG.md`：產品原本就有的檔案，CSARC 從不覆寫；不需要
   移除，頂多手動刪掉你自己當初加進去、引用 CSARC 流程的段落（例如指到
   `.csarc/docs/csarc.md`、`./.csarc/scripts/verify` 的說明文字）。
-- `pyproject.toml`／`package.json`／`Cargo.toml` — CSARC 只合併了它需要的欄位／依賴／
+- `pyproject.toml`／`package.json`／`Cargo.toml`：CSARC 只合併了它需要的欄位／依賴／
   script（例如 lint、type-check 相關的 dev dependency）。整檔刪除會連產品自己的設定一起
   刪掉；改成手動比對、只移除明顯是 CSARC 加入的區塊或依賴。
-- `go.mod` 與 `cmd/`、`internal/` 下的產品 Go 程式 — CSARC 不改寫，也不需要移除。
+- `go.mod` 與 `cmd/`、`internal/` 下的產品 Go 程式：CSARC 不改寫，也不需要移除。
 
 ## 6. 確認移除乾淨
 

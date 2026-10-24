@@ -198,7 +198,7 @@ CLI（`src/csarc_cli/repository_facts.py`）、本 repository（`scripts/reposit
 `csarc init` 與 `csarc adopt`（`src/csarc_cli/setup_plan.py`）在查詢 Release、呼叫 GitHub 寫入、render 或寫檔之前完成問卷：先用 §8 的 detector 與本表的分類，只有未知、矛盾或沒有唯一來源的使用者意圖才成為問題（TTY）或必填輸入（non-interactive）。明確 `--data` 與偵測到的值不再詢問。`csarc update` 不提問，也不接受 `--preset`。
 
 - **提問條件**：stdin 是 TTY，而且沒有 `--non-interactive` 與 `--json`。只用標準輸入；不合法的回答在同一題重問，不增加題數。阻擋後的確認（approval route、偵測結果被拒）不算題目。
-- **Non-interactive**：缺少必填輸入時，在查詢 Release、render 或寫檔前以一行 `csarc: Missing required setup input (...)` 結束，列出每個 `--data KEY=`。必填：init 的 `project_description`、`languages`（可為空字串，表示只有 CI baseline）、`copyright_holder`；adopt 沒有 manifest description 時的 `project_description`、沒有 `LICENSE`（plan 會新建）時的 `copyright_holder`、`ambiguous` 的 `package_name`；public 而沒有偵測到揭露政策管道時的 `security_reporting_channel`（需要 live visibility，所以在唯讀 GitHub 讀取之後、render 之前檢查）。有建議值的題目（授權 `proprietary`、文件語言 `zh-tw`、`governance_mode: managed`、Dockerfile 時的 `container: false`、`team` 的 `copilot_review: allowed`、`release_trigger: main`）採用建議值；adopt 對其中沒有唯一來源的意圖各列一個非 blocking 的 `setting-decision`（SPEC-008 `2.1.0`）。repository 無法解析時 non-interactive 仍需要 `--data repository_url=`；visibility 依 §8 使用 safe default。
+- **Non-interactive**：缺少必填輸入時，在查詢 Release、render 或寫檔前以一行 `ERROR: Missing required setup input (...)` 結束，列出每個 `--data KEY=`。必填：init 的 `project_description`、`languages`（可為空字串，表示只有 CI baseline）、`copyright_holder`；adopt 沒有 manifest description 時的 `project_description`、沒有 `LICENSE`（plan 會新建）時的 `copyright_holder`、`ambiguous` 的 `package_name`；public 而沒有偵測到揭露政策管道時的 `security_reporting_channel`（需要 live visibility，所以在唯讀 GitHub 讀取之後、render 之前檢查）。有建議值的題目（授權 `proprietary`、文件語言 `zh-tw`、`governance_mode: managed`、Dockerfile 時的 `container: false`、`team` 的 `copilot_review: allowed`、`release_trigger: main`）採用建議值；adopt 對其中沒有唯一來源的意圖各列一個非 blocking 的 `setting-decision`（SPEC-008 `2.1.0`）。repository 無法解析時 non-interactive 仍需要 `--data repository_url=`；visibility 依 §8 使用 safe default。
 - **新專案預設**（#1058 決定 14）：init 由 CLI 採用 `documentation_mode: content-only`、`documentation_languages: zh-tw`；`copier.yml` 的預設只供 raw Copier render。
 - **`custom` 授權**（#1058 決定 17）：init 的授權題可選 `custom`，表示產品自行管理授權：不問 `copyright_holder`，CSARC 不產生 `LICENSE`，Python、npm、Cargo manifest 不寫 license 欄位（npm 維持 `private: true`）。`check_license_metadata.py` 只在 provenance 記錄 `project_license: custom` 時接受缺少 `LICENSE`；沒有 provenance 的 raw Copier render 只在沒有任何 manifest 宣告授權時接受。其他授權缺少 `LICENSE` 仍然失敗；之後加入的 `LICENSE` 由產品擁有，不被解讀。
 - **空 repository**：init 接受不存在的路徑、空資料夾，或只含 `.git`、沒有 commit 也沒有 tracked 檔的 repository（保留 `.git`）；`csarc status` 對後者回報 `create`。
@@ -273,11 +273,11 @@ WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup
 
 `github_project_url` 是唯一的 Project 設定（#1058 決定 23）。它只保存完整的 organization 或 user ProjectV2 URL（`https://github.com/orgs/<org>/projects/<n>` 或 `https://github.com/users/<user>/projects/<n>`），預設空字串；不保存 project、field 或 item ID，也沒有其他 Project 鍵。init／adopt 不提問（題數不變），以 `--data github_project_url=<URL>` 設定，`csarc update --data github_project_url=` 清空。它是唯一的選用 intent：檔案沒有這個鍵時等於 `''`（停用），因為較早的 current-only reader 會拒絕未知鍵；新 render 會寫出它，本 repository 的 root 設定在 trusted base 認得它之前不寫。
 
-- 空值：`csarc issue create` 與 `csarc issue sync-project` 完全不呼叫 Project API；repository 的 `has_projects` 維持 `false`，不新增 workflow 或 check。
+- 空值：`csarc issue create` 與 `csarc issue sync-project` 不呼叫 Project API；repository 的 `has_projects` 維持 `false`，不新增 workflow 或 check。
 - 有值：受管入口在任何寫入前即時解析 URL，讀回 owner、project URL、`closed`、`viewerCanUpdate`，以及唯一、型別為 DATE 的 `Project start`／`Project target` 欄位；token 能回報 scopes 時要求 `project`，否則明示 `unknown`。
 - 上看板的範圍（#1186，固定規則）：只有 Milestone tracker（Milestone 描述 `Lifecycle Issue: #N` 指向的 Issue）與 standalone Issue（沒有 parent，也不屬於有 tracker 的 Milestone）加入 Project。Milestone work issue 與 sub-issue 不加入：`csarc issue create`／`csarc issue sync-project` 對它們不呼叫任何 Project 寫入，逐張輸出略過原因；已在 Project 上的既有 item 也不改動。
 - `Project start` 是 Issue 建立日的台北日期（Asia/Taipei，UTC+8）；`Project target` 是目前 Milestone `due_on` 的日期（GitHub 以固定時刻的 UTC 時間戳保存只有日期的 due date，取其 UTC 日期即為設定的日期）；沒有 due date 時用明確傳入的 `--target-date YYYY-MM-DD`，沒有傳入時固定為開始日後 14 個曆日（#1186）。
-- 為何固定採台北日期（#1186）：Project 看板由在台灣工作的團隊閱讀，一天的界線是台北的日曆日；以 UTC 計算時，台北 00:00–08:00 建立或完成的 Issue 會落在前一天。Taiwan 沒有日光節約時間，所以固定 +08:00 與 Asia/Taipei 相同。時區與 14 天預設都不提供設定，`github_project_url` 仍是唯一的 Project 設定。
+- 為何固定採台北日期（#1186）：Project 看板由在台灣工作的團隊閱讀，一天的界線是台北的日曆日；以 UTC 計算時，台北 00:00–08:00 建立或完成的 Issue 會落在前一天。台灣沒有日光節約時間，所以固定 +08:00 與 Asia/Taipei 相同。時區與 14 天預設都不提供設定，`github_project_url` 仍是唯一的 Project 設定。
 - 完成後的 target（#1179）：Issue 已關閉，或它在 Project 的 `Status` 為 `Done` 時，`Project target` 改為實際完成日的台北日期，取代 Milestone due date，也不使用 `--target-date`。完成日優先取 `Status` 改成 `Done` 的日期（該欄位值的 `updatedAt`），沒有時取 Issue 的 `closed_at`；兩者都有且不同時以 Done 日期為準，因為 Done 是擁有者驗收後的完成。未關閉、也不是 Done 的 Issue（包括重新開啟的 Issue）規則不變。
 - `csarc issue sync-project --issue <N>`／`--milestone <M>` 依目前的 Milestone 冪等同步；空欄直接寫入，既有值不同時先列 diff，經確認（互動確認或 `--yes`）才覆寫。只同步 Issue，不同步 PR。
 - Issue 已建立但 Project 寫入失敗時保留 Issue，輸出單一可重跑的修復指令；加入 item 以 Issue 與 Project 的 identity upsert，重跑不產生重複 item。
@@ -313,10 +313,10 @@ WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup
 - [SPEC-008 lifecycle report format](SPEC-008-lifecycle-report-format.md)
 - [Simplified project configuration ADR](../adr/simplified-project-configuration.md)
 - [Issue #1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)
-- [Issue #1072](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1072) — repository detector 與唯一推導
-- [Issue #1078](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1078) — 設定問卷、工作模式與 approval route preflight
-- [Issue #1080](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1080) — GitHub Project Roadmap 同步
-- [Issue #1186](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1186) — 看板範圍、台北日期與 14 天預設 target
-- [Issue #1058](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1058) — 決定 3、8、14–17、23、25
-- [Issue #900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900) — 平面、最少的設定
-- [Issue #919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919) — 文件模式與語言
+- [Issue #1072](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1072)：repository detector 與唯一推導
+- [Issue #1078](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1078)：設定問卷、工作模式與 approval route preflight
+- [Issue #1080](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1080)：GitHub Project Roadmap 同步
+- [Issue #1186](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1186)：看板範圍、台北日期與 14 天預設 target
+- [Issue #1058](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1058)：決定 3、8、14–17、23、25
+- [Issue #900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900)：平面、最少的設定
+- [Issue #919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919)：文件模式與語言

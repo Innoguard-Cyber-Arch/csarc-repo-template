@@ -194,7 +194,7 @@ def test_tracker_validates_declared_checkpoints() -> None:
     malformed = snapshot()
     _declare_checkpoints(malformed, "- Checkpoint A: #81")
     assert tracker_errors(malformed) == [
-        "Invalid checkpoint declaration: - Checkpoint A: #81"
+        "Invalid checkpoint declaration: - Checkpoint A: #81. Fix the line."
     ]
 
 

@@ -11,12 +11,12 @@ grep -Fq -- '-shellcheck=' \
 if "$actionlint_bin" \
   "$repo_root/tests/fixtures/static-validation/invalid-workflow.yml" \
   >/dev/null 2>&1; then
-  echo "Actionlint accepted an intentionally invalid workflow." >&2
+  echo "ERROR: Actionlint self-test failed: it accepted an invalid workflow. Fix the lint setup." >&2
   exit 1
 fi
 if "$shellcheck_bin" \
   "$repo_root/tests/fixtures/static-validation/invalid-shell.sh" \
   >/dev/null 2>&1; then
-  echo "ShellCheck accepted an intentionally invalid shell script." >&2
+  echo "ERROR: ShellCheck self-test failed: it accepted an invalid script. Fix the lint setup." >&2
   exit 1
 fi

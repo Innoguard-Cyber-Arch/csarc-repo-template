@@ -20,13 +20,13 @@ if [[ "${1:-}" == "--suggest" ]]; then
 fi
 
 if [[ ! -f "$config_file" ]]; then
-  echo "Missing .csarc/config.yml; detected languages: $detected"
+  echo "ERROR: Settings are missing: no .csarc/config.yml. Run 'csarc update'." >&2
   exit 1
 fi
 
 declared="$(python3 "$repo_root/.csarc/scripts/csarc_config.py" languages)"
 if [[ "$declared" != "$detected" ]]; then
-  echo "Declared languages '$declared' do not match detected languages '$detected'."
+  echo "ERROR: Languages differ: saved '$declared', found '$detected'. Run 'csarc update'." >&2
   exit 1
 fi
 

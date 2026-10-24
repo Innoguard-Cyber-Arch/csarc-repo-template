@@ -69,7 +69,7 @@ else
 fi
 
 if [[ "$cache_root" != /* ]]; then
-  printf 'CSARC_CACHE_ROOT must be an absolute path: %s\n' "$cache_root" >&2
+  printf "ERROR: 'CSARC_CACHE_ROOT' is invalid: it must be an absolute path, not '%s'. Set an absolute path.\n" "$cache_root" >&2
   exit 2
 fi
 
