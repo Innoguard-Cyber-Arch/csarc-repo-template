@@ -7,6 +7,13 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.44.2] - 2026-10-24
+
+### Bug Fixes
+
+* fix(lifecycle): recover own PR leases and attach promotion Milestones (2975ea1)
+* fix(lifecycle): keep template docstrings to one summary line (9d9e66f)
+
 ## [0.44.1] - 2026-10-24
 
 ### Bug Fixes
