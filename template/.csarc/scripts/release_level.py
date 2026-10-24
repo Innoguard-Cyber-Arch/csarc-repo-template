@@ -329,24 +329,9 @@ def release_batch(
                 key, row = _work_item("Issue", issue, decision)
                 items[key] = row
             continue
-        numbers = sorted(
-            {
-                int(match.group(1))
-                for match in _CLOSING_ISSUE.finditer(
-                    str(pull.get("body") or "")
-                )
-            }
-        )
+        numbers = _closing_numbers(pull)
         if len(numbers) == 1:
-            issue = github.get(repo, f"issues/{numbers[0]}")
-            if (
-                not isinstance(issue, dict)
-                or issue.get("pull_request") is not None
-            ):
-                raise RuntimeError(
-                    f"Closing reference #{numbers[0]}: not an Issue. Edit the "
-                    "PR body."
-                )
+            issue = _closing_issue(github, repo, numbers[0])
             decision = resolve_issue(github, repo, issue, settings)
             key, row = _work_item("Issue", issue, decision)
         else:
@@ -580,12 +565,7 @@ def resolve_pull(
             settings.suites[release_level],
             "release pull request version",
         )
-    numbers = sorted(
-        {
-            int(match.group(1))
-            for match in _CLOSING_ISSUE.finditer(str(pull.get("body") or ""))
-        }
-    )
+    numbers = _closing_numbers(pull)
     if len(numbers) > 1:
         raise RuntimeError("Pull request: closes several Issues. Close one.")
     if not numbers:
@@ -600,12 +580,26 @@ def resolve_pull(
             settings.suites[level],
             "configured default (pull request has no declared Issue)",
         )
-    issue = github.get(repo, f"issues/{numbers[0]}")
+    issue = _closing_issue(github, repo, numbers[0])
+    return resolve_issue(github, repo, issue, settings)
+
+
+def _closing_numbers(pull: dict[str, Any]) -> list[int]:
+    """Return the distinct Issue numbers a pull request body closes."""
+    body = str(pull.get("body") or "")
+    return sorted({int(m.group(1)) for m in _CLOSING_ISSUE.finditer(body)})
+
+
+def _closing_issue(
+    github: GitHubReader, repo: str, number: int
+) -> dict[str, Any]:
+    """Read one closing reference and require it to be an Issue."""
+    issue = github.get(repo, f"issues/{number}")
     if not isinstance(issue, dict) or issue.get("pull_request") is not None:
         raise RuntimeError(
-            f"Closing reference #{numbers[0]}: not an Issue. Edit the PR body."
+            f"Closing reference #{number}: not an Issue. Edit the PR body."
         )
-    return resolve_issue(github, repo, issue, settings)
+    return issue
 
 
 def checkpoint_role(
@@ -621,19 +615,10 @@ def checkpoint_role(
     base_ref = str(base.get("ref") or "") if isinstance(base, dict) else ""
     if not base_ref.startswith("dev/m"):
         return "none"
-    numbers = sorted(
-        {
-            int(match.group(1))
-            for match in _CLOSING_ISSUE.finditer(str(pull.get("body") or ""))
-        }
-    )
+    numbers = _closing_numbers(pull)
     if len(numbers) != 1:
         return "none"
-    issue = github.get(repo, f"issues/{numbers[0]}")
-    if not isinstance(issue, dict) or issue.get("pull_request") is not None:
-        raise RuntimeError(
-            f"Closing reference #{numbers[0]}: not an Issue. Edit the PR body."
-        )
+    issue = _closing_issue(github, repo, numbers[0])
     milestone = issue.get("milestone")
     if (
         not isinstance(milestone, dict)

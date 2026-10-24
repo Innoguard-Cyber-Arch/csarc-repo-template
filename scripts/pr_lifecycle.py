@@ -5129,6 +5129,7 @@ def python_writer_violations(text: str) -> list[str]:  # noqa: C901
         "subprocess.run",
     }
     write_methods = {"delete", "patch", "post", "put"}
+    known_methods = write_methods | {"get", "head", "options"}
     events = sorted(
         (
             node
@@ -5212,8 +5213,9 @@ def python_writer_violations(text: str) -> list[str]:  # noqa: C901
         url_node: ast.AST | None = None
         urllib_request = name.casefold().endswith("urllib.request.request")
         urllib_urlopen = name.casefold().endswith("urllib.request.urlopen")
+        first_url = node.args[0] if node.args else keywords.get("url")
         if urllib_request:
-            url_node = node.args[0] if node.args else keywords.get("url")
+            url_node = first_url
             method_node = keywords.get("method")
             if method_node is not None:
                 resolved = ast_text(method_node, values)
@@ -5223,13 +5225,13 @@ def python_writer_violations(text: str) -> list[str]:  # noqa: C901
             else:
                 method = "get"
         elif urllib_urlopen:
-            url_node = node.args[0] if node.args else keywords.get("url")
+            url_node = first_url
             method = (
                 "post" if "data" in keywords or len(node.args) > 1 else "get"
             )
-        elif leaf in write_methods | {"get", "head", "options"}:
+        elif leaf in known_methods:
             method = leaf
-            url_node = node.args[0] if node.args else keywords.get("url")
+            url_node = first_url
         elif leaf == "request":
             method_node = node.args[0] if node.args else keywords.get("method")
             url_node = (
@@ -5251,17 +5253,14 @@ def python_writer_violations(text: str) -> list[str]:  # noqa: C901
             (method is None and lifecycle_target)
             or (url is None and method in write_methods)
         )
-        if method in write_methods and (
+        exposed = (
             lifecycle_target
             or root in {"httpx", "requests"}
             or unresolved_urllib
-        ):
+        )
+        if method in write_methods and exposed:
             violations.append("Python HTTP client lifecycle mutation")
-        elif method not in write_methods | {"get", "head", "options"} and (
-            lifecycle_target
-            or root in {"httpx", "requests"}
-            or unresolved_urllib
-        ):
+        elif method not in known_methods and exposed:
             violations.append("Python HTTP method cannot be proven read-only")
     return violations
 

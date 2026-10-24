@@ -568,11 +568,17 @@ def write_retention_report(
     print(rendered, end="")  # noqa: T201
 
 
-def git_output(arguments: list[str], root: Path) -> str:
-    """Run a read-only Git query."""
+def git_executable() -> str:
+    """Return the Git executable used for release planning."""
     executable = shutil.which("git")
     if executable is None:
         raise RuntimeError("Git: not found. Install Git for release planning.")
+    return executable
+
+
+def git_output(arguments: list[str], root: Path) -> str:
+    """Run a read-only Git query."""
+    executable = git_executable()
     result = subprocess.run(  # noqa: S603
         [executable, *arguments],
         cwd=root,
@@ -804,9 +810,7 @@ def release_plan_report(
 
 def verify_candidate_version(root: Path, base_sha: str) -> tuple[str, str, str]:
     """Recompute the candidate version from its current base commit."""
-    executable = shutil.which("git")
-    if executable is None:
-        raise RuntimeError("Git: not found. Install Git for release planning.")
+    executable = git_executable()
     candidate_sha = git_output(["rev-parse", "HEAD"], root)
     source_sha = git_output(["merge-base", candidate_sha, base_sha], root)
     new_base_log = git_output(
@@ -1184,9 +1188,7 @@ def _promotion_baseline_tree(root: Path, source_sha: str, head_sha: str) -> str:
             "the bridge."
         )
 
-    executable = shutil.which("git")
-    if executable is None:
-        raise RuntimeError("Git: not found. Install Git for release planning.")
+    executable = git_executable()
     merged = subprocess.run(  # noqa: S603
         [executable, "merge-tree", "--write-tree", source_sha, parents[2]],
         cwd=root,
@@ -1236,9 +1238,7 @@ def verify_promotion_version(
             "head_sha": head_sha,
         }
 
-    executable = shutil.which("git")
-    if executable is None:
-        raise RuntimeError("Git: not found. Install Git for release planning.")
+    executable = git_executable()
     with tempfile.TemporaryDirectory(prefix="csarc-promotion-version-") as path:
         worktree = Path(path) / "worktree"
         subprocess.run(  # noqa: S603
