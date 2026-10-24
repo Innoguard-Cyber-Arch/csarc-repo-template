@@ -1988,6 +1988,17 @@ def rules_plan_unsupported(error: RuntimeError) -> bool:
     return str(error).endswith(f"gh: {RULES_PLAN_UNSUPPORTED}")
 
 
+def malformed_check(item: object) -> bool:
+    """Return whether one required-check entry lacks its context or app."""
+    return (
+        not isinstance(item, dict)
+        or not isinstance(item.get("context"), str)
+        or not item["context"]
+        or type(item.get("integration_id")) is not int
+        or item["integration_id"] <= 0
+    )
+
+
 def _effective_protection(  # noqa: C901
     github: GitHub,
     repo: str,
@@ -2087,14 +2098,7 @@ def _effective_protection(  # noqa: C901
             False,
         )
     required_items = [item for items in required_groups for item in items]
-    if any(
-        not isinstance(item, dict)
-        or not isinstance(item.get("context"), str)
-        or not item["context"]
-        or type(item.get("integration_id")) is not int
-        or item["integration_id"] <= 0
-        for item in required_items
-    ):
+    if any(map(malformed_check, required_items)):
         return (
             "unknown",
             "required check rules are malformed",
@@ -2513,43 +2517,26 @@ def declared_required_contexts() -> set[tuple[str, int]]:
             f"Required checks: unreadable: {error}. Fix the declaration."
         ) from error
     rules = policy.get("rules") if isinstance(policy, dict) else None
-    if not isinstance(rules, list):
+    valid = isinstance(rules, list) and all(isinstance(x, dict) for x in rules)
+    groups = [
+        params.get("required_status_checks")
+        if isinstance(params := rule.get("parameters"), dict)
+        else None
+        for rule in (rules if valid else [])
+        if rule.get("type") == "required_status_checks"
+    ]
+    if not valid or any(
+        not isinstance(items, list) or any(map(malformed_check, items))
+        for items in groups
+    ):
         raise RuntimeError(
             "Required checks: malformed declaration. Fix '.csarc/config.yml'."
         )
-    contexts: set[tuple[str, int]] = set()
-    for rule in rules:
-        if not isinstance(rule, dict):
-            raise RuntimeError(
-                "Required checks: malformed declaration. Fix "
-                "'.csarc/config.yml'."
-            )
-        if rule.get("type") != "required_status_checks":
-            continue
-        parameters = rule.get("parameters")
-        items = (
-            parameters.get("required_status_checks")
-            if isinstance(parameters, dict)
-            else None
-        )
-        if not isinstance(items, list):
-            raise RuntimeError(
-                "Required checks: malformed declaration. Fix "
-                "'.csarc/config.yml'."
-            )
-        for item in items:
-            if (
-                not isinstance(item, dict)
-                or not isinstance(item.get("context"), str)
-                or not item["context"]
-                or type(item.get("integration_id")) is not int
-                or item["integration_id"] <= 0
-            ):
-                raise RuntimeError(
-                    "Required checks: malformed declaration. Fix "
-                    "'.csarc/config.yml'."
-                )
-            contexts.add((item["context"], item["integration_id"]))
+    contexts = {
+        (item["context"], item["integration_id"])
+        for items in groups
+        for item in items
+    }
     if not contexts:
         raise RuntimeError(
             "Hosted merge: no declared required checks. Declare them."
@@ -3966,6 +3953,20 @@ def merge_snapshot(  # noqa: C901
     }
 
 
+def args_snapshot(
+    github: GitHub, lease: dict[str, Any], args: argparse.Namespace
+) -> dict[str, object]:
+    """Take the merge snapshot with this command's own inputs."""
+    return merge_snapshot(
+        github,
+        lease,
+        args.authorization_url,
+        getattr(args, "actor", ""),
+        getattr(args, "quota_fallback_note_url", ""),
+        getattr(args, "require_dependabot_head", False),
+    )
+
+
 def review_settings() -> str:
     """Return this checkout's normalized Copilot review setting."""
     return review_gate.review_settings(
@@ -4223,14 +4224,7 @@ def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
 def check(args: argparse.Namespace, github: GitHub) -> None:
     """Print the live merge snapshot without mutating GitHub."""
     lease = caller_lease(args, github)
-    snapshot = merge_snapshot(
-        github,
-        lease,
-        args.authorization_url,
-        getattr(args, "actor", ""),
-        getattr(args, "quota_fallback_note_url", ""),
-        getattr(args, "require_dependabot_head", False),
-    )
+    snapshot = args_snapshot(github, lease, args)
     # message-pattern: allow X1 JSON output
     sys.stdout.write(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
 
@@ -4587,14 +4581,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         contract = merge_trace.load_contract()
     except merge_trace.EvidenceError as error:
         raise RuntimeError(str(error)) from error
-    snapshot = merge_snapshot(
-        github,
-        lease,
-        args.authorization_url,
-        getattr(args, "actor", ""),
-        getattr(args, "quota_fallback_note_url", ""),
-        getattr(args, "require_dependabot_head", False),
-    )
+    snapshot = args_snapshot(github, lease, args)
     if snapshot["merge_mode"] != "agent":
         permission = str(snapshot.get("merge_permission") or "blocked")
         step = (
@@ -4617,14 +4604,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     if candidate_evidence:
         # message-pattern: allow X2 release_policy output without change
         sys.stdout.write(candidate_evidence.rstrip() + "\n")
-    snapshot = merge_snapshot(
-        github,
-        lease,
-        args.authorization_url,
-        getattr(args, "actor", ""),
-        getattr(args, "quota_fallback_note_url", ""),
-        getattr(args, "require_dependabot_head", False),
-    )
+    snapshot = args_snapshot(github, lease, args)
     title = str(snapshot["title"])
     require_head_contains_base(github, args.repo, lease)
     # Because the head contains the base, the squash tree is the head tree;
