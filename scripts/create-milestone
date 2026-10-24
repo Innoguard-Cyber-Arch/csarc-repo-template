@@ -245,11 +245,13 @@ Failed to attach the tracker Issue to Milestone #$milestone_number via
 $tracker_cmd_output
 This usually means no Milestone, or more than one, matches that name --
 not a problem with the Issue body, label, or type. Milestone
-#$milestone_number already exists with no tracker yet -- delete it first
-if you would rather start over, or create the tracker Issue by hand and
-attach it by number instead of by name to avoid the same ambiguity:
+#$milestone_number already exists with no tracker yet. To start over,
+delete the Milestone:
   gh api --method DELETE repos/$repo/milestones/$milestone_number
-  gh api --method PATCH repos/$repo/issues/<new-issue-number> --field "milestone=$milestone_number"
+To keep it, create the tracker Issue by hand. Then attach the Issue by
+Milestone number '$milestone_number', not by name, to avoid the same
+ambiguity. Use the REST API command in the 'docs/ci-policy.md' section
+"Milestone 掛勾與持續同步".
 EOF
   else
     cat >&2 <<EOF
@@ -288,9 +290,11 @@ Tracker $tracker_url is not attached to Milestone #$milestone_number:
 got "${attached_milestone_number:-<none>}" instead. --milestone "$title"
 matches by name, so this can happen if more than one Milestone shares
 that title. Milestone #$milestone_number and tracker $tracker_url already
-exist -- reattach it by number (not by name, to avoid the same
-ambiguity), then rerun preflight to confirm, or delete both instead:
-  gh api --method PATCH repos/$repo/issues/$tracker_number --field "milestone=$milestone_number"
+exist. To keep them, reattach the tracker by Milestone number
+'$milestone_number', not by name, to avoid the same ambiguity. Use the
+REST API command in the 'docs/ci-policy.md' section
+"Milestone 掛勾與持續同步". Then rerun preflight to confirm. To start
+over, delete both instead:
   gh issue delete $tracker_number --repo $repo
   gh api --method DELETE repos/$repo/milestones/$milestone_number
 EOF

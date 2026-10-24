@@ -884,11 +884,14 @@ def test_writer_scanner_allows_the_shipped_pr_policy_validator() -> None:
     ever caught by the full-tier, real-template adoption tests. Regression
     coverage for Issue #645: scan the exact shipped files directly so a
     reintroduced literal example fails fast, without needing a real render.
+    Issue #1254 added scripts/create-milestone: its recovery hints quoted a
+    literal REST milestone PATCH and made the repository's own scan fail.
     """
     root = Path(__file__).resolve().parents[1]
     relative_paths = (
         "scripts/validate-pr-policy",
         "template/.csarc/scripts/validate-pr-policy",
+        "scripts/create-milestone",
     )
     for relative in relative_paths:
         candidate = root / relative
