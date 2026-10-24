@@ -2004,6 +2004,7 @@ def effective_protection(
     copilot_mode: bool = False,
     local_mode: bool = False,
     local_fallback: bool = False,
+    dependabot_route: bool = False,
 ) -> tuple[str, str, set[tuple[str, int]], bool, bool]:
     """Prove review and check enforcement for an exact-head merge.
 
@@ -2019,6 +2020,7 @@ def effective_protection(
         copilot_mode,
         local_mode,
         local_fallback,
+        dependabot_route,
     )
     if local_mode and result[0] == "unknown":
         return "inconclusive", result[1], set(), False, False
@@ -2062,6 +2064,7 @@ def _effective_protection(  # noqa: C901
     copilot_mode: bool,
     local_mode: bool,
     local_fallback: bool,
+    dependabot_route: bool,
 ) -> tuple[str, str, set[tuple[str, int]], bool, bool]:
     """Classify the effective Ruleset shape for `effective_protection`."""
     try:
@@ -2269,6 +2272,7 @@ def _effective_protection(  # noqa: C901
         )
     ruleset_ids = set(ruleset_id_values)
     reviewed_bypass = False
+    hidden_bypass = False
     for ruleset_id in ruleset_ids:
         try:
             ruleset = github.get(repo, f"rulesets/{ruleset_id}")
@@ -2308,9 +2312,25 @@ def _effective_protection(  # noqa: C901
                 )
             reviewed_bypass = True
         elif bypass_actors != []:
-            if (
-                not reviewed_merge
-                or bypass_actors != REVIEWED_MERGE_BYPASS_ACTORS
+            # Issue #1262: GitHub hides bypass actors from a token that
+            # cannot edit the Ruleset, such as the Dependabot merge workflow.
+            # Only that route accepts it, and only when GitHub reports that
+            # the token can never bypass, so every rule applies to its merge.
+            hidden = "bypass_actors" not in ruleset
+            if hidden and not (
+                dependabot_route
+                and ruleset.get("current_user_can_bypass") == "never"
+            ):
+                return (
+                    "blocked",
+                    "an effective Ruleset hides its bypass actors; only a "
+                    "Dependabot merge that can never bypass may proceed",
+                    set(),
+                    False,
+                    False,
+                )
+            if not reviewed_merge or (
+                not hidden and bypass_actors != REVIEWED_MERGE_BYPASS_ACTORS
             ):
                 return (
                     "blocked",
@@ -2320,6 +2340,7 @@ def _effective_protection(  # noqa: C901
                     False,
                 )
             reviewed_bypass = True
+            hidden_bypass = hidden_bypass or hidden
     copilot_only_block_possible = all(
         item.get("type")
         in {
@@ -2339,6 +2360,12 @@ def _effective_protection(  # noqa: C901
         "enforced",
         (
             "exact-head review and checks are revalidated by lifecycle"
+            + (
+                "; GitHub hides the bypass actors, and this token can never "
+                "bypass"
+                if hidden_bypass
+                else ""
+            )
             if reviewed_bypass
             else "server-side merge controls are active without bypass"
         ),
@@ -3824,6 +3851,7 @@ def merge_snapshot(  # noqa: C901
         verification_mode == "local",
         verification_mode == "local"
         and configured_admin_bypass() in {"beta-only", "always"},
+        dependabot_route=bool(dependabot_head),
     )
     authorization_actor = str((auth.get("user") or {}).get("login", ""))
     mergeable_state = pull.get("mergeable_state")
