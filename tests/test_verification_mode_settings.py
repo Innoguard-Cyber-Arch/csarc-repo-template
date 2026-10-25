@@ -479,16 +479,20 @@ class Visibility:
         return {"private": self.private}
 
 
+RENDERED = {"hosted": "pr-policy.yml", "self-hosted": "csarc-verify.yml"}
+OTHER_RENDER = {"hosted": "local", "local": "hosted", "self-hosted": "local"}
+
+
 def lifecycle(
-    name: str, root: Path, text: str, hosted_render: bool
+    name: str, root: Path, text: str, render: str
 ) -> Callable[..., str]:
-    """Load one lifecycle module against a temporary repository root."""
+    """Load one lifecycle module against a root rendered in one mode."""
     module = runpy.run_path(str(LIFECYCLES[name]))
     (root / ".csarc").mkdir(parents=True, exist_ok=True)
     (root / ".csarc/config.yml").write_text(text, encoding="utf-8")
-    if hosted_render:
+    if render in RENDERED:
         (root / ".github/workflows").mkdir(parents=True, exist_ok=True)
-        (root / ".github/workflows/pr-policy.yml").write_text("", "utf-8")
+        (root / ".github/workflows" / RENDERED[render]).write_text("", "utf-8")
     function = module["configured_verification_mode"]
     function.__globals__["repository_root"] = lambda: root
     return function
@@ -500,20 +504,20 @@ def lifecycle(
 def test_merge_uses_the_live_visibility_and_fails_closed(
     name: str, private: str, public: str, is_private: bool, tmp_path: Path
 ) -> None:
-    """AC3/R2: merge reads live visibility; mismatch and self-hosted stop."""
+    """AC3/R2: merge reads live visibility; a render mismatch stops.
+
+    #1269 replaced the blanket self-hosted refusal: the mode is returned and
+    the merge then requires bound VM evidence (test_self_hosted_verification).
+    """
     mode = private if is_private else public
-    function = lifecycle(
-        name, tmp_path, config(private, public), mode == "hosted"
-    )
+    function = lifecycle(name, tmp_path, config(private, public), mode)
     github = Visibility(is_private)
-    if mode == "self-hosted":
-        with pytest.raises(RuntimeError, match="Register with csarc-devops"):
-            function(github, "acme/product")
-    else:
-        assert function(github, "acme/product") == mode
+    assert function(github, "acme/product") == mode
     # The same settings against the other render family must re-render.
     other = tmp_path / "other"
-    function = lifecycle(name, other, config(private, public), mode != "hosted")
+    function = lifecycle(
+        name, other, config(private, public), OTHER_RENDER[mode]
+    )
     with pytest.raises(RuntimeError, match="csarc update"):
         function(github, "acme/product")
 
@@ -523,7 +527,7 @@ def test_merge_fails_closed_without_visibility(
     name: str, tmp_path: Path
 ) -> None:
     """AC3 (ADR Q7): an unreadable visibility never picks a mode."""
-    function = lifecycle(name, tmp_path, config("hosted", "hosted"), True)
+    function = lifecycle(name, tmp_path, config("hosted", "hosted"), "hosted")
     with pytest.raises(RuntimeError, match="visibility"):
         function(Visibility(None), "acme/product")
 
@@ -532,10 +536,37 @@ def test_merge_fails_closed_without_visibility(
 def test_registered_self_hosted_still_waits_for_vm_evidence(
     name: str, tmp_path: Path
 ) -> None:
-    """AC3: a registered runner never makes a merge pretend VM evidence."""
-    function = lifecycle(name, tmp_path, config(extra=RUNNER_TEXT), False)
-    with pytest.raises(RuntimeError, match="VM evidence"):
-        function(Visibility(True), "acme/product")
+    """AC3: a registered runner never makes a merge pretend VM evidence.
+
+    #1269: the mode is self-hosted, and without a bound VM run the evidence
+    reader refuses the merge instead of using local or hosted evidence.
+    """
+    text = config(extra=RUNNER_TEXT)
+    function = lifecycle(name, tmp_path, text, "self-hosted")
+    assert function(Visibility(True), "acme/product") == "self-hosted"
+    reader_path = LIFECYCLES[name].with_name("self_hosted_evidence.py")
+    require = runpy.run_path(str(reader_path))["require"]
+
+    class NoRuns:
+        def collection(self, *_args: object) -> list[dict[str, Any]]:
+            return []
+
+    lease = {
+        "head_sha": "a" * 40,
+        "head_tree": "e" * 40,
+        "base_ref": "main",
+        "base_sha": "b" * 40,
+    }
+    pull = {"head": {"repo": {"full_name": "acme/product"}}}
+    with pytest.raises(RuntimeError, match="no VM run"):
+        require(
+            NoRuns(),
+            "acme/product",
+            lease,
+            pull,
+            tmp_path / ".csarc/config.yml",
+            "fast",
+        )
 
 
 def test_payload_fixtures_keep_the_default_and_add_self_hosted() -> None:

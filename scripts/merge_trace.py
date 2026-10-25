@@ -81,7 +81,11 @@ PAYLOAD_PREFIX = "payload: "
 # Arrays whose order carries no meaning; producers sort them first.
 SET_ARRAYS = frozenset({"labels", "runner_labels", "scopes", "toolchain"})
 TIME_FIELDS = frozenset({"completed_at", "started_at"})
-TRUST_VALUES = ("github-hosted", "self-attested-local")
+TRUST_VALUES = (
+    "github-hosted",
+    "self-attested-local",
+    "self-hosted-registered",
+)
 MERGE_FINDINGS = (
     "traced",
     "untraced",

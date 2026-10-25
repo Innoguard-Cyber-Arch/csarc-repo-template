@@ -221,6 +221,7 @@ RUNTIME_GROUPS: dict[str, frozenset[str]] = {
             "local_verification.py",
             "resolve-cache-root",
             "scan-secrets",
+            "self_hosted_evidence.py",
             "verification-step",
             "verification_cost.py",
             "verification_evidence.py",

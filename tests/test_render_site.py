@@ -504,6 +504,7 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     workflow_labels = {
         "ci.yml": "必要驗證",
         "codeql.yml": "CodeQL SAST",
+        "csarc-verify.yml": "VM 驗證",
         "docker-build-scan.yml": "容器建置掃描",
         "dependabot-auto-merge.yml": "Dependabot 更新資格判定",
         "dependabot-merge.yml": "Dependabot 精確合併",

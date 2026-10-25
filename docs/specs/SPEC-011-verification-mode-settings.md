@@ -39,14 +39,14 @@ tracking: none
 
 - 實際模式依 repository 當下的可見性決定：`public` 用 `verification_mode_public`，`private` 與 `internal` 用 `verification_mode_private`。
 - render 使用 render 時的 `project_visibility`。合併時，lifecycle（`pr_lifecycle.py merge`）以操作者的登入讀取 repository 的 `private` 欄位；讀不到或不是布林值就 fail closed（ADR Q7）。設定本身只從 trusted base 讀取（#1069）。
-- 實際模式是 `self-hosted` 時，在 VM 證據的讀取上線（#1269）之前，lifecycle 一律拒絕合併，不改用 `local` 或 `hosted`。尚未登記時，訊息列出登記步驟；已登記時，訊息要求更新 CSARC。
-- `verify-fast` 在 self-hosted render 中照常執行，只記錄自我聲明的本機證據（`self-attested-local`），並印出一行 `NOTICE:` 說明這不是 VM 證據。
+- 實際模式是 `self-hosted` 時，治理與 `local` 相同，合併只接受 §9 的 VM 證據，不改用 `local` 或 `hosted` 的證據（#1269）。尚未登記時，訊息列出登記步驟。唯一的例外是 §9 的離開出口。
+- `verify-fast` 在 self-hosted render 中照常執行，只記錄自我聲明的本機證據（`self-attested-local`），並印出一行 `NOTICE:` 說明這不是 VM 證據；在 VM 上由 `csarc-verify.yml` 執行時不印這一行。
 
 ## 3. Render
 
-- `self-hosted` 的 render 等同 `local` 的 render，不產生任何 hosted workflow。唯讀驗證 workflow 與 VM 證據 reader 由 #1269 加入。
+- `self-hosted` 的 render 等同 `local` 的 render，不產生任何 hosted workflow，只多兩個檔案：唯讀驗證 workflow `.github/workflows/csarc-verify.yml` 與 VM 證據 reader `.csarc/scripts/self_hosted_evidence.py`（#1269）。其他模式不 render 這兩個檔案。
 - 只 render 當下實際模式需要的檔案（ADR Q2）。可見性改變後必須重新 render：轉 public 時由 `retire`（#1271）的 PR 以 public 模式重新 render；轉回 private 時執行 `csarc update`。
-- 已 render 的檔案以 `.github/workflows/pr-policy.yml` 判斷：只有 hosted render 產生它。lifecycle 發現實際模式與已 render 的檔案不一致（實際模式是 `hosted` 卻沒有這個檔案，或反過來）時 fail closed，訊息要求執行 `csarc update` 重新 render。
+- 已 render 的檔案以兩個 workflow 判斷：只有 hosted render 產生 `.github/workflows/pr-policy.yml`，只有 self-hosted render 產生 `.github/workflows/csarc-verify.yml`。lifecycle 發現實際模式與已 render 的檔案不一致時 fail closed，訊息要求執行 `csarc update` 重新 render。
 
 ## 4. Migration
 
@@ -74,4 +74,38 @@ tracking: none
 
 ## 8. 不在本規格範圍
 
-唯讀驗證 workflow、VM 證據的讀取與綁定（#1269）、登記 PR 的檢查（#1270）、窗口指令（#1271），以及文件與手冊（#1272）。
+登記 PR 的檢查（#1270）、窗口指令（#1271），以及文件與手冊（#1272）。
+
+## 9. VM 驗證與證據（#1269）
+
+依 ADR D3、D4、D6（L3、L6）、D10 與 Q1。
+
+**Runner 命名。**由 `self_hosted_runner.id`（下稱 `<id>`）與環境（`dev` 或 `uat`）推導，不含主機名稱。csarc-devops 開窗時依此註冊 runner（ADR C2）：
+
+| 項目 | 值 |
+| --- | --- |
+| labels | `self-hosted`、`csarc-vm-<id>`、`csarc-env-<環境>` |
+| `runner_name` | `csarc-<id>-<環境>` |
+| runner group | `Default` |
+
+**環境。**目標分支是 `main` 時為 `uat`，是 `dev/m*` 或 `dev/i*` 時為 `dev`；其他分支沒有環境，派工與合併都被拒絕。環境必須列在 `self_hosted_environments`。
+
+**`csarc-verify.yml`。**
+
+- 只由 `workflow_dispatch` 觸發，在 PR 的目標分支上派工。輸入：`pull_request`、`head_sha`、`environment`（只列已登記的環境）、`window_end`（UTC，例如 `2026-10-25T09:00Z`）。run 名稱帶 PR 編號與 head SHA。
+- 權限只有 `actions: read`、`contents: read`、`pull-requests: read`，不引用任何 secret；`runs-on` 是上表的三個 labels；尚未登記時 VM label 是 `csarc-vm-unregistered`，登記的 VM 都不帶這個 label。所有 Action 固定完整 SHA，checkout 一律 `persist-credentials: false`。
+- 第一個 step「Check the dispatch before any candidate code」來自目標分支的定義，在任何 checkout 之前以唯讀 token 確認：事件是 `workflow_dispatch`、`GITHUB_WORKFLOW_REF` 是目標分支上的 `csarc-verify.yml`、repository 是 private、PR 的 head repo 是本 repository、head SHA 等於輸入且 PR 仍開啟、PR 的目標分支是派工分支、輸入的環境等於目標分支推出的環境。任一項不符就以 `ERROR:` 結束。窗口剩不到 2 小時時，在輸出與 job summary 各印一行 `WARNING:`，提示執行 `csarc self-hosted extend --env <環境>`。
+- 之後 checkout 目標分支（`github.sha`）並以 trusted executor（#1086）準備 entry point，再 checkout exact candidate。tier 是 trusted router 的 path tier 與 channel floor 中較強者；scopes 來自同一個 router。
+- execution step 名稱是 `Execute self-hosted verification head=<head> tree=<tree> tier=<tier> scopes=<scopes> mode=self-hosted environment=<環境> window=<window_end>`，由 trusted-base 的 `verify` 或 `verify-fast` 對 candidate tree 執行。
+
+**合併時的證據綁定。**`pr_lifecycle.py merge` 以操作者的登入，在 `csarc-verify.yml` 的 runs 中依 `event=workflow_dispatch`、目標分支與 lease 的 base SHA 查詢，取 run 名稱含 exact head 的最新一筆，並要求全部成立：
+
+1. run：`event` 是 `workflow_dispatch`、`path` 是 `.github/workflows/csarc-verify.yml`、`head_branch` 是目標分支、`head_sha` 等於 lease 的 trusted base SHA、`repository` 與 `head_repository` 都是本 repository、結論是 `success`。
+2. job：只有一個 job，結論是 `success`；labels、`runner_name` 與 runner group 等於上表；第一個 step 與 execution step 都成功，而且第一個 step 在前。
+3. execution step：head 與 tree 等於 lease，環境等於目標分支的環境，tier 不低於 trusted router 要求的強度。
+4. job 完成時間在 24 小時內（`evidence_freshness.py`）。
+5. PR 的 head repo 是本 repository；合併當下的實際模式是 `self-hosted`（§2）。
+
+合併證據記錄 run URL、run 的 `actor` 與 `triggering_actor`、runner、環境、窗口與模式，trailer 是 `CSARC-Trust: self-hosted-registered`，summary 多一行 `self-hosted-verification-trace`。窗口結束或登記撤銷不讓已完成的證據失效。
+
+**離開 self-hosted 的出口（ADR Q1）。**trusted base 的 `verification_mode_private` 是 `self-hosted`，candidate 改成其他值，而且兩邊設定只有 `verification_mode_private`、`self_hosted_runner`、`self_hosted_environments` 不同、變更的路徑都在 `.csarc/`、`.github/` 或 `AGENTS.md` 下時，這張 governance-switch PR 改用 `local` 的本機證據合併。trailer 是 `CSARC-Trust: self-attested-local`，summary 多一行 `self-hosted-exit-trace` 說明原因。其他 PR 都不適用。

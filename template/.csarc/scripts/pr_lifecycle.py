@@ -104,6 +104,7 @@ promotion_gate: Any = SiblingModule("promotion_gate")
 release_level: Any = SiblingModule("release_level")
 review_gate: Any = SiblingModule("review_gate")
 risk_controls: Any = SiblingModule("risk_controls")
+self_hosted_evidence: Any = SiblingModule("self_hosted_evidence")
 verification_evidence: Any = SiblingModule("verification_evidence")
 
 
@@ -2494,21 +2495,14 @@ def configured_verification_mode(github: GitHub, repo: str) -> str:
     mode = str(
         config[f"verification_mode_{'private' if private else 'public'}"]
     )
-    rendered = (repository_root() / ".github/workflows/pr-policy.yml").is_file()
-    if (mode == "hosted") != rendered:
+    flows = repository_root() / ".github/workflows"
+    if (mode == "hosted", mode == "self-hosted") != (
+        (flows / "pr-policy.yml").is_file(),
+        (flows / "csarc-verify.yml").is_file(),
+    ):
         raise RuntimeError(
             f"Verification mode {mode}: the rendered files do not match the "
             "current visibility. Run 'csarc update' to render again."
-        )
-    if mode == "self-hosted":
-        step = (
-            "Update CSARC to read VM evidence"
-            if config["self_hosted_runner"]
-            else "Register with csarc-devops, then add self_hosted_runner "
-            "through a governance-switch pull request"
-        )
-        raise RuntimeError(
-            f"Self-hosted verification: no registered VM evidence. {step}."
         )
     return mode
 
@@ -2927,6 +2921,10 @@ def merge_snapshot(  # noqa: C901
     require_lease(github, lease, repo, pr_number, head_sha)
     pull = live_pull(github, repo, pr_number, head_sha)
     verification_mode = configured_verification_mode(github, repo)
+    # Self-hosted keeps the local governance; only its evidence differs.
+    self_hosted = verification_mode == "self-hosted"
+    if self_hosted:
+        verification_mode = "local"
     dependabot_head = ""
     dependabot_scope: list[str] = []
     if require_dependabot_head and verification_mode == "local":
@@ -3237,7 +3235,24 @@ def merge_snapshot(  # noqa: C901
     # label differs.
     verification_record: dict[str, Any] | None = None
     hosted_evidence: dict[str, Any] = {}
-    if verification_mode == "local":
+    vm_evidence: dict[str, Any] | None = None
+    config_path = repository_root() / ".csarc/config.yml"
+    exit_reason = (
+        self_hosted_evidence.exit_reason(
+            subject_repository_root(), config_path, lease
+        )
+        if self_hosted
+        else ""
+    )
+    if self_hosted and not exit_reason and not quota_run_urls:
+        vm_evidence = self_hosted_evidence.require(
+            github, repo, lease, pull, config_path, required_tier
+        )
+        check_evidence = "self-hosted-registered"
+        verification_record = evidence_freshness.normalized_record(
+            vm_evidence, evidence_freshness.TRUST_SELF_HOSTED
+        )
+    elif verification_mode == "local":
         if quota_run_urls:
             raise RuntimeError(
                 "Quota fallback: not for local verification. Run it."
@@ -3267,7 +3282,7 @@ def merge_snapshot(  # noqa: C901
                 hosted_evidence, evidence_freshness.TRUST_HOSTED
             )
     trace = requirement_trace(
-        github, repo, pull, str(head_sha), local_evidence is not None
+        github, repo, pull, str(head_sha), verification_mode == "local"
     )
     require_lease(github, lease, repo, pr_number, head_sha)
     head_ref = str((pull.get("head") or {}).get("ref") or "")
@@ -3302,6 +3317,8 @@ def merge_snapshot(  # noqa: C901
         "local_verification": local_evidence,
         "verification_record": verification_record,
         "hosted_verification": hosted_evidence or None,
+        "self_hosted_verification": vm_evidence,
+        "self_hosted_exit": exit_reason,
         "trailer_route": trailer_route(
             str(lease["base_ref"]),
             head_ref,
@@ -3770,6 +3787,8 @@ def merge_evidence(
         payload, trust = local, "self-attested-local"
     elif isinstance(hosted, dict):
         payload, trust = hosted, "github-hosted"
+    elif isinstance(vm := snapshot.get("self_hosted_verification"), dict):
+        payload, trust = vm, "self-hosted-registered"
     else:
         raise RuntimeError(
             "evidence-missing: no exact-head verification evidence. "
@@ -3954,6 +3973,10 @@ def trace_lines(
             f"scopes={','.join(local_evidence['scopes'])} {suffix} "
             "trust=self-attested-local; this is not trusted hosted evidence"
         )
+    if snapshot.get("self_hosted_verification") or snapshot.get(
+        "self_hosted_exit"
+    ):
+        lines += self_hosted_evidence.trace_lines(snapshot, suffix)
     return lines
 
 

@@ -1103,7 +1103,7 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
    CSARC-Evidence: https://github.com/<owner>/<repo>/pull/<N>#issuecomment-<id>
    CSARC-Evidence-SHA256: sha256:<64 hex>
    CSARC-Evidence-Tree: <verified tree>
-   CSARC-Trust: github-hosted | self-attested-local
+   CSARC-Trust: github-hosted | self-attested-local | self-hosted-registered
    CSARC-Route: issue | sync | dependabot | release-recovery | hotfix | release-follow-up | milestone | isolated
    CSARC-Approval: review | comment | copilot | hotfix-emergency
    CSARC-Authorization: <approval URL>

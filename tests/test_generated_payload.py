@@ -385,9 +385,16 @@ def test_options_select_one_verifier_and_at_most_one_publisher(
     assert ("work-item-lifecycle.yml" in workflows) is (
         hosted and bool(lifecycle)
     )
+    # #1269: only a self-hosted render ships the read-only VM workflow.
+    self_hosted = render_mode(data) == "self-hosted"
+    assert ("csarc-verify.yml" in workflows) is self_hosted
+    assert ("self_hosted_evidence.py" in scripts) is self_hosted
     if not hosted:
         # Only the opted-in scheduled checks run without hosted CI.
-        assert workflows <= {"governance-drift.yml", "template-update.yml"}
+        assert workflows - {"csarc-verify.yml"} <= {
+            "governance-drift.yml",
+            "template-update.yml",
+        }
     # Milestone operations exist only when Milestone automation is on.
     milestones = "milestones" in lifecycle
     assert (
@@ -869,7 +876,10 @@ def test_guide_describes_only_the_enabled_options(
     assert f"| 驗證 | `{render_mode(data)}` |" in text
     assert f"| 發版 | `{ownership}` |" in text
     assert ("required `title`、`verify`、`review`" in text) is hosted
-    assert ("self-attested-local" in text) is not hosted
+    # #1269: self-hosted merges on VM evidence, not local evidence.
+    mode = render_mode(data)
+    assert ("self-attested-local" in text) is (mode == "local")
+    assert ("self-hosted-registered" in text) is (mode == "self-hosted")
     assert ("## 發版" in text) is (ownership == "csarc-owned")
     assert ("publish-release" in text) is (ownership == "csarc-owned")
     assert ("milestone-description.md" in text) is ("milestones" in lifecycle)
