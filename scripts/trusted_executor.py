@@ -383,8 +383,13 @@ GOVERNANCE_ORDER: dict[str, tuple[str, ...]] = {
     "admin_bypass": ("off", "beta-only", "always"),
     "copilot_review": ("off", "allowed"),
     "governance_mode": ("managed", "observe"),
-    "verification_mode": ("hosted", "local"),
+    # SPEC-011: self-hosted is in neither order, so any switch to or from
+    # it takes the reviewed route.
+    "verification_mode_private": ("hosted", "local"),
+    "verification_mode_public": ("hosted", "local"),
 }
+# Any change to the self-hosted registration is a governance switch.
+GOVERNANCE_EXACT = csarc_config.SELF_HOSTED_KEYS
 GOVERNANCE_FLAGS = ("enable_codeql",)
 GOVERNANCE_LISTS = ("lifecycle", "scheduled_checks")
 GOVERNANCE_MINIMUMS = ("coverage_threshold",)
@@ -537,9 +542,9 @@ def read_candidate_config(
             + ("matches" if matches else "does not match")
         )
     if known and all(item.endswith(" matches") for item in items):
-        csarc_config.validate_config(
-            {key: values[key] for key in values if key not in new}, path
-        )
+        checked = {key: values[key] for key in values if key not in new}
+        csarc_config.validate_config(checked, path)
+        values = {**checked, **{key: values[key] for key in new}}
         seen = ",".join(f"{key}:{known[key][0]}:{tag}" for key in new)
         source = f"release:{tag} inventory={seen}"
         # message-pattern: allow X1 stdout carries the JSON route decision
@@ -589,6 +594,9 @@ def governance_relaxations(  # noqa: C901
         before, after = base.get(key), candidate.get(key)
         if type(before) is int and (type(after) is not int or after < before):
             relaxed.append(f"{key}: {before} -> {after}")
+    for key in GOVERNANCE_EXACT:
+        if base.get(key) != candidate.get(key):
+            relaxed.append(f"{key}: {base.get(key)} -> {candidate.get(key)}")
     for key in GOVERNANCE_GRANTS:
         before, after = base.get(key, ""), candidate.get(key, "")
         if after and after != before:

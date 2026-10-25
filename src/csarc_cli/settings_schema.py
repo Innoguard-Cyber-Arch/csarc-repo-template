@@ -59,6 +59,7 @@ MULTI = "multi"
 BOOL = "bool"
 INT = "int"
 TEXT = "text"
+MAP = "map"
 
 # Persistent intent: kind and allowed values (SPEC-009 settings table).
 INTENT_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -72,7 +73,8 @@ INTENT_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
         CHOICE,
         ("zh-tw", "en", "zh-tw+en", "en+zh-tw"),
     ),
-    "verification_mode": (CHOICE, ("local", "hosted")),
+    "verification_mode_private": (CHOICE, ("self-hosted", "hosted", "local")),
+    "verification_mode_public": (CHOICE, ("hosted", "local")),
     "admin_bypass": (CHOICE, ("off", "beta-only", "always")),
     "copilot_review": (CHOICE, ("allowed", "off")),
     "governance_mode": (CHOICE, ("managed", "observe")),
@@ -93,7 +95,21 @@ INTENT_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
     "project_verification_hook": (TEXT, ()),
     "github_project_url": (TEXT, ()),
     "single_writer_merger": (TEXT, ()),
+    "self_hosted_runner": (MAP, ("id", "registration")),
+    "self_hosted_environments": (MULTI, ("dev", "uat")),
 }
+# SPEC-011: the registration keys exist exactly when the private mode is
+# self-hosted; ``{}`` is the valid "not yet registered" runner.
+SELF_HOSTED_KEYS = ("self_hosted_runner", "self_hosted_environments")
+# SPEC-011 transition (#1069 decision 8): the one legacy mode key stays
+# valid, alone, until the target's trusted base reads both visibility
+# settings; it means the same mode for both visibilities.
+LEGACY_MODE = "verification_mode"
+MODE_KEYS = ("verification_mode_private", "verification_mode_public")
+RUNNER = re.compile(
+    r"[a-z0-9][a-z0-9-]{0,31} "
+    r"https://github\.com/[A-Za-z0-9-]+/csarc-devops/issues/[1-9][0-9]*"
+)
 # Optional intent and its default when absent: #1080 added it after older
 # readers, which reject unknown keys, so a schema 2 file may omit it.
 OPTIONAL_DEFAULTS: dict[str, object] = {
@@ -124,6 +140,8 @@ METADATA_KEYS = (SCHEMA_KEY, *COPIER_METADATA_KEYS, "project_mode")
 RENDER_KEYS = (
     "documentation_primary_language",
     "documentation_secondary_language",
+    # SPEC-011: the effective mode for the render's visibility.
+    "verification_mode",
 )
 # The resolved render context recorded in provenance: what a render
 # consumed beyond the saved intent.
@@ -283,6 +301,15 @@ def _validate_value(key: str, value: object) -> None:
         valid = isinstance(value, bool)
     elif kind == INT:
         valid = type(value) is int and 1 <= value <= 100
+    elif kind == MAP:
+        valid = value == {} or (
+            isinstance(value, Mapping)
+            and len(value) == 2
+            and RUNNER.fullmatch(
+                f"{value.get('id')} {value.get('registration')}"
+            )
+            is not None
+        )
     else:
         pattern = {
             "github_project_url": PROJECT_URL,
@@ -298,10 +325,40 @@ def _validate_value(key: str, value: object) -> None:
         )
 
 
+def verification_modes(raw: Mapping[str, object]) -> dict[str, object]:
+    """Return both visibility modes, reading the legacy key (SPEC-011)."""
+    if LEGACY_MODE not in raw:
+        return {key: raw[key] for key in MODE_KEYS if key in raw}
+    legacy = raw[LEGACY_MODE]
+    if legacy not in ("local", "hosted") or set(MODE_KEYS) & set(raw):
+        raise settings_error(
+            f"{LEGACY_MODE} is {legacy!r} in .csarc/config.yml; expected "
+            "local or hosted, without verification_mode_private or "
+            "verification_mode_public"
+        )
+    return dict.fromkeys(MODE_KEYS, legacy)
+
+
+def _validate_self_hosted(raw: Mapping[str, object]) -> None:
+    """Require the registration keys exactly for a self-hosted mode."""
+    modes = verification_modes(raw)
+    self_hosted = modes.get("verification_mode_private") == "self-hosted"
+    present = [key for key in SELF_HOSTED_KEYS if key in raw]
+    if present != (list(SELF_HOSTED_KEYS) if self_hosted else []) or (
+        self_hosted and raw["self_hosted_environments"] == []
+    ):
+        raise settings_error(
+            "self_hosted_runner and a non-empty self_hosted_environments "
+            "are required exactly when verification_mode_private is "
+            "self-hosted in .csarc/config.yml"
+        )
+
+
 def validate_current(raw: Mapping[str, object]) -> None:
     """Fail closed unless ``raw`` is exactly a valid schema 2 file."""
     allowed = {
         SCHEMA_KEY,
+        LEGACY_MODE,
         *COPIER_METADATA_KEYS,
         *INTENT_SETTINGS,
         *DECISION_SETTINGS,
@@ -312,10 +369,14 @@ def validate_current(raw: Mapping[str, object]) -> None:
             "unknown or retired settings in .csarc/config.yml: "
             + ", ".join(unknown)
         )
+    _validate_self_hosted(raw)
+    present = {*raw, *verification_modes(raw)}
     missing = sorted(
         key
         for key in INTENT_SETTINGS
-        if key not in raw and key not in OPTIONAL_DEFAULTS
+        if key not in present
+        and key not in OPTIONAL_DEFAULTS
+        and key not in SELF_HOSTED_KEYS
     )
     if missing:
         raise settings_error(
@@ -335,6 +396,7 @@ def config_text(values: Mapping[str, object]) -> str:
     """
     allowed = (
         SCHEMA_KEY,
+        LEGACY_MODE,
         *COPIER_METADATA_KEYS,
         *INTENT_SETTINGS,
         *DECISION_SETTINGS,
@@ -606,6 +668,13 @@ def reject_retired_data(explicit: Mapping[str, object]) -> None:
     One-time inputs that were once saved, such as adopt's work-item mapping
     review, remain valid ``--data`` but never reach the settings file.
     """
+    if LEGACY_MODE in explicit:
+        raise SettingsSchemaError(
+            f"{SETTINGS_ERROR_PREFIX}: --data names {LEGACY_MODE}, which "
+            "now has one setting per visibility. No file was changed. Pass "
+            "'--data verification_mode_private=<self-hosted|hosted|local>' "
+            "or '--data verification_mode_public=<hosted|local>'."
+        )
     retired = sorted(
         key
         for key in explicit

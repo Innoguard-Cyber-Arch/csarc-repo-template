@@ -35,7 +35,8 @@ COPIES = {
 }
 GIT = shutil.which("git") or "git"
 LOCAL_ESCALATION = (
-    '{% if verification_mode == "local" -%}\n  if [[ -z "${CSARC_CI_TIER:-}" ]]'
+    '{% if verification_mode != "hosted" -%}\n'
+    '  if [[ -z "${CSARC_CI_TIER:-}" ]]'
 )
 MERGE_DOCSTRING = (
     '    """Merge only when the lease and exact-head controls are '
@@ -319,7 +320,9 @@ def test_root_schema_two_settings_pass_the_trusted_base_reader(
         "verification_mode: hosted\n",
     )
     values = executor["read_config"](path)
-    assert values["verification_mode"] == "hosted"
+    # SPEC-011: the legacy key reads as the same mode for both visibilities.
+    assert values["verification_mode_private"] == "hosted"
+    assert values["verification_mode_public"] == "hosted"
     assert values["admin_bypass"] == "always"
 
 
@@ -330,7 +333,14 @@ def test_root_schema_two_settings_pass_the_trusted_base_reader(
     ("override", "reason"),
     [
         ({"admin_bypass": "always"}, "admin_bypass: off -> always"),
-        ({"verification_mode": "local"}, "verification_mode: hosted -> local"),
+        (
+            {
+                "verification_mode": None,
+                "verification_mode_private": "hosted",
+                "verification_mode_public": "local",
+            },
+            "verification_mode_public: hosted -> local",
+        ),
         ({"governance_mode": "observe"}, "governance_mode: managed -> observe"),
         (
             {"scheduled_checks": []},

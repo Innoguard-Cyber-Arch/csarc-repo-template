@@ -40,7 +40,7 @@ if [[ "$mode" != "full" && "$mode" != "go" && "$mode" != "python" &&
   echo "ERROR: Unknown mode: '$mode'. Use full|go|python|python-compatibility|typescript|rust." >&2
   exit 2
 fi
-{% if verification_mode == "local" -%}
+{% if verification_mode != "hosted" -%}
 verification_head_sha="$(git rev-parse HEAD 2>/dev/null || true)"
 {% endif -%}
 
@@ -137,7 +137,7 @@ verify_go_module() {
   verification_step "Go build" go build ./...
 }
 
-{% if verification_mode == "local" and container -%}
+{% if verification_mode != "hosted" and container -%}
 verify_container() {
   verification_step "Docker availability" command -v docker
   verification_step "Trivy availability" command -v trivy
@@ -285,7 +285,7 @@ fi
 if $verify_go; then
   verify_go_module
 fi
-{% if verification_mode == "local" and container %}
+{% if verification_mode != "hosted" and container %}
 verify_container
 {% endif %}
 
@@ -554,7 +554,7 @@ fi
 # This is the generated project's full-verification path. Scoped modes exit
 # earlier; reaching this point means every selected check and any optional
 # project verification hook passed.
-{% if verification_mode == "local" -%}
+{% if verification_mode != "hosted" -%}
 python3 .csarc/scripts/local_verification.py record \
   --tier full --scopes all --head-sha "$verification_head_sha"
 {% endif -%}

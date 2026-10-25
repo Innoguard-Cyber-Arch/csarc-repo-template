@@ -171,7 +171,9 @@ def test_root_rulesets_match_the_template_render_of_root_settings() -> None:
             key: value
             for key, value in config.items()
             if key in settings_schema.INTENT_SETTINGS
-        }
+        },
+        # SPEC-011: root keeps the legacy key, one mode for both sides.
+        verification_mode=config["verification_mode"],
     )
     for name in ("rulesets", "rulesets-required-checks"):
         root = json.loads(

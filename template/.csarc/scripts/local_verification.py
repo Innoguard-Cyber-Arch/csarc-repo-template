@@ -102,11 +102,18 @@ def evidence_path(head_sha: str) -> Path:
 
 
 def verification_mode(root: Path | None = None) -> str:
-    """Return the configured verification trust mode."""
-    target = root or repository_root()
-    return str(
-        csarc_config.load_config(config_path(target))["verification_mode"]
-    )
+    """Return `hosted` when no visibility uses local-family evidence.
+
+    Only local and self-hosted renders ship this file (SPEC-011), and both
+    record self-attested local evidence; self-hosted merges never accept it
+    as VM evidence.
+    """
+    config = csarc_config.load_config(config_path(root or repository_root()))
+    sides = {
+        config["verification_mode_private"],
+        config["verification_mode_public"],
+    }
+    return "hosted" if sides == {"hosted"} else "local"
 
 
 def resolve_base(base: str = "") -> tuple[str, str]:

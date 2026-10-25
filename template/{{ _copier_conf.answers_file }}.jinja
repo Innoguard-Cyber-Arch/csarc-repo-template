@@ -23,8 +23,21 @@
   "scheduled_checks": scheduled_checks,
   "security_reporting_channel": security_reporting_channel,
   "single_writer_merger": single_writer_merger | default(''),
-  "verification_mode": verification_mode,
+  "self_hosted_environments": self_hosted_environments,
+  "self_hosted_runner": self_hosted_runner,
+  "verification_mode_private": verification_mode_private,
+  "verification_mode_public": verification_mode_public,
 } %}
+{#- SPEC-011: the registration exists only for a self-hosted private mode. #}
+{%- if verification_mode_private != "self-hosted" %}
+{%- set _ = saved.pop("self_hosted_environments") %}
+{%- set _ = saved.pop("self_hosted_runner") %}
+{%- endif %}
+{#- #1069 decision 8: the CLI keeps the one legacy key until the trusted base reads both. #}
+{%- if csarc_legacy_verification_mode | default(false) %}
+{%- set _ = saved.update({"verification_mode": saved.pop("verification_mode_private")}) %}
+{%- set _ = saved.pop("verification_mode_public") %}
+{%- endif %}
 {#- Issue #1233: omit the empty opt-in so older trusted-base readers accept the file. #}
 {%- if not saved.single_writer_merger %}{%- set _ = saved.pop("single_writer_merger") %}{%- endif %}
 {%- for key in ["_commit", "_src_path"] if key in _copier_answers %}

@@ -57,7 +57,7 @@ if [[ -z "$base_ref" ]]; then
   echo "ERROR: Unknown base: '$base'. Fetch it or set CSARC_CI_BASE." >&2
   exit 2
 fi
-{% if verification_mode == "local" -%}
+{% if verification_mode != "hosted" -%}
 verification_head_sha="$(git rev-parse HEAD)"
 verification_base_sha="$(git rev-parse "$base_ref^{commit}")"
 {% endif -%}
@@ -119,7 +119,7 @@ floor_plan="$(python3 "$control_root/.csarc/scripts/trusted_executor.py" channel
 channel_floor="${floor_plan#*floor=}"
 channel_floor="${channel_floor%% *}"
 if [[ "$channel_floor" == "full" && "$suite" != "full" ]]; then
-{% if verification_mode == "local" -%}
+{% if verification_mode != "hosted" -%}
   if [[ -z "${CSARC_CI_TIER:-}" ]]; then
     suite=full
   fi
@@ -130,6 +130,9 @@ fi
 # message-pattern: allow X1 key=value plan
 echo "Local verification plan: base=$base merge-base=$merge_base suite=$suite scopes=${scope_csv:-none}"
 {% if has_python %}export UV_PYTHON="${CSARC_PYTHON_VERSION:-{{ python_target }}}"
+{% endif -%}
+{% if verification_mode == "self-hosted" -%}
+echo "NOTICE: Self-hosted merge evidence comes only from the registered VM; this run is not VM evidence."
 {% endif -%}
 case "$suite" in
   fast) ;;
@@ -239,7 +242,7 @@ if [[ "$scopes" == *,docs,* ]]; then
 fi
 {% endif -%}
 
-{% if verification_mode == "local" -%}
+{% if verification_mode != "hosted" -%}
 python3 .csarc/scripts/local_verification.py record \
   --tier fast --scopes "${scope_csv:-unknown}" --base "$base" \
   --head-sha "$verification_head_sha" --base-sha "$verification_base_sha"

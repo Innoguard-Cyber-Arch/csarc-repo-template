@@ -31,7 +31,8 @@ SHARED_NAMES = (
     "RECORD_TIERS",
 )
 HOSTED_FIXTURES = ("hosted-csarc-owned-python", "consumer-a", "consumer-b")
-LOCAL_FIXTURES = ("solo-default", "solo-python")
+# SPEC-011: solo-default renders self-hosted, which ships the local tool.
+LOCAL_FIXTURES = ("solo-default", "solo-local", "solo-python")
 
 
 @pytest.fixture(scope="module")

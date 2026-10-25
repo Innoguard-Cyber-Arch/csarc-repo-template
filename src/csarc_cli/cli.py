@@ -4804,10 +4804,14 @@ def print_update_recommendation(update: dict[str, object] | None) -> None:
     """Print an optional update recommendation."""
     if update is None:
         return
-    recommendation = update.get("governance_drift_recommendation")
-    if isinstance(recommendation, str):
-        # message-pattern: allow X5 recommendation line of the plan report
-        print(f"Recommendation: {recommendation}")
+    for key in (
+        "governance_drift_recommendation",
+        "self_hosted_recommendation",
+    ):
+        recommendation = update.get(key)
+        if isinstance(recommendation, str):
+            # message-pattern: allow X5 recommendation line of the plan report
+            print(f"Recommendation: {recommendation}")
 
 
 def print_plan(plan: ResolvedPlan) -> None:
@@ -9857,6 +9861,52 @@ def governance_drift_update_recommendation(
     return None
 
 
+# SPEC-011 transition (#1069 decision 8): the template writes the one legacy
+# mode key while the target's trusted-base reader predates both settings.
+LEGACY_MODE_FLAG = "csarc_legacy_verification_mode"
+
+
+def legacy_mode_writer(
+    target: Path, answers: Mapping[str, object]
+) -> dict[str, object]:
+    """Return the render flag that keeps the legacy mode key, if needed."""
+    reader = managed_script(target, "csarc_config.py")
+    try:
+        current = settings_schema.MODE_KEYS[0] in reader.read_text("utf-8")
+    except OSError:
+        current = False
+    if current:
+        return {}
+    modes = {answers.get(key) for key in settings_schema.MODE_KEYS}
+    if modes == {None}:
+        return {}
+    if len(modes) != 1 or not modes <= {"local", "hosted"}:
+        raise CliError(
+            "Verification modes cannot change in this update: the "
+            "repository's reader predates verification_mode_private and "
+            "verification_mode_public. Merge this update without changing "
+            "them, then run 'csarc update --data ...' again."
+        )
+    return {LEGACY_MODE_FLAG: True}
+
+
+def self_hosted_update_recommendation(
+    answers: Mapping[str, object], repository: RepositoryContext
+) -> str | None:
+    """Recommend self-hosted on a private repository, never switching it."""
+    private = answers.get("verification_mode_private")
+    if repository.visibility == "public" or private in {None, "self-hosted"}:
+        return None
+    return (
+        "private repositories can verify on a registered csarc-devops VM "
+        "(verification_mode_private: self-hosted); this update keeps "
+        f"{private}. To switch: open an Issue here and one in csarc-devops, "
+        "linked both ways; after both approve, open a governance-switch "
+        "pull request that sets verification_mode_private=self-hosted and "
+        "self_hosted_runner to the VM id and that csarc-devops Issue URL."
+    )
+
+
 def migrate_simplified_settings(
     answers: Mapping[str, object], explicit_data: Mapping[str, str]
 ) -> dict[str, object]:
@@ -13103,6 +13153,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     candidate_answers, update_data = update_plan_answers(
         saved_answers, explicit_data, repository
     )
+    update_data.update(legacy_mode_writer(target, candidate_answers))
     observed = observed_setting_differences(
         saved_answers, explicit_data, repository
     )
@@ -13431,6 +13482,11 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         status["governance_drift_recommendation"] = (
             governance_drift_recommendation
         )
+    self_hosted_recommendation = self_hosted_update_recommendation(
+        candidate_answers, repository
+    )
+    if self_hosted_recommendation is not None:
+        status["self_hosted_recommendation"] = self_hosted_recommendation
     target_snapshot: dict[str, object] = {}
     if not args.check:
         require_clean_repository(target)
@@ -13677,7 +13733,9 @@ def parser() -> argparse.ArgumentParser:
             choices=setup_plan.WORK_MODES,
             help=(
                 "work mode to expand into saved settings (default "
-                f"{setup_plan.DEFAULT_WORK_MODE}); explicit --data wins"
+                f"{setup_plan.DEFAULT_WORK_MODE} for init, "
+                f"{setup_plan.DEFAULT_ADOPT_WORK_MODE} for adopt); explicit "
+                "--data wins"
             ),
         )
         subparser.add_argument(
