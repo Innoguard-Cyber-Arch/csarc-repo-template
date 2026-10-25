@@ -136,7 +136,8 @@ def test_lifecycle_reads_the_record_from_the_shared_module(
     source = path.read_text(encoding="utf-8")
     assert "local_verification.normalized_record" not in source
     assert "local_verification.TRUST_" not in source
-    assert source.count("evidence_freshness.normalized_record(") == 2
+    # Local, hosted, and self-hosted VM evidence (#1269) share the record.
+    assert source.count("evidence_freshness.normalized_record(") == 3
     lifecycle = runpy.run_path(str(path), run_name="render_lifecycle")
     sibling = lifecycle["evidence_freshness"]
     assert sibling.TRUST_HOSTED == "github-hosted"

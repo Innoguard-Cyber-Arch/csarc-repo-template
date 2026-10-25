@@ -128,6 +128,7 @@ typescript/tests/index.test.ts
 .csarc/scripts/render_site.py | documentation_mode == 'template-and-content'
 .csarc/scripts/repo_site_blocks.py | documentation_mode == 'template-and-content'
 .csarc/scripts/request-reviewer | verification_mode == 'hosted'
+.csarc/scripts/self_hosted_evidence.py | verification_mode == 'self-hosted'
 .csarc/scripts/spec_to_issue.py | verification_mode == 'hosted' or documentation_mode != 'off'
 .csarc/scripts/sync_milestone_state.py | verification_mode == 'hosted' or 'milestones' in lifecycle
 .csarc/scripts/sync_milestone_state_hosted.py | verification_mode == 'hosted'
@@ -142,6 +143,7 @@ typescript/tests/index.test.ts
 .github/ISSUE_TEMPLATE/milestone-tracker.yml | 'milestones' in lifecycle
 .github/workflows/ci.yml | verification_mode == 'hosted'
 .github/workflows/codeql.yml | verification_mode == 'hosted' and enable_codeql | default(false)
+.github/workflows/csarc-verify.yml | verification_mode == 'self-hosted'
 .github/workflows/dependabot-auto-merge.yml | verification_mode == 'hosted'
 .github/workflows/dependabot-merge.yml | verification_mode == 'hosted'
 .github/workflows/docker-build-scan.yml | verification_mode == 'hosted' and container

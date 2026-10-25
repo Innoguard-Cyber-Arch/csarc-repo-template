@@ -100,6 +100,9 @@ _exclude:
   # Issue #1267: only local verification records and requires local
   # evidence; the shared record contract lives in evidence_freshness.py.
   - "{% if verification_mode != 'hosted' %}__keep_local_verification__{% else %}.csarc/scripts/local_verification.py{% endif %}"
+  # Issue #1269: only a self-hosted render dispatches and reads VM runs.
+  - "{% if verification_mode == 'self-hosted' %}__keep_csarc_verify__{% else %}.github/workflows/csarc-verify.yml{% endif %}"
+  - "{% if verification_mode == 'self-hosted' %}__keep_self_hosted_evidence__{% else %}.csarc/scripts/self_hosted_evidence.py{% endif %}"
   - "{% if verification_mode == 'hosted' and 'issues' in lifecycle %}__keep_issue_policy_script__{% else %}.csarc/scripts/validate-issue-policy{% endif %}"
   - "{% if verification_mode == 'hosted' or documentation_mode != 'off' %}__keep_spec_script__{% else %}.csarc/scripts/spec_to_issue.py{% endif %}"
   # Issue #1208: Milestone approval, promotion, and delivery sync. Hosted

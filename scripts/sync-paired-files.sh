@@ -30,6 +30,7 @@ paired_files=(
   "scripts/repository_facts.py|template/.csarc/scripts/repository_facts.py"
   "scripts/request-reviewer|template/.csarc/scripts/request-reviewer"
   "scripts/review_gate.py|template/.csarc/scripts/review_gate.py"
+  "scripts/self_hosted_evidence.py|template/.csarc/scripts/self_hosted_evidence.py"
   "scripts/test-worktree-cleanup|tests/generated_self_tests/scripts/test-worktree-cleanup"
   "scripts/test-finalization-queue|tests/generated_self_tests/scripts/test-finalization-queue"
   "scripts/validate-issue-title|template/.csarc/scripts/validate-issue-title"

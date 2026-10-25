@@ -132,7 +132,8 @@ echo "Local verification plan: base=$base merge-base=$merge_base suite=$suite sc
 {% if has_python %}export UV_PYTHON="${CSARC_PYTHON_VERSION:-{{ python_target }}}"
 {% endif -%}
 {% if verification_mode == "self-hosted" -%}
-echo "NOTICE: Self-hosted merge evidence comes only from the registered VM; this run is not VM evidence."
+[[ -n "${CSARC_CI_TIER:-}" ]] ||
+  echo "NOTICE: Self-hosted merge evidence comes only from the registered VM; this run is not VM evidence."
 {% endif -%}
 case "$suite" in
   fast) ;;

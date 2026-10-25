@@ -32,6 +32,7 @@ RECORD_SCHEMA_VERSION = 1
 SHA = re.compile(r"[0-9a-f]{40}")
 TRUST_LOCAL = "self-attested-local"
 TRUST_HOSTED = "github-hosted"
+TRUST_SELF_HOSTED = "self-hosted-registered"
 RECORD_KEYS = frozenset(
     {
         "schema_version",
@@ -145,9 +146,9 @@ def normalized_record(evidence: dict[str, Any], trust: str) -> dict[str, Any]:
     and may omit it for legacy execution claims. Every other field and its
     validation are identical, and the trust label is kept as given.
     """
-    if trust not in {TRUST_LOCAL, TRUST_HOSTED}:
+    if trust not in {TRUST_LOCAL, TRUST_HOSTED, TRUST_SELF_HOSTED}:
         raise RuntimeError(
-            f"Bad trust label: '{trust}' is unknown. Use 'local' or 'hosted'."
+            f"Bad trust label: '{trust}' is unknown. Use a known trust label."
         )
     declared = evidence.get("trust")
     if declared is not None and declared != trust:

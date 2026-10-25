@@ -17,7 +17,7 @@
     "CSARC-Trust": {
       "required": true,
       "value": "enum",
-      "values": ["github-hosted", "self-attested-local"]
+      "values": ["github-hosted", "self-attested-local", "self-hosted-registered"]
     },
     "CSARC-Route": {
       "required": true,
