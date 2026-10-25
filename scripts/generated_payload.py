@@ -95,21 +95,23 @@ CONVERSION_OFFSETS: dict[str, int] = {
     "consumer-a": 229_124,
     "consumer-b": 228_687,
 }
-# Every per-fixture budget (#1231). A later change may only lower these.
+# Every per-fixture budget (#1231). A later change may only lower these;
+# raising one needs an ADR revision and owner approval, as #1267 did for the
+# solo agent_doc_tokens (2026-10-25).
 TARGETS: dict[str, dict[str, int]] = {
     "solo-default": {
         "files": 92,
         "canonical_bytes": 784_000,
         "write_workflows": 0,
         "pull_request_target_workflows": 0,
-        "agent_doc_tokens": 13_500,
+        "agent_doc_tokens": 14_000,
     },
     "solo-python": {
         "files": 95,
         "canonical_bytes": 794_000,
         "write_workflows": 0,
         "pull_request_target_workflows": 0,
-        "agent_doc_tokens": 13_500,
+        "agent_doc_tokens": 14_000,
     },
     "hosted-csarc-owned-python": {
         "files": 126,

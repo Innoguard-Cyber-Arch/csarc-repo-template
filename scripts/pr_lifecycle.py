@@ -104,6 +104,7 @@ class SiblingModule:
 # selected command first needs it.
 ci_tier: Any = SiblingModule("ci_tier")
 dependabot_auth: Any = SiblingModule("authenticate_dependabot_head")
+evidence_freshness: Any = SiblingModule("evidence_freshness")
 local_verification: Any = SiblingModule("local_verification")
 merge_trace: Any = SiblingModule("merge_trace")
 promotion_gate: Any = SiblingModule("promotion_gate")
@@ -3965,8 +3966,8 @@ def merge_snapshot(  # noqa: C901
             required_tier=required_tier,
         )
         check_evidence = "local-self-attested"
-        verification_record = local_verification.normalized_record(
-            local_evidence, local_verification.TRUST_LOCAL
+        verification_record = evidence_freshness.normalized_record(
+            local_evidence, evidence_freshness.TRUST_LOCAL
         )
     elif protection in AGENT_PROTECTIONS or quota_run_urls:
         check_evidence = require_successful_checks(
@@ -3978,8 +3979,8 @@ def merge_snapshot(  # noqa: C901
             hosted_evidence,
         )
         if hosted_evidence:
-            verification_record = local_verification.normalized_record(
-                hosted_evidence, local_verification.TRUST_HOSTED
+            verification_record = evidence_freshness.normalized_record(
+                hosted_evidence, evidence_freshness.TRUST_HOSTED
             )
     trace = requirement_trace(
         github, repo, pull, str(head_sha), local_evidence is not None
