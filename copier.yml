@@ -97,6 +97,9 @@ _exclude:
   - "{% if verification_mode == 'hosted' %}__keep_sync_milestone_state_hosted__{% else %}.csarc/scripts/sync_milestone_state_hosted.py{% endif %}"
   - "{% if verification_mode == 'hosted' %}__keep_authenticate_dependabot_hosted__{% else %}.csarc/scripts/authenticate_dependabot_hosted.py{% endif %}"
   - "{% if verification_mode == 'hosted' %}__keep_open_milestone_detector__{% else %}.csarc/scripts/detect-open-milestone{% endif %}"
+  # Issue #1267: only local verification records and requires local
+  # evidence; the shared record contract lives in evidence_freshness.py.
+  - "{% if verification_mode != 'hosted' %}__keep_local_verification__{% else %}.csarc/scripts/local_verification.py{% endif %}"
   - "{% if verification_mode == 'hosted' and 'issues' in lifecycle %}__keep_issue_policy_script__{% else %}.csarc/scripts/validate-issue-policy{% endif %}"
   - "{% if verification_mode == 'hosted' or documentation_mode != 'off' %}__keep_spec_script__{% else %}.csarc/scripts/spec_to_issue.py{% endif %}"
   # Issue #1208: Milestone approval, promotion, and delivery sync. Hosted

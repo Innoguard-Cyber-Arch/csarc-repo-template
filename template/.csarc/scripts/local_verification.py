@@ -7,7 +7,6 @@ import argparse
 import importlib
 import json
 import os
-import re
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -24,30 +23,13 @@ else:
         f"{__package__}.evidence_freshness"
     )
 
-SCHEMA_VERSION = 1
-SHA = re.compile(r"[0-9a-f]{40}")
+SCHEMA_VERSION = evidence_freshness.RECORD_SCHEMA_VERSION
+SHA = evidence_freshness.SHA
 VALID_TIERS = {"fast", "full"}
-# One normalized verification record serves both trust modes. Only the trust
-# label differs, so a reader can compare candidates without ever treating
-# self-attested local evidence as trusted hosted evidence.
-TRUST_LOCAL = "self-attested-local"
-TRUST_HOSTED = "github-hosted"
-RECORD_KEYS = frozenset(
-    {
-        "schema_version",
-        "trust",
-        "success",
-        "head_sha",
-        "tree_sha",
-        "base_ref",
-        "base_sha",
-        "tier",
-        "scopes",
-        "command",
-        "completed_at",
-    }
-)
-RECORD_TIERS = {"docs", "fast", "full"}
+TRUST_LOCAL = evidence_freshness.TRUST_LOCAL
+TRUST_HOSTED = evidence_freshness.TRUST_HOSTED
+RECORD_KEYS = evidence_freshness.RECORD_KEYS
+RECORD_TIERS = evidence_freshness.RECORD_TIERS
 TIER_RANK = {"fast": 0, "full": 1}
 VALID_SCOPES = {
     "all",
@@ -62,73 +44,7 @@ VALID_SCOPES = {
 }
 
 
-def normalized_record(evidence: dict[str, Any], trust: str) -> dict[str, Any]:
-    """Project local or hosted evidence onto the shared record contract.
-
-    Local evidence names its base `base_ref`; hosted evidence names it `base`
-    and may omit it for legacy execution claims. Every other field and its
-    validation are identical, and the trust label is kept as given.
-    """
-    if trust not in {TRUST_LOCAL, TRUST_HOSTED}:
-        raise RuntimeError(
-            f"Bad trust label: '{trust}' is unknown. Use 'local' or 'hosted'."
-        )
-    declared = evidence.get("trust")
-    if declared is not None and declared != trust:
-        raise RuntimeError(
-            "Bad trust label: evidence differs. Run verify again."
-        )
-    base_ref = evidence.get("base_ref", evidence.get("base"))
-    base_sha = evidence.get("base_sha")
-    scopes = evidence.get("scopes")
-    record: dict[str, Any] = {
-        "schema_version": SCHEMA_VERSION,
-        "trust": trust,
-        "success": True,
-        "head_sha": evidence.get("head_sha"),
-        "tree_sha": evidence.get("tree_sha"),
-        "base_ref": base_ref,
-        "base_sha": base_sha,
-        "tier": evidence.get("tier"),
-        "scopes": sorted(set(scopes)) if isinstance(scopes, list) else scopes,
-        "command": evidence.get("command"),
-        "completed_at": evidence.get("completed_at"),
-    }
-    legacy_hosted_base = trust == TRUST_HOSTED and not base_ref and not base_sha
-    exact_base = (
-        isinstance(base_ref, str)
-        and bool(base_ref)
-        and isinstance(base_sha, str)
-        and SHA.fullmatch(base_sha) is not None
-    )
-    if (
-        evidence.get("success", True) is not True
-        or not isinstance(record["head_sha"], str)
-        or SHA.fullmatch(record["head_sha"]) is None
-        or not isinstance(record["tree_sha"], str)
-        or SHA.fullmatch(record["tree_sha"]) is None
-        or not (legacy_hosted_base or exact_base)
-        or record["tier"] not in RECORD_TIERS
-        or not isinstance(record["scopes"], list)
-        or not record["scopes"]
-        or not all(isinstance(scope, str) for scope in record["scopes"])
-        or not isinstance(record["command"], str)
-        or not record["command"]
-        or not isinstance(record["completed_at"], str)
-    ):
-        raise RuntimeError(
-            "Bad evidence: a field is invalid. Run verify again."
-        )
-    try:
-        completed_at = datetime.fromisoformat(record["completed_at"])
-    except ValueError as error:
-        raise RuntimeError(
-            "Record completion time is malformed: not ISO 8601. "
-            "Run verify again."
-        ) from error
-    if completed_at.tzinfo is None:
-        raise RuntimeError("Bad completion time: no zone. Run verify again.")
-    return record
+normalized_record = evidence_freshness.normalized_record
 
 
 def git(*args: str) -> str:
