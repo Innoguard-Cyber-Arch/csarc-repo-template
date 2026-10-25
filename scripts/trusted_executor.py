@@ -663,6 +663,43 @@ def require_route(decision: RouteDecision, labels: set[str]) -> None:
         )
 
 
+def require_registration(
+    base: dict[str, object], candidate: dict[str, object], issue: str = "-"
+) -> None:
+    """Print the registration inventory, then require its link (#1270).
+
+    Only the URL format is checked; csarc-devops is never read, because the
+    VM enforces the registration itself (ADR D7, Q5).
+    """
+    keys = ("verification_mode_private", *GOVERNANCE_EXACT)
+    changes = [
+        f"- {key}: {base.get(key, '-')} -> {candidate.get(key, '-')}"
+        for key in keys
+        if base.get(key) != candidate.get(key)
+    ]
+    if not changes:
+        return
+    runner = candidate.get(keys[1])
+    runner = runner if isinstance(runner, dict) else {}
+    url = runner.get("registration")
+    sys.stdout.write(
+        "NOTICE: Self-hosted registration inventory follows; csarc-devops "
+        "is not read.\n"
+    )
+    changes[:0] = [f"- Issue: {issue}", f"- registration: {url or '-'}"]
+    sys.stdout.writelines(f"{line}\n" for line in changes)
+    if candidate.get(keys[0]) == "self-hosted" and not (
+        csarc_config.RUNNER.fullmatch(f"{runner.get('id')} {url}")
+    ):
+        detail = f"{url} is not a csarc-devops Issue" if url else "missing"
+        raise RuntimeError(
+            f"Self-hosted registration: {detail}. Set "
+            "self_hosted_runner.registration to "
+            "https://github.com/<owner>/csarc-devops/issues/<n>, and keep "
+            f"the '{GOVERNANCE_SWITCH_LABEL}' label."
+        )
+
+
 def stronger_suite(first: str, second: str) -> str:
     """Return the stronger of two verification suites."""
     aliases = {"baseline": "fast", "docs": "fast"}
@@ -877,6 +914,7 @@ def _route_command(args: argparse.Namespace) -> int:
     if args.enforce:
         try:
             require_route(decision, labels)
+            require_registration(base, candidate)
         except RuntimeError as error:
             sys.stderr.write(f"ERROR: {error}\n")
             return 1
