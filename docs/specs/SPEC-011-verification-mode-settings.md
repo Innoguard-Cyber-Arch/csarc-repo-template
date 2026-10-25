@@ -61,6 +61,7 @@ tracking: none
 - 改變 `verification_mode_private` 或 `verification_mode_public` 時，`hosted` 到 `local` 是放寬；任何切換到或離開 `self-hosted` 的變更都視為放寬。
 - 任何 `self_hosted_runner` 或 `self_hosted_environments` 的變更都需要 `governance-switch` route。
 - 舊鍵與新鍵在比較前先讀成同一組值，所以只改寫格式的 migration 不算放寬。
+- 登記 PR（#1270）：改動 `verification_mode_private`、`self_hosted_runner` 或 `self_hosted_environments` 時，trusted base 先印出盤點（PR 關閉的 Issue、`registration` URL、每個設定的舊值→新值）。結果仍是 `self-hosted` 時，`registration` 必須符合 §1 的格式，`{}` 或其他 repo 的 URL 都 fail closed。離開 self-hosted 只需要 `governance-switch`。這項檢查只看格式，不讀 csarc-devops；登記是否有效由 VM 依允許清單強制（ADR D7、Q5）。
 
 ## 6. CLI
 
@@ -146,11 +147,12 @@ tracking: none
 
 - [x] 兩個模式設定、登記設定、依可見性 render 與 migration 如 §1–§6（#1268）。
 - [x] self-hosted 的唯讀驗證 workflow、VM 證據綁定與離開出口如 §7（#1269）。
+- [x] 登記 PR 的盤點與 `registration` 格式檢查如 §5（#1270）。
 - [x] 窗口指令、交付管道與工具鏈 image 契約如 §8（#1271）。
 
 ## Out of scope
 
-登記 PR 的檢查（#1270），以及文件與手冊（#1272）。窗口指令（#1271）見 §8；交付管道本身、VM、hook 與 image 的建置由 csarc-devops 負責。
+文件與手冊（#1272）。窗口指令（#1271）見 §8；交付管道本身、VM、hook 與 image 的建置由 csarc-devops 負責。
 
 ## Verification
 
