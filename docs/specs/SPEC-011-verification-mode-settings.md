@@ -39,7 +39,7 @@ tracking: none
 
 - 實際模式依 repository 當下的可見性決定：`public` 用 `verification_mode_public`，`private` 與 `internal` 用 `verification_mode_private`。
 - render 使用 render 時的 `project_visibility`。合併時，lifecycle（`pr_lifecycle.py merge`）以操作者的登入讀取 repository 的 `private` 欄位；讀不到或不是布林值就 fail closed（ADR Q7）。設定本身只從 trusted base 讀取（#1069）。
-- 實際模式是 `self-hosted` 時，治理與 `local` 相同，合併只接受 §9 的 VM 證據，不改用 `local` 或 `hosted` 的證據（#1269）。尚未登記時，訊息列出登記步驟。唯一的例外是 §9 的離開出口。
+- 實際模式是 `self-hosted` 時，治理與 `local` 相同，合併只接受 §7 的 VM 證據，不改用 `local` 或 `hosted` 的證據（#1269）。尚未登記時，訊息列出登記步驟。唯一的例外是 §7 的離開出口。
 - `verify-fast` 在 self-hosted render 中照常執行，只記錄自我聲明的本機證據（`self-attested-local`），並印出一行 `NOTICE:` 說明這不是 VM 證據；在 VM 上由 `csarc-verify.yml` 執行時不印這一行。
 
 ## 3. Render
@@ -67,16 +67,7 @@ tracking: none
 - 工作模式的 preset 改寫兩個模式設定（`solo-local` 兩者都是 `local`；`solo-hosted`、`team` 兩者都是 `hosted`），預設仍是 `solo-local`。`custom` 各問一題，private 只能選 `local` 或 `hosted`。
 - 沒有 preset 或問題提供 `self-hosted`；`csarc init` 的登記指引由 #1272 加入。設定已是 `self-hosted` 而尚未登記時，合併被拒絕的訊息列出登記步驟（§2）。
 
-## 7. 驗證
-
-- root 與 template 的回歸測試涵蓋三種模式與兩種可見性、migration 不改變行為、public 設成 `self-hosted` 被拒絕，以及合併時的模式判斷。
-- payload：`solo-default` 維持量測 `local` 預設；另加 `solo-self-hosted` fixture，沿用同一組預算（ADR Q2）。#1272 切換預設時再調整 fixture 名稱。
-
-## 8. 不在本規格範圍
-
-登記 PR 的檢查（#1270）、窗口指令（#1271），以及文件與手冊（#1272）。
-
-## 9. VM 驗證與證據（#1269）
+## 7. VM 驗證與證據（#1269）
 
 依 ADR D3、D4、D6（L3、L6）、D10 與 Q1。
 
@@ -109,3 +100,17 @@ tracking: none
 合併證據記錄 run URL、run 的 `actor` 與 `triggering_actor`、runner、環境、窗口與模式，trailer 是 `CSARC-Trust: self-hosted-registered`，summary 多一行 `self-hosted-verification-trace`。窗口結束或登記撤銷不讓已完成的證據失效。
 
 **離開 self-hosted 的出口（ADR Q1）。**trusted base 的 `verification_mode_private` 是 `self-hosted`，candidate 改成其他值，而且兩邊設定只有 `verification_mode_private`、`self_hosted_runner`、`self_hosted_environments` 不同、變更的路徑都在 `.csarc/`、`.github/` 或 `AGENTS.md` 下時，這張 governance-switch PR 改用 `local` 的本機證據合併。trailer 是 `CSARC-Trust: self-attested-local`，summary 多一行 `self-hosted-exit-trace` 說明原因。其他 PR 都不適用。
+
+## Acceptance criteria
+
+- [x] 兩個模式設定、登記設定、依可見性 render 與 migration 如 §1–§6（#1268）。
+- [x] self-hosted 的唯讀驗證 workflow、VM 證據綁定與離開出口如 §7（#1269）。
+
+## Out of scope
+
+登記 PR 的檢查（#1270）、窗口指令（#1271），以及文件與手冊（#1272）。
+
+## Verification
+
+- root 與 template 的回歸測試涵蓋三種模式與兩種可見性、migration 不改變行為、public 設成 `self-hosted` 被拒絕，以及合併時的模式判斷。
+- payload：`solo-default` 維持量測 `local` 預設；另加 `solo-self-hosted` fixture，沿用同一組預算（ADR Q2）。#1272 切換預設時再調整 fixture 名稱。
