@@ -387,6 +387,30 @@ def test_update_migrates_the_legacy_mode_unchanged(legacy: str | None) -> None:
         assert classes[key] == ("exact", None)
 
 
+def test_update_passes_the_effective_mode_to_both_render_sides() -> None:
+    """AC3/R1: an update supplies the derived mode the old side needs.
+
+    Copier evaluates the new `_exclude` rules on the old side too, where
+    `verification_mode` is never computed; without the data every hosted
+    workflow of a legacy hosted consumer would look removed (#1277 parity).
+    """
+    hosted = dict.fromkeys(settings_schema.MODE_KEYS, "hosted")
+    for visibility, private, expected in (
+        ("private", "local", "local"),
+        ("public", "local", "hosted"),
+        ("internal", "hosted", "hosted"),
+    ):
+        answers = {
+            **hosted,
+            "verification_mode_private": private,
+            "project_visibility": visibility,
+        }
+        assert cli.effective_mode_data(answers) == {
+            "verification_mode": expected
+        }
+    assert cli.effective_mode_data({}) == {}
+
+
 def test_writer_keeps_the_legacy_key_until_the_reader_reads_both(
     tmp_path: Path,
 ) -> None:

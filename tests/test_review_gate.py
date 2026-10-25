@@ -908,7 +908,8 @@ def test_new_project_defaults_to_local_verification(tmp_path: Path) -> None:
     config = (project / ".csarc/config.yml").read_text(encoding="utf-8")
     assert "copilot_review: allowed" in config
     assert "admin_bypass: always" in config
-    assert "verification_mode: local" in config
+    # SPEC-011: the private mode setting replaces verification_mode.
+    assert "verification_mode_private: local" in config
     generated = rules(project)
     assert generated["copilot_code_review"]["review_on_push"] is True
     assert generated["pull_request"]["required_approving_review_count"] == 0

@@ -9886,6 +9886,22 @@ def legacy_mode_writer(
     return {LEGACY_MODE_FLAG: True}
 
 
+def effective_mode_data(answers: Mapping[str, object]) -> dict[str, object]:
+    """Pass the render-derived mode as update data (SPEC-011).
+
+    Copier evaluates the new template's `_exclude` rules on both sides of
+    an update, and the old side never computes `verification_mode` from the
+    two visibility settings; without it every hosted workflow would look
+    removed. The value equals what the new side computes, which its
+    validator checks.
+    """
+    side = (
+        "public" if answers.get("project_visibility") == "public" else "private"
+    )
+    mode = answers.get(f"verification_mode_{side}")
+    return {} if mode is None else {"verification_mode": mode}
+
+
 def migrate_simplified_settings(
     answers: Mapping[str, object], explicit_data: Mapping[str, str]
 ) -> dict[str, object]:
@@ -13133,6 +13149,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         saved_answers, explicit_data, repository
     )
     update_data.update(legacy_mode_writer(target, candidate_answers))
+    update_data.update(effective_mode_data(candidate_answers))
     observed = observed_setting_differences(
         saved_answers, explicit_data, repository
     )
