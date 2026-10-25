@@ -7,6 +7,18 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.45.0-beta.1] - 2026-10-25
+
+### Features
+
+* feat(settings): choose the verification mode by repository visibility (40a5624)
+
+### Bug Fixes
+
+* fix(agent-docs): point the governance-switch route at its rendered section (058d428)
+* fix(settings): keep the local default and do not offer self-hosted yet (d1a04ba)
+* fix(update): pass the derived verification mode to both render sides (69d3155)
+
 ## [0.44.4] - 2026-10-24
 
 ### Bug Fixes
