@@ -7,7 +7,7 @@
 - One writable task uses one Git branch and one worktree so concurrent changes stay isolated.
 {% if verification_mode == 'local' %}- Run focused checks while iterating, then run `./.csarc/scripts/verify-fast` once on the committed final candidate; it promotes itself to full when path risk requires it and records self-attested evidence bound to the clean exact head/tree, base, tier, and freshness. This is not hosted or release provenance. See [`.csarc/docs/ci-policy.md`](ci-policy.md#本機與-hosted-驗證模式).
 {% else %}- Run focused checks for the owners you touched; do not rerun the aggregate suite solely because the hosted plan selects `full`. The required hosted `verify` check selects the tier from trusted base code and runs it once on the exact candidate; local full is reserved for a documented fallback or explicit diagnostic and never substitutes for hosted evidence. See [`.csarc/docs/ci-policy.md`](ci-policy.md#驗證分級).
-{% endif %}- [`.csarc/docs/ci-policy.md`](ci-policy.md#審查與合併資格) owns review requirements, merge eligibility, configured admin bypass, and the Actions-outage governance-switch route; the former quota fallback is retired. Do not restate or invent exceptions here.
+{% endif %}- [`.csarc/docs/ci-policy.md`](ci-policy.md#審查與合併資格) owns review requirements, merge eligibility, and configured admin bypass{% if verification_mode == 'hosted' %}; its [failure section](ci-policy.md#failure-與-fallback) owns the Actions-outage governance-switch route{% endif %}; the former quota fallback is retired. Do not restate or invent exceptions here.
 - Template updates follow the [`.csarc/docs/csarc.md` update contract](csarc.md#公版更新).
 
 ## Scope and sources of truth
