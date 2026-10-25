@@ -9857,6 +9857,51 @@ def governance_drift_update_recommendation(
     return None
 
 
+# SPEC-011 transition (#1069 decision 8): the template writes the one legacy
+# mode key while the target's trusted-base reader predates both settings.
+LEGACY_MODE_FLAG = "csarc_legacy_verification_mode"
+
+
+def legacy_mode_writer(
+    target: Path, answers: Mapping[str, object]
+) -> dict[str, object]:
+    """Return the render flag that keeps the legacy mode key, if needed."""
+    reader = managed_script(target, "csarc_config.py")
+    try:
+        current = settings_schema.MODE_KEYS[0] in reader.read_text("utf-8")
+    except OSError:
+        current = False
+    if current:
+        return {}
+    modes = {answers.get(key) for key in settings_schema.MODE_KEYS}
+    if modes == {None}:
+        return {}
+    if len(modes) != 1 or not modes <= {"local", "hosted"}:
+        raise CliError(
+            "Verification modes cannot change in this update: the "
+            "repository's reader predates verification_mode_private and "
+            "verification_mode_public. Merge this update without changing "
+            "them, then run 'csarc update --data ...' again."
+        )
+    return {LEGACY_MODE_FLAG: True}
+
+
+def effective_mode_data(answers: Mapping[str, object]) -> dict[str, object]:
+    """Pass the render-derived mode as update data (SPEC-011).
+
+    Copier evaluates the new template's `_exclude` rules on both sides of
+    an update, and the old side never computes `verification_mode` from the
+    two visibility settings; without it every hosted workflow would look
+    removed. The value equals what the new side computes, which its
+    validator checks.
+    """
+    side = (
+        "public" if answers.get("project_visibility") == "public" else "private"
+    )
+    mode = answers.get(f"verification_mode_{side}")
+    return {} if mode is None else {"verification_mode": mode}
+
+
 def migrate_simplified_settings(
     answers: Mapping[str, object], explicit_data: Mapping[str, str]
 ) -> dict[str, object]:
@@ -13103,6 +13148,8 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     candidate_answers, update_data = update_plan_answers(
         saved_answers, explicit_data, repository
     )
+    update_data.update(legacy_mode_writer(target, candidate_answers))
+    update_data.update(effective_mode_data(candidate_answers))
     observed = observed_setting_differences(
         saved_answers, explicit_data, repository
     )

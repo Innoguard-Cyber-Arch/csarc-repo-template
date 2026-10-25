@@ -97,6 +97,15 @@ def human_review_mode(monkeypatch: pytest.MonkeyPatch) -> None:
         "review_settings",
         lambda: "human",
     )
+    # SPEC-011: merge reads the live visibility; fakes report a private
+    # repository and the real root settings and render decide the mode.
+    configured_mode = MODULE["configured_verification_mode"]
+    live = SimpleNamespace(get=lambda _repo, _path: {"private": True})
+    monkeypatch.setitem(
+        MODULE["merge_snapshot"].__globals__,
+        "configured_verification_mode",
+        lambda _github, repo: configured_mode(live, repo),
+    )
 
     def resolved_level(
         github: object, repo: str, pull: dict[str, Any]
@@ -2790,7 +2799,7 @@ def test_local_mode_uses_exact_local_evidence_without_hosted_checks(
     monkeypatch.setitem(
         merge_snapshot.__globals__,
         "configured_verification_mode",
-        lambda: "local",
+        lambda *_: "local",
     )
     monkeypatch.setitem(
         merge_snapshot.__globals__,
@@ -5202,7 +5211,7 @@ def test_local_merge_snapshot_uses_the_configured_e1_fallback(
     """Only a configured beta-only/always scope lets lifecycle accept E1."""
     bind_remote_lease(monkeypatch)
     for name, value in (
-        ("configured_verification_mode", lambda: "local"),
+        ("configured_verification_mode", lambda *_: "local"),
         ("configured_admin_bypass", lambda: admin_bypass),
         ("require_local_pull_policy", lambda *_: None),
     ):

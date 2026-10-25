@@ -79,7 +79,8 @@ def test_init_solo_local_private_asks_six_questions() -> None:
         "work_mode",
     ]
     assert result.work_mode == "solo-local"
-    assert result.values["verification_mode"] == "local"
+    assert result.values["verification_mode_private"] == "local"
+    assert result.values["verification_mode_public"] == "local"
     assert result.values["admin_bypass"] == "always"
     assert result.values["lifecycle"] == []
     assert result.values["scheduled_checks"] == []
@@ -100,13 +101,19 @@ def test_init_solo_local_private_asks_six_questions() -> None:
         (("solo-hosted", ""), ["release_trigger"]),
         (("team", "", ""), ["copilot_review", "release_trigger"]),
         (
-            ("custom", "local", "", ""),
-            ["verification_mode", "admin_bypass", "copilot_review"],
+            ("custom", "local", "", "", ""),
+            [
+                "verification_mode_private",
+                "verification_mode_public",
+                "admin_bypass",
+                "copilot_review",
+            ],
         ),
         (
-            ("custom", "hosted", "", "", "manual"),
+            ("custom", "hosted", "", "", "", "manual"),
             [
-                "verification_mode",
+                "verification_mode_private",
+                "verification_mode_public",
                 "admin_bypass",
                 "copilot_review",
                 "release_trigger",
@@ -198,11 +205,12 @@ def test_explicit_inputs_and_preset_ask_zero_questions() -> None:
 
     assert session.asked == []
     assert session.transcript == []
-    assert result.values["verification_mode"] == "local"
-    assert result.sources["verification_mode"] == {
-        "note": "work mode solo-local",
-        "source": "explicit",
-    }
+    for key in setup_plan.MODE_KEYS:
+        assert result.values[key] == "local"
+        assert result.sources[key] == {
+            "note": "work mode solo-local",
+            "source": "explicit",
+        }
 
 
 def adopt_detections(**overrides: object) -> list[setup_plan.Detection]:
@@ -422,8 +430,12 @@ def test_script_custom_preset_requires_no_guess() -> None:
 
     assert result.work_mode == "custom"
     assert "admin_bypass" not in result.values
-    assert result.values["verification_mode"] == "local"
-    assert result.sources["verification_mode"]["note"] == "suggested default"
+    assert result.values["verification_mode_private"] == "local"
+    assert result.values["verification_mode_public"] == "hosted"
+    assert (
+        result.sources["verification_mode_private"]["note"]
+        == "suggested default"
+    )
 
 
 def test_preset_override_keeps_explicit_values_and_never_saves_name() -> None:
@@ -441,7 +453,8 @@ def test_preset_override_keeps_explicit_values_and_never_saves_name() -> None:
 
     assert inputs["admin_bypass"] == "beta-only"
     assert inputs["scheduled_checks"] == "governance-drift"
-    assert inputs["verification_mode"] == "local"
+    assert inputs["verification_mode_private"] == "local"
+    assert inputs["verification_mode_public"] == "local"
     assert inputs["lifecycle"] == []
     assert inputs["languages"] == "python"
     for name in ("work_mode", "preset", "solo-local"):
@@ -535,7 +548,7 @@ def test_rejected_combinations_stop_before_render(
             "--data enable_codeql=false",
         ),
         (
-            {"languages": ["go"], "verification_mode": "local"},
+            {"languages": ["go"], "verification_mode_private": "local"},
             {"release_trigger": "manual"},
             "init",
             "drop --data release_trigger",
@@ -728,11 +741,11 @@ def test_approval_route_is_inconclusive_before_the_repository_exists() -> None:
 
 
 HOSTED_OFF = {
-    "verification_mode": "hosted",
+    "verification_mode_private": "hosted",
     "admin_bypass": "off",
     "copilot_review": "allowed",
 }
-LOCAL_OFF = {**HOSTED_OFF, "verification_mode": "local"}
+LOCAL_OFF = {**HOSTED_OFF, "verification_mode_private": "local"}
 
 
 def test_none_observed_blocks_even_with_second_approver_confirmation() -> None:
@@ -826,7 +839,7 @@ def test_finish_setup_skips_collaborator_reads_for_always(
         setup_plan.SetupResult(mode="init", work_mode="solo-local"),
         {
             "admin_bypass": "always",
-            "verification_mode": "local",
+            "verification_mode_private": "local",
             "languages": [],
         },
         {},
@@ -884,7 +897,7 @@ def test_cli_peer_roles_match_the_merge_gate() -> None:
 
 BASE = {
     "admin_bypass": "off",
-    "verification_mode": "hosted",
+    "verification_mode_private": "hosted",
     "copilot_review": "off",
     "governance_mode": "managed",
     "coverage_mode": "global",
@@ -904,7 +917,7 @@ BASE = {
     [
         ({"admin_bypass": "always"}, {}, "W01-admin-bypass-always"),
         (
-            {"verification_mode": "local", "admin_bypass": "always"},
+            {"verification_mode_private": "local", "admin_bypass": "always"},
             {},
             "W02-local-verification",
         ),
@@ -919,12 +932,12 @@ BASE = {
             "W04-copilot-entitlement-confirmed",
         ),
         (
-            {"verification_mode": "local", "copilot_review": "allowed"},
+            {"verification_mode_private": "local", "copilot_review": "allowed"},
             {},
             "W05-copilot-reference-only",
         ),
         (
-            {"verification_mode": "local", "admin_bypass": "beta-only"},
+            {"verification_mode_private": "local", "admin_bypass": "beta-only"},
             {},
             "W06-local-beta-only",
         ),
@@ -949,14 +962,14 @@ BASE = {
         ),
         (
             {
-                "verification_mode": "local",
+                "verification_mode_private": "local",
                 "scheduled_checks": ["governance-drift"],
             },
             {},
             "W15-local-actions-minutes",
         ),
         (
-            {"verification_mode": "local", "admin_bypass": "always"},
+            {"verification_mode_private": "local", "admin_bypass": "always"},
             {},
             "W20-ui-merge-without-approval",
         ),
@@ -1012,7 +1025,7 @@ def test_observe_mode_gets_only_a_warning(tmp_path: Path) -> None:
         setup_plan.SetupResult(mode="adopt", work_mode="solo-local"),
         {
             "admin_bypass": "always",
-            "verification_mode": "local",
+            "verification_mode_private": "local",
             "governance_mode": "observe",
             "languages": [],
         },

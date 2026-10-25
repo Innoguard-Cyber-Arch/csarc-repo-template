@@ -6,7 +6,7 @@ Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政
 
 | 項目 | 目前狀態 |
 | --- | --- |
-| 公版版本 | v0.44.4<!-- x-release-please-version --> |
+| 公版版本 | v0.45.0-beta.1<!-- x-release-please-version --> |
 | 支援語言 | Python、Rust、TypeScript、Go（可獨立複選；都不選時只使用共通流程） |
 | repo-site 排版模板版本 | 1.1.0 |
 | repo-site 渲染引擎版本 | 1.1.0 |
@@ -156,7 +156,7 @@ flowchart LR
 
 `main` 前進不會讓無關的里程碑工作失效，也不會自動同步所有分支。各里程碑的最終 Promotion PR 以精確雙親 bridge 同時納入 delivery source 與當時最新 `main`，不另開 final sync PR；只有 owner 記錄真實 dependency，或 `dev/i*` canary 要交付時，才使用受審查的 `sync/main-to-*` PR。
 
-公版的完整入口是 `./scripts/verify-template.sh`；生成專案使用 `./scripts/verify`。新專案預設 `verification_mode: local`，fast／full 成功後寫入綁定 exact head/tree、base、tier 與 scopes 的 self-attested evidence，由 merge lifecycle 重驗後走有 trace 的 admin bypass；不產生 hosted CI、PR 治理、Pages 或 release workflow，也不宣稱 required checks／Pages 已啟用。需要獨立 runner、Pages 或 release provenance 時可改為 `hosted`，由 GitHub-hosted `verify` 執行相同入口。本 repo 本身維持 hosted。兩種模式共用同一個 risk-owned router 與 suite，不增加測試矩陣；本機證明不能取代第三方服務、部署或 release provenance。詳細邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
+公版的完整入口是 `./scripts/verify-template.sh`；生成專案使用 `./scripts/verify`。新專案預設 `verification_mode_private: local`，fast／full 成功後寫入綁定 exact head/tree、base、tier 與 scopes 的 self-attested evidence，由 merge lifecycle 重驗後走有 trace 的 admin bypass；不產生 hosted CI、PR 治理、Pages 或 release workflow，也不宣稱 required checks／Pages 已啟用。需要獨立 runner、Pages 或 release provenance 時可改為 `hosted`，由 GitHub-hosted `verify` 執行相同入口。本 repo 本身維持 hosted。兩種模式共用同一個 risk-owned router 與 suite，不增加測試矩陣；本機證明不能取代第三方服務、部署或 release provenance。詳細邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
 Dependabot、PR 條件式 OSV 與每週／手動 OSV 掃描已啟用；單一 release workflow 已設定為候選，待預設分支實跑後才算啟用。專用 promotion、release handoff、registry publisher 與 deployment workflows 不恢復，歷史由 Git／Issue／PR 保存；Zizmor 由現役的本機驗證階段執行。Reviewer assignment（`.github/workflows/governance-comment.yml`）已在本 repo 與所有生成 repo 啟用；生成 repo 預設產生每日治理漂移排程（`governance-drift.yml`），可從 `scheduled_checks` 移除 `governance-drift` 關閉，本模板 source repo 則只保留同一支 `scripts/check-governance-drift` 供本機驗證，不另外啟用排程。
 
@@ -176,7 +176,7 @@ GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository setti
 
 生成 repo 在 `scheduled_checks` 選 `template-update` 時另會取得 `template-update.yml`：`schedule`（每週一）／`workflow_dispatch` 觸發、`contents: read`＋`issues: write`、10 分鐘 timeout，只呼叫 `scripts/check-template-update` 建立或更新一張通知 Issue，不會自動套用或合併變更。公開模板來源不需要 secret；`_src_path` 指向 private GitHub repository 時，才需設定只有該來源 repository Contents read 權限的 `CSARC_TEMPLATE_READ_TOKEN` repository secret，且只有 `schedule`／`workflow_dispatch` 讀得到，不會流向 `pull_request` workflow。本模板 repo 是來源本身，不消費也不排程它。
 
-`container: true`（Issue #554）時才會取得 `Dockerfile`、`docker-compose.yml` 與唯讀、不推送的 build-and-scan workflow。文件改由 `documentation_mode` 單獨控制：`template-and-content` 一律產生 portable HTML 與渲染驗證，但只有 `verification_mode: hosted` 才產生 Pages workflow 與 enabled policy；該 workflow 僅在 `docs/**` 變更或手動觸發時部署。`content-only` 只管理 project-owned Markdown／README，`off` 不介入；`documentation_languages` 再決定主要語言與是否維護英文與繁中兩個入口。Pages 不可用或未選 hosted 時網站仍可離線使用，不會誤稱已部署。
+`container: true`（Issue #554）時才會取得 `Dockerfile`、`docker-compose.yml` 與唯讀、不推送的 build-and-scan workflow。文件改由 `documentation_mode` 單獨控制：`template-and-content` 一律產生 portable HTML 與渲染驗證，但只有實際驗證模式為 `hosted` 時才產生 Pages workflow 與 enabled policy；該 workflow 僅在 `docs/**` 變更或手動觸發時部署。`content-only` 只管理 project-owned Markdown／README，`off` 不介入；`documentation_languages` 再決定主要語言與是否維護英文與繁中兩個入口。Pages 不可用或未選 hosted 時網站仍可離線使用，不會誤稱已部署。
 
 選配整合（Renovate）與 SAST 啟用依偵測到的平台能力與方案提供建議，不需要導入者建立 PAT 或額外 GitHub App；`csarc init`／`adopt`／`update` 會先顯示唯讀 preflight 結果。選配整合依目前權限引導，分成 `available`／`request-owner`／`fallback` 三種狀態，決定能否直接開啟 [Renovate App 安裝頁](https://github.com/apps/renovate/installations/new)。這個 preflight 不會啟用發版流程。完整能力矩陣與 Fleet 治理觸發門檻見附錄。
 Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`，不要把 token、私鑰或實際密碼寫進 repo。`./scripts/verify-template.sh` 只證明靜態與合成驗證；歷史 live-integration 與 artifact-consumption run 只證明當時的 commit，不能當成現行能力。封存證據與未來恢復條件見 [`docs/live-integration.md`](docs/live-integration.md) 及 [`docs/artifact-consumption.md`](docs/artifact-consumption.md)。

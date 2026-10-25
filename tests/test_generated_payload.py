@@ -53,6 +53,15 @@ MATRIX: dict[str, dict[str, object]] = {
         "release_ownership": "verification-only",
     },
     "solo-local": dict(NARROW),
+    # SPEC-011: the new default renders private self-hosted.
+    "self-hosted": {
+        **{
+            key: value
+            for key, value in NARROW.items()
+            if key != "verification_mode"
+        },
+        "verification_mode_private": "self-hosted",
+    },
     "hosted": {
         "verification_mode": "hosted",
         "documentation_mode": "template-and-content",
@@ -84,6 +93,16 @@ MATRIX: dict[str, dict[str, object]] = {
         "verification_mode": "hosted",
     },
 }
+
+
+def render_mode(values: dict[str, object]) -> str:
+    """Return the effective mode of a private render (SPEC-011)."""
+    return str(
+        values.get("verification_mode")
+        or values.get("verification_mode_private", "self-hosted")
+    )
+
+
 # Read-only operator diagnostics documented for maintainers; they have no
 # automated caller, so each one needs a reason here. The capability
 # diagnostic (#531) had none and is no longer rendered (#1129 AC5); it stays
@@ -344,7 +363,7 @@ def test_options_select_one_verifier_and_at_most_one_publisher(
         (project / ".csarc/config.yml").read_text(encoding="utf-8")
     )
     ownership = config["release_ownership"]
-    hosted = data["verification_mode"] == "hosted"
+    hosted = render_mode(data) == "hosted"
     lifecycle = cast(list[str], data.get("lifecycle", ["issues", "milestones"]))
 
     # One verifier pair, no template self-test, no second runner.
@@ -534,7 +553,7 @@ def test_rulesets_require_only_checks_the_render_ships(
             yaml.safe_load(path.read_text(encoding="utf-8")).get("jobs") or {}
         ).items()
     }
-    if config["verification_mode"] == "local":
+    if render_mode(config) != "hosted":
         assert contexts == set()
     else:
         assert contexts == {"title", "verify", "review"}
@@ -619,7 +638,7 @@ def test_documentation_stays_within_its_budget() -> None:
     hosted = values["hosted-csarc-owned-python"]
     assert hosted["ci_policy_lines"] <= budget["hosted_ci_policy_lines"]
     for name, data in generated_payload.FIXTURES.items():
-        if data.get("verification_mode") == "local":
+        if data.get("verification_mode_private") in {"local", "self-hosted"}:
             lines = values[name]["agent_workflow_lines"]
             assert lines <= budget["agent_workflow_lines"], name
         assert (
@@ -832,7 +851,7 @@ def test_guide_describes_only_the_enabled_options(
     release ownership, evidence, update, and recovery, and nothing else."""
     data = MATRIX[name]
     text = guide(renders[name])
-    hosted = data["verification_mode"] == "hosted"
+    hosted = render_mode(data) == "hosted"
     lifecycle = cast(list[str], data.get("lifecycle", ["issues", "milestones"]))
     config = yaml.safe_load(
         (renders[name] / ".csarc/config.yml").read_text(encoding="utf-8")
@@ -847,7 +866,7 @@ def test_guide_describes_only_the_enabled_options(
         "## 故障與恢復",
     ):
         assert heading in text, heading
-    assert f"| 驗證 | `{data['verification_mode']}` |" in text
+    assert f"| 驗證 | `{render_mode(data)}` |" in text
     assert f"| 發版 | `{ownership}` |" in text
     assert ("required `title`、`verify`、`review`" in text) is hosted
     assert ("self-attested-local" in text) is not hosted

@@ -8442,16 +8442,19 @@ def test_update_normalizes_retired_verification_suite_names() -> None:
     ):
         assert key not in answers
         assert key not in update_data
-    assert answers["verification_mode"] == "hosted"
-    assert update_data["verification_mode"] == "hosted"
+    # SPEC-011: a missing mode migrates to hosted for both visibilities.
+    for key in ("verification_mode_private", "verification_mode_public"):
+        assert answers[key] == "hosted"
+        assert update_data[key] == "hosted"
 
     answers, update_data = cli.update_plan_answers(
         saved,
-        {"verification_mode": "local"},
+        {"verification_mode_private": "local"},
         repository,
     )
-    assert answers["verification_mode"] == "local"
-    assert update_data["verification_mode"] == "local"
+    assert answers["verification_mode_private"] == "local"
+    assert update_data["verification_mode_private"] == "local"
+    assert answers["verification_mode_public"] == "hosted"
 
 
 def test_update_migrates_documentation_language_and_license_settings() -> None:

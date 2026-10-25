@@ -325,7 +325,7 @@ _migrations:
   - command: "bash .csarc/scripts/build-repo-site"
     when: "{{ _stage == 'after' and documentation_mode == 'template-and-content' }}"
 _message_after_copy: |
-  {% if project_mode == 'existing' %}Existing product files and its release workflow were preserved. Review .csarc/config.yml, merge the required tool settings described in .csarc/docs/csarc.md, run ./.csarc/scripts/verify, then link the pull request to its Issue. Apply release settings only when the product-owned workflow requires them.{% elif verification_mode == 'hosted' %}Project created with the CSARC hosted verification and release workflows. Confirm .csarc/config.yml, run ./.csarc/scripts/verify, then open an Issue and its numbered branch before the first pull request. Before the first release, an administrator must run ./.csarc/scripts/apply-repository-settings.sh plan, review it, then run apply and check so immutable Releases and the other required controls are enabled.{% else %}Project created with local verification and no hosted validation or release workflow. Initialize Git, commit the candidate, then run ./.csarc/scripts/verify-fast once to record merge evidence. Switch to verification_mode: hosted and update before the first release.{% endif %} GitHub template creation and Copier do not copy repository settings. See {% if documentation_mode == 'off' %}.csarc/docs/csarc.md{% else %}README.md{% endif %} for the remaining project guidance.
+  {% if project_mode == 'existing' %}Existing product files and its release workflow were preserved. Review .csarc/config.yml, merge the required tool settings described in .csarc/docs/csarc.md, run ./.csarc/scripts/verify, then link the pull request to its Issue. Apply release settings only when the product-owned workflow requires them.{% elif verification_mode == 'hosted' %}Project created with the CSARC hosted verification and release workflows. Confirm .csarc/config.yml, run ./.csarc/scripts/verify, then open an Issue and its numbered branch before the first pull request. Before the first release, an administrator must run ./.csarc/scripts/apply-repository-settings.sh plan, review it, then run apply and check so immutable Releases and the other required controls are enabled.{% elif verification_mode == 'self-hosted' %}Project created with self-hosted verification and no hosted validation or release workflow. {% if self_hosted_runner %}Run{% else %}It is not registered yet, so pull requests cannot merge. Ask csarc-devops to register this repository (one Issue in each repository, linked both ways), set self_hosted_runner to the VM id and that csarc-devops Issue URL in a governance-switch pull request, then run{% endif %} verification on the VM; ./.csarc/scripts/verify-fast records only self-attested local evidence, never VM evidence.{% else %}Project created with local verification and no hosted validation or release workflow. Initialize Git, commit the candidate, then run ./.csarc/scripts/verify-fast once to record merge evidence. Switch to verification_mode_{{ 'public' if project_visibility == 'public' else 'private' }}: hosted and update before the first release.{% endif %} GitHub template creation and Copier do not copy repository settings. See {% if documentation_mode == 'off' %}.csarc/docs/csarc.md{% else %}README.md{% endif %} for the remaining project guidance.
 
 project_mode:
   type: str
@@ -446,13 +446,49 @@ lifecycle:
     Milestone reconciliation and work-item closure: milestones
   default: [issues, milestones]
 
-verification_mode:
+# SPEC-011: one verification mode per repository visibility. Each default
+# reads a saved legacy verification_mode first, so an update keeps the
+# earlier mode for both visibilities.
+# self-hosted is accepted only when the answer already says so (saved or
+# --data); it is not offered as a new choice until #1272.
+verification_mode_private:
   type: str
-  help: Use self-attested local checks by default, or trusted GitHub-hosted verification when available
+  help: Verification mode while the repository is private
   choices:
     Use local verification with audited admin merge: local
     Require trusted GitHub-hosted checks: hosted
-  default: local
+    Verify on a registered self-hosted VM:
+      value: self-hosted
+      validator: "{% if verification_mode_private | default('') != 'self-hosted' %}Self-hosted verification is not offered yet.{% endif %}"
+  default: "{{ verification_mode | default('local') }}"
+
+verification_mode_public:
+  type: str
+  help: Verification mode while the repository is public; self-hosted is not allowed
+  choices:
+    Require trusted GitHub-hosted checks: hosted
+    Use local verification with audited admin merge: local
+  default: "{{ verification_mode | default('hosted') }}"
+
+# SPEC-011 registration, saved only for a self-hosted private mode. An empty
+# runner means "not yet registered". Never asked; set with --data.
+self_hosted_runner:
+  type: yaml
+  help: Registered csarc-devops VM id and the csarc-devops Issue URL that records the registration
+  default: {}
+  when: false
+  validator: "{% if self_hosted_runner and not (self_hosted_runner is mapping and self_hosted_runner | list | sort == ['id', 'registration'] and self_hosted_runner.id is string and self_hosted_runner.id | regex_search('^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$') and self_hosted_runner.registration is string and self_hosted_runner.registration | regex_search('^https://github\\.com/[A-Za-z0-9-]+/csarc-devops/issues/[1-9][0-9]*$')) %}Use {} until registered, or {id: <vm-id>, registration: https://github.com/<owner>/csarc-devops/issues/<n>}.{% endif %}"
+
+self_hosted_environments:
+  type: str
+  help: Registered self-hosted environments
+  multiselect: true
+  choices:
+    DEV (pull requests into dev/m* and dev/i*): dev
+    UAT (pull requests into main): uat
+  default: [dev, uat]
+  when: false
+  validator: "{% if not self_hosted_environments %}Select dev, uat, or both.{% endif %}"
 
 admin_bypass:
   type: str
@@ -585,6 +621,15 @@ project_visibility:
     Private: private
     Internal (GitHub Enterprise Cloud only): internal
   default: private
+
+# Render-derived (never saved): the effective verification mode for the
+# visibility this render uses (SPEC-011). An older release's side of an
+# update reads its own saved verification_mode under the same name.
+verification_mode:
+  type: str
+  default: "{{ verification_mode_public if project_visibility == 'public' else verification_mode_private }}"
+  when: false
+  validator: "{% if verification_mode != (verification_mode_public if project_visibility == 'public' else verification_mode_private) %}verification_mode is derived; set verification_mode_private or verification_mode_public instead.{% endif %}"
 
 # Issue #1084: a public repository must name a maintainer-approved private
 # reporting channel outside GitHub (an email address, a mailto: link, or a

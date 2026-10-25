@@ -31,6 +31,7 @@ def render(**overrides: object) -> str:
     context: dict[str, object] = {
         "_copier_conf": {"vcs_ref_hash": ""},
         "verification_mode": "local",
+        "project_visibility": "private",
         "documentation_mode": "content-only",
         "admin_bypass": "always",
         "copilot_review": "allowed",

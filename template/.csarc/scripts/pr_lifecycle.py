@@ -2484,13 +2484,33 @@ def repository_root() -> Path:
     return parent.parent if parent.name == ".csarc" else parent
 
 
-def configured_verification_mode() -> str:
-    """Return the normalized local-or-hosted verification choice."""
-    return str(
-        csarc_config.load_config(repository_root() / ".csarc/config.yml")[
-            "verification_mode"
-        ]
+def configured_verification_mode(github: GitHub, repo: str) -> str:
+    """Return the live-visibility mode; fail closed on drift (SPEC-011)."""
+    config = csarc_config.load_config(repository_root() / ".csarc/config.yml")
+    repository = github.get(repo, "")
+    private = repository.get("private") if isinstance(repository, dict) else 0
+    if not isinstance(private, bool):
+        raise RuntimeError(f"Repository visibility: unavailable. {GH_RETRY}.")
+    mode = str(
+        config[f"verification_mode_{'private' if private else 'public'}"]
     )
+    rendered = (repository_root() / ".github/workflows/pr-policy.yml").is_file()
+    if (mode == "hosted") != rendered:
+        raise RuntimeError(
+            f"Verification mode {mode}: the rendered files do not match the "
+            "current visibility. Run 'csarc update' to render again."
+        )
+    if mode == "self-hosted":
+        step = (
+            "Update CSARC to read VM evidence"
+            if config["self_hosted_runner"]
+            else "Register with csarc-devops, then add self_hosted_runner "
+            "through a governance-switch pull request"
+        )
+        raise RuntimeError(
+            f"Self-hosted verification: no registered VM evidence. {step}."
+        )
+    return mode
 
 
 def trusted_executor_module() -> ModuleType:
@@ -2906,7 +2926,7 @@ def merge_snapshot(  # noqa: C901
     head_sha = lease["head_sha"]
     require_lease(github, lease, repo, pr_number, head_sha)
     pull = live_pull(github, repo, pr_number, head_sha)
-    verification_mode = configured_verification_mode()
+    verification_mode = configured_verification_mode(github, repo)
     dependabot_head = ""
     dependabot_scope: list[str] = []
     if require_dependabot_head and verification_mode == "local":

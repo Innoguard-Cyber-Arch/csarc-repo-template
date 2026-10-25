@@ -92,7 +92,11 @@ def choice_values(question: dict[str, object]) -> set[str]:
     """Return a Copier question's choice values as strings."""
     choices = question["choices"]
     if isinstance(choices, dict):
-        return {str(value) for value in choices.values()}
+        # A dict value is Copier's extended choice with a validator.
+        return {
+            str(value["value"] if isinstance(value, dict) else value)
+            for value in choices.values()
+        }
     assert isinstance(choices, list)
     return {str(value) for value in choices}
 

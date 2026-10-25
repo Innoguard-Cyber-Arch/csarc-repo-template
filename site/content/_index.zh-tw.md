@@ -31,7 +31,7 @@ fit = "符合畫面"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">四個語言模組</span>
           <span class="package-badge">公版可持續更新</span>
-          <span class="package-badge muted">v0.44.4</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.45.0-beta.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">網站排版模板 v[[site_template_version]]</span>
           <span class="package-badge muted">渲染引擎 v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "符合畫面"
 {{< basic >}}
 Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；設定檔、程式與 GitHub Actions 留在維運模式。[repo README](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme) 是本頁的濃縮入口，兩者維持公開事實一致，不要求逐字相同。本 repository 與 GitHub Pages repo-site 目前均為公開可讀；`noindex`／`robots.txt` 不限制讀取或分享。
 
-<p class="template-version"><strong>公版版本：</strong>v0.44.4<!-- x-release-please-version --></p>
+<p class="template-version"><strong>公版版本：</strong>v0.45.0-beta.1<!-- x-release-please-version --></p>
 
 | 項目 | 目前狀態 |
 | --- | --- |
@@ -752,7 +752,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | 層級 | `.csarc/config.yml` key | 預設／允許值 | 產生或驗證位置 |
 | --- | --- | --- | --- |
 | 治理意圖 | `governance_mode`、`lifecycle` | `managed`／`observe`；`issues`／`milestones` | repository policy 與工作項目 side effects |
-| 驗證信任 | `verification_mode` | 新專案預設 `local`；可選 `hosted` | local self-attestation＋audited bypass，不產生 hosted CI、PR 治理、Pages／release workflow；或 trusted GitHub-hosted checks |
+| 驗證信任 | `verification_mode_private`／`verification_mode_public` | 新專案預設 `local`；可選 `hosted` | local self-attestation＋audited bypass，不產生 hosted CI、PR 治理、Pages／release workflow；或 trusted GitHub-hosted checks |
 | 審查意圖 | `admin_bypass`、`copilot_review` | admin bypass 新專案預設 `always`、可選 `beta-only`／`off`；Copilot 為 `allowed`／`off` | exact-head `review` gate；Copilot 不可用時回到同行核准或設定允許的管理員授權 |
 | 發版意圖 | `release_ownership`、`release_trigger`、`project_maturity` | ownership 三選一；trigger 為 `main`／`manual`；成熟度預設 early | 公開 beta／stable 通道、固定 Conventional Commits 演算法與發版候選觸發 |
 | 文件治理 | `documentation_mode` | `template-and-content`／`content-only`／`off` | 文件模板與 project-owned 內容分層；Pages 只在 hosted＋完整模板時啟用，且只因 `docs/**` 或手動觸發 |
