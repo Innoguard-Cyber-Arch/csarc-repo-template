@@ -159,6 +159,7 @@ def test_agent_workflow_names_only_rendered_ci_policy_rules(
         "release_trigger": "manual",
         "scheduled_checks": [],
         "verification_mode": verification_mode,
+        "project_visibility": "private",
     }
     workflow = environment.from_string(
         WORKFLOW_TEMPLATE.read_text(encoding="utf-8")

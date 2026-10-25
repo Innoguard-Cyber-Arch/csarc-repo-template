@@ -19,24 +19,15 @@ import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
-WORK_MODES = ("solo-self-hosted", "solo-local", "solo-hosted", "team", "custom")
-# SPEC-011: a new project's private default is self-hosted; adopt keeps the
-# earlier local default because the repository already exists.
-DEFAULT_WORK_MODE = "solo-self-hosted"
-DEFAULT_ADOPT_WORK_MODE = "solo-local"
+WORK_MODES = ("solo-local", "solo-hosted", "team", "custom")
+DEFAULT_WORK_MODE = "solo-local"
 MODE_KEYS = ("verification_mode_private", "verification_mode_public")
 GOVERNANCE_KEYS = (*MODE_KEYS, "admin_bypass", "copilot_review")
 SOLO_AUTOMATION: dict[str, object] = {"lifecycle": [], "scheduled_checks": []}
 # #1058 decision 14: a preset only expands into saved intent; its name is
-# never stored. The local presets also turn hosted-only automation off.
+# never stored. The local preset also turns hosted-only automation off.
+# SPEC-011: no preset offers self-hosted until #1272.
 PRESET_VALUES: dict[str, dict[str, object]] = {
-    "solo-self-hosted": {
-        "verification_mode_private": "self-hosted",
-        "verification_mode_public": "hosted",
-        "admin_bypass": "always",
-        "copilot_review": "allowed",
-        **SOLO_AUTOMATION,
-    },
     "solo-local": {
         **dict.fromkeys(MODE_KEYS, "local"),
         "admin_bypass": "always",
@@ -53,7 +44,6 @@ PRESET_VALUES: dict[str, dict[str, object]] = {
 }
 # Keys a preset leaves to one more question each.
 PRESET_QUESTIONS: dict[str, tuple[str, ...]] = {
-    "solo-self-hosted": (),
     "solo-local": (),
     "solo-hosted": (),
     "team": ("copilot_review",),
@@ -70,7 +60,8 @@ LICENSES = ("proprietary", "MIT", "Apache-2.0", "custom")
 LANGUAGES = ("go", "python", "rust", "typescript")
 DOCUMENTATION_LANGUAGES = ("zh-tw", "en", "zh-tw+en", "en+zh-tw")
 CHOICES: dict[str, tuple[str, ...]] = {
-    "verification_mode_private": ("self-hosted", "hosted", "local"),
+    # SPEC-011: setup does not offer self-hosted until #1272.
+    "verification_mode_private": ("local", "hosted"),
     "verification_mode_public": ("hosted", "local"),
     "admin_bypass": ("off", "beta-only", "always"),
     "copilot_review": ("allowed", "off"),
@@ -122,7 +113,6 @@ WARNINGS = {
     "W12": "documentation-scope",
     "W13": "public-codeql-off",
     "W15": "local-actions-minutes",
-    "W16": "self-hosted-unregistered",
     "W20": "ui-merge-without-approval",
     "W21": "single-writer-unobserved",
 }
@@ -403,7 +393,7 @@ def plan_work_mode(
             key="work_mode",
             prompt="Work mode",
             choices=WORK_MODES,
-            default=result.work_mode,
+            default=DEFAULT_WORK_MODE,
             kind="choice",
         )
         answered = len(session.asked)
@@ -423,7 +413,7 @@ def plan_work_mode(
             result.set(key, value, source, note)
     for key in PRESET_QUESTIONS[mode]:
         default = {
-            "verification_mode_private": "self-hosted",
+            "verification_mode_private": "local",
             "verification_mode_public": "hosted",
             "admin_bypass": "always",
             "copilot_review": "allowed",
@@ -446,7 +436,7 @@ def effective_verification_mode(values: Mapping[str, object]) -> str:
     """Return the mode the render uses for its visibility (SPEC-011)."""
     if values.get("project_visibility") == "public":
         return str(values.get("verification_mode_public", "hosted"))
-    return str(values.get("verification_mode_private", "self-hosted"))
+    return str(values.get("verification_mode_private", "local"))
 
 
 def plan_release_trigger(
@@ -572,7 +562,7 @@ def plan_adopt(  # noqa: C901
 ) -> SetupResult:
     """Confirm detections, then ask governance, work mode, and gaps."""
     check_work_mode(requested_mode)
-    result = SetupResult(mode="adopt", work_mode=DEFAULT_ADOPT_WORK_MODE)
+    result = SetupResult(mode="adopt", work_mode=DEFAULT_WORK_MODE)
     shown = [
         item
         for item in detections
@@ -1077,19 +1067,6 @@ def setup_warnings(  # noqa: C901
                 "Local verification evidence is self-attested; anyone with "
                 "write access can forge it.",
                 f"csarc update --data verification_mode_{side}=hosted",
-            )
-        )
-    if mode == "self-hosted" and not values.get("self_hosted_runner"):
-        rows.append(
-            _warning(
-                "W16",
-                "self_hosted_runner",
-                "Self-hosted verification is not registered yet, so pull "
-                "requests cannot merge. Open an Issue here and one in "
-                "csarc-devops, linked both ways; after both approve, add "
-                "self_hosted_runner (VM id and that csarc-devops Issue URL) "
-                "in a governance-switch pull request.",
-                "csarc update --data verification_mode_private=local",
             )
         )
     confirmation = None if approval is None else approval.get("confirmation")

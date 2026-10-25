@@ -56,7 +56,7 @@
 {% if hosted -%}
 實作中只跑變更 owner 的 focused checks。required `verify` 由 trusted base 選出 fast 或 full，在 exact candidate 執行一次；本機不必為了證據重跑。合併只經 `.csarc/scripts/pr_lifecycle.py merge`：它取得 remote lease，重驗 exact-head 授權、required checks、head 包含 base 與驗證過的 tree，再以 squash 合併並寫入 durable summary 與 trailer。
 {%- else -%}
-實作中只跑變更 owner 的 focused checks；候選 commit 乾淨後執行一次 `./.csarc/scripts/verify-fast`，需要時它自動升級為 full。證據綁定 head、tree、base 與 tier，24 小時內有效；head 或 base 改變後重跑一次。合併只經 `.csarc/scripts/pr_lifecycle.py merge`：它取得 remote lease，從 trusted base 重驗 PR policy、exact-head 授權與本機證據，再以 squash 合併並寫入 durable summary 與 trailer。本機證據不能證明 GitHub event、遠端 runner 或 release provenance；需要這些保證時改用 `verification_mode: hosted`。
+實作中只跑變更 owner 的 focused checks；候選 commit 乾淨後執行一次 `./.csarc/scripts/verify-fast`，需要時它自動升級為 full。證據綁定 head、tree、base 與 tier，24 小時內有效；head 或 base 改變後重跑一次。合併只經 `.csarc/scripts/pr_lifecycle.py merge`：它取得 remote lease，從 trusted base 重驗 PR policy、exact-head 授權與本機證據，再以 squash 合併並寫入 durable summary 與 trailer。本機證據不能證明 GitHub event、遠端 runner 或 release provenance；需要這些保證時改用 `verification_mode_{{ 'public' if project_visibility == 'public' else 'private' }}: hosted`。
 {%- endif %}
 
 GitHub UI 或 `gh pr merge --admin` 合併會略過 lifecycle，`csarc status` 把它列為 `untraced`{% if release_ownership == 'csarc-owned' %}，並阻擋下一次 CSARC 發版{% endif %}。細節見 [`ci-policy.md`](ci-policy.md#審查與合併資格)。

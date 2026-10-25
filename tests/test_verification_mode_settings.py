@@ -281,13 +281,30 @@ def test_render_uses_the_mode_for_its_visibility(
 
 
 def test_new_project_defaults_and_legacy_answers() -> None:
-    """AC1/AC2: new defaults, and a saved legacy mode for both settings."""
-    assert question_default("verification_mode_private", {}) == "self-hosted"
+    """AC1/AC2: defaults stay local/hosted; a legacy mode fills both."""
+    assert question_default("verification_mode_private", {}) == "local"
     assert question_default("verification_mode_public", {}) == "hosted"
     for legacy in ("local", "hosted"):
         saved = {"verification_mode": legacy}
         assert question_default("verification_mode_private", saved) == legacy
         assert question_default("verification_mode_public", saved) == legacy
+
+
+def test_self_hosted_is_not_offered_but_accepted_when_given() -> None:
+    """AC1: self-hosted is disabled as a new choice, valid from data."""
+    choices = COPIER["verification_mode_private"]["choices"]
+    entry = next(
+        value
+        for value in choices.values()
+        if isinstance(value, dict) and value["value"] == "self-hosted"
+    )
+    disabled = ENV.from_string(entry["validator"])
+    assert disabled.render({}) == "Self-hosted verification is not offered yet."
+    assert disabled.render({"verification_mode_private": "self-hosted"}) == ""
+    assert "self-hosted" not in setup_plan.CHOICES["verification_mode_private"]
+    for values in setup_plan.PRESET_VALUES.values():
+        assert values.get("verification_mode_private") != "self-hosted"
+    assert setup_plan.DEFAULT_WORK_MODE == "solo-local"
 
 
 def render_settings(**answers: object) -> dict[str, object]:
@@ -390,62 +407,6 @@ def test_writer_keeps_the_legacy_key_until_the_reader_reads_both(
             cli.legacy_mode_writer(tmp_path, changed)
     reader_path.write_text(READERS["template"].read_text("utf-8"), "utf-8")
     assert cli.legacy_mode_writer(tmp_path, changed) == {}
-
-
-def test_update_recommends_self_hosted_only_on_private() -> None:
-    """AC4: update never switches; it recommends self-hosted when private."""
-    hosted = dict.fromkeys(settings_schema.MODE_KEYS, "hosted")
-    note = cli.self_hosted_update_recommendation(hosted, REPOSITORY)
-    assert note is not None
-    assert "governance-switch" in note
-    assert "csarc-devops" in note
-    public = cli.RepositoryContext(
-        "acme/product", "acme", "Organization", "public", "github", True
-    )
-    assert cli.self_hosted_update_recommendation(hosted, public) is None
-    self_hosted = {**hosted, "verification_mode_private": "self-hosted"}
-    assert (
-        cli.self_hosted_update_recommendation(self_hosted, REPOSITORY) is None
-    )
-
-
-def test_init_defaults_to_self_hosted_with_registration_guidance() -> None:
-    """AC4: init's default preset is self-hosted and prints the steps."""
-    values = setup_plan.PRESET_VALUES[setup_plan.DEFAULT_WORK_MODE]
-    assert values["verification_mode_private"] == "self-hosted"
-    assert values["verification_mode_public"] == "hosted"
-    assert setup_plan.DEFAULT_ADOPT_WORK_MODE == "solo-local"
-    rows = setup_plan.setup_warnings(
-        {**values, "project_visibility": "private"},
-        approval=None,
-        runner_role="admin",
-        plan_name=None,
-        single_writer=None,
-    )
-    codes = {row["code"] for row in rows}
-    assert "W16-self-hosted-unregistered" in codes
-    registered = setup_plan.setup_warnings(
-        {
-            **values,
-            "project_visibility": "private",
-            "self_hosted_runner": {"id": "vm-01", "registration": REGISTRATION},
-        },
-        approval=None,
-        runner_role="admin",
-        plan_name=None,
-        single_writer=None,
-    )
-    assert "W16-self-hosted-unregistered" not in {
-        row["code"] for row in registered
-    }
-    public = setup_plan.setup_warnings(
-        {**values, "project_visibility": "public"},
-        approval=None,
-        runner_role="admin",
-        plan_name=None,
-        single_writer=None,
-    )
-    assert "W16-self-hosted-unregistered" not in {row["code"] for row in public}
 
 
 # ---------------------------------------------------------------------------
@@ -553,24 +514,26 @@ def test_registered_self_hosted_still_waits_for_vm_evidence(
         function(Visibility(True), "acme/product")
 
 
-def test_payload_fixtures_measure_the_new_default_and_local() -> None:
-    """AC6 (ADR Q2): solo-default is self-hosted; solo-local keeps budgets."""
+def test_payload_fixtures_keep_the_default_and_add_self_hosted() -> None:
+    """AC6 (ADR Q2): solo-default stays local; solo-self-hosted shares it."""
     payload = runpy.run_path(str(ROOT / "scripts/generated_payload.py"))
     fixtures = payload["FIXTURES"]
+    assert fixtures["solo-default"]["verification_mode_private"] == "local"
     assert (
-        fixtures["solo-default"]["verification_mode_private"] == "self-hosted"
+        fixtures["solo-self-hosted"]["verification_mode_private"]
+        == "self-hosted"
     )
-    assert fixtures["solo-local"]["verification_mode_private"] == "local"
-    targets = payload["TARGETS"]
-    assert targets["solo-local"] == targets["solo-default"]
-    assert (
-        payload["RAW_TARGETS"]["solo-local"]
-        == payload["RAW_TARGETS"]["solo-default"]
-    )
-    assert json.dumps(fixtures["solo-local"], sort_keys=True) == json.dumps(
+    for table in ("TARGETS", "RAW_TARGETS", "CONVERSION_OFFSETS"):
+        assert (
+            payload[table]["solo-self-hosted"] == payload[table]["solo-default"]
+        )
+    assert json.dumps(
+        fixtures["solo-self-hosted"], sort_keys=True
+    ) == json.dumps(
         {
             **fixtures["solo-default"],
-            **dict.fromkeys(settings_schema.MODE_KEYS, "local"),
+            "verification_mode_private": "self-hosted",
+            "verification_mode_public": "hosted",
         },
         sort_keys=True,
     )

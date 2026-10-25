@@ -2,7 +2,7 @@
 {%- set owned = release_ownership == 'csarc-owned' -%}
 # CI/CD 設定與交付邊界
 
-本文件依這個 repository 的設定產生（`verification_mode: {{ verification_mode }}`、`release_ownership: {{ release_ownership }}`、`lifecycle: {{ lifecycle | join(', ') if lifecycle else '[]' }}`），只描述目前啟用的檢查、合併與發版規則。設定改變後由 `csarc update` 重新產生；沒有列在這裡的 workflow 或路線不屬於本專案。操作總覽見 [`csarc.md`](csarc.md)。
+本文件依這個 repository 的設定產生（`verification_mode_{{ 'public' if project_visibility == 'public' else 'private' }}: {{ verification_mode }}`、`release_ownership: {{ release_ownership }}`、`lifecycle: {{ lifecycle | join(', ') if lifecycle else '[]' }}`），只描述目前啟用的檢查、合併與發版規則。設定改變後由 `csarc update` 重新產生；沒有列在這裡的 workflow 或路線不屬於本專案。操作總覽見 [`csarc.md`](csarc.md)。
 
 ## 審查與合併資格
 
@@ -39,7 +39,7 @@ Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─→ main
 - **Hotfix**：只用於必須立即修正 `main` 的缺陷。沒有 Milestone 的 Bug Issue 標 `hotfix`，分支 `fix/<Issue>-<slug>`，PR 標題 `fix(scope): summary`，一律 full 驗證與正常 review。
 - **Release recovery**：`main` 缺少一次應有的發版時，以 `fix/<Issue>-<slug>`、`release-recovery` label 直接對 `main` 提出修正，比照 hotfix 一律 full。
 - **Dependabot**：minor／patch 更新在 exact head 重新驗證後經 lifecycle 合併，major 保留人工審核。
-- **模板更新**：`csarc update` 產生的 PR 帶 `governance-switch` label；改動 `.csarc/scripts/` 或放寬治理設定（例如 `admin_bypass`、`verification_mode`、關閉 CodeQL、移除 `lifecycle` 項目、降低 coverage 門檻）的 PR 也一樣。
+- **模板更新**：`csarc update` 產生的 PR 帶 `governance-switch` label；改動 `.csarc/scripts/` 或放寬治理設定（例如 `admin_bypass`、`verification_mode_private`、關閉 CodeQL、移除 `lifecycle` 項目、降低 coverage 門檻）的 PR 也一樣。
 - **升級帶來的新設定**：PR 帶 `governance-switch` label，且 `.csarc/provenance.json` 記錄的 tag 是指向 `_commit` 的已發布 immutable 正式版時，以 `ast` 盤點該版設定表（不執行）。全部相符才放行，並記錄 `schema_source=release:<tag>`；否則 fail closed 並列出盤點。
 
 ## Milestone 掛勾與持續同步
@@ -98,7 +98,7 @@ GitHub UI 合併與 `gh pr merge --admin` 不是合法 route，沒有 trailer；
 {%- else -%}
 本專案使用 `local`，因此不產生 `ci.yml`、`pr-policy.yml`、`pr-review.yml`、reviewer assignment 或 Dependabot 自動合併 workflow，required-checks Ruleset 保持停用。候選 commit 乾淨後執行一次 `./.csarc/scripts/verify-fast`；成功時把 head／tree、base、tier、scopes、command 與結果寫進 Git metadata，24 小時內有效。尚未 commit 或仍有未提交修改時，測試照常回報，但不產生可合併的證據。`pr_lifecycle.py merge` 在合併前重讀 GitHub metadata、review、lease 與這份證據，從 trusted base 執行 PR policy，合併讀回後留下 `self-attested-local` trace。
 
-這份證據能防止拿錯舊結果、錯 branch 或測完又改檔，但不能防止有寫入權限的人偽造，也不能證明 GitHub event、權限、遠端 runner 或 release provenance。外部協作者在 GitHub UI 改的 metadata 不會即時修正。需要這些保證時，以 `csarc update --data verification_mode=hosted` 切換並重新套用 repository settings。
+這份證據能防止拿錯舊結果、錯 branch 或測完又改檔，但不能防止有寫入權限的人偽造，也不能證明 GitHub event、權限、遠端 runner 或 release provenance。外部協作者在 GitHub UI 改的 metadata 不會即時修正。需要這些保證時，以 `csarc update --data verification_mode_{{ 'public' if project_visibility == 'public' else 'private' }}=hosted` 切換並重新套用 repository settings。
 {%- endif %}
 
 合併與驗證在兩種模式都只依 trusted base 的政策決定：gate、router、設定 reader 與 PR policy 都取自 base，candidate 只是被驗證的 exact head；candidate 自己的 gate 只做不影響結果的自我測試。

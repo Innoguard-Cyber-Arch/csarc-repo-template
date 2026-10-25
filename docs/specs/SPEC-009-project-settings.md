@@ -47,7 +47,7 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 | `python_floor` | `persistent-intent` | `choice` | `latest`, `3.12`, `3.13`, `3.14` | Python 支援意圖，不由 manifest 反推 |
 | `documentation_mode` | `persistent-intent` | `choice` | `template-and-content`, `content-only`, `off` | `csarc update --data documentation_mode=...` |
 | `documentation_languages` | `persistent-intent` | `choice` | `zh-tw`, `en`, `zh-tw+en`, `en+zh-tw` | 只管 project-owned 文件；第一個是主要語言 |
-| `verification_mode_private` | `persistent-intent` | `choice` | `self-hosted`, `hosted`, `local` | private 時的模式；放寬只走 governance-switch（SPEC-011） |
+| `verification_mode_private` | `persistent-intent` | `choice` | `self-hosted`, `hosted`, `local` | private 時的模式；`self-hosted` 尚未提供為選項；放寬只走 governance-switch（SPEC-011） |
 | `verification_mode_public` | `persistent-intent` | `choice` | `hosted`, `local` | public 時的模式；`self-hosted` 被拒絕（SPEC-011） |
 | `admin_bypass` | `persistent-intent` | `choice` | `off`, `beta-only`, `always` | 缺值遷移為 `always`（`widened`） |
 | `copilot_review` | `persistent-intent` | `choice` | `allowed`, `off` | review provider 意圖 |
@@ -209,15 +209,14 @@ CLI（`src/csarc_cli/repository_facts.py`）、本 repository（`scripts/reposit
 
 #### 工作模式（preset）
 
-一題決定工作模式；也可用 `--preset` 指定。preset 只展開成下表的 persistent intent，展開值可被明確 `--data` 逐鍵覆寫並照常保存；preset 名稱不寫入 `.csarc/config.yml` 或 provenance，只出現在 plan 與 adopt 報告的 `setup.work_mode`。non-interactive 時，init 採用 `solo-self-hosted`（SPEC-011），adopt 採用 `solo-local`。preset 只在 init 與 adopt 展開，update 保留已存值。
+一題決定工作模式；也可用 `--preset` 指定。preset 只展開成下表的 persistent intent，展開值可被明確 `--data` 逐鍵覆寫並照常保存；preset 名稱不寫入 `.csarc/config.yml` 或 provenance，只出現在 plan 與 adopt 報告的 `setup.work_mode`。non-interactive 採用 `solo-local`。preset 只在 init 與 adopt 展開，update 保留已存值。
 
 | preset | `verification_mode_private`／`verification_mode_public` | `admin_bypass` | `copilot_review` | 另外展開 |
 | --- | --- | --- | --- | --- |
-| `solo-self-hosted`（init 預設） | `self-hosted`／`hosted` | `always` | `allowed` | `lifecycle: []`、`scheduled_checks: []` |
-| `solo-local`（adopt 預設） | `local`／`local` | `always` | `allowed` | `lifecycle: []`、`scheduled_checks: []` |
+| `solo-local`（預設） | `local`／`local` | `always` | `allowed` | `lifecycle: []`、`scheduled_checks: []` |
 | `solo-hosted` | `hosted`／`hosted` | `always` | `allowed` | — |
 | `team` | `hosted`／`hosted` | `off` | 追加一題（建議 `allowed`） | — |
-| `custom` | 各詢問一題（建議 `self-hosted`／`hosted`） | 詢問（建議 `always`） | 詢問（建議 `allowed`） | — |
+| `custom` | 各詢問一題（建議 `local`／`hosted`；private 不提供 `self-hosted`，SPEC-011） | 詢問（建議 `always`） | 詢問（建議 `allowed`） | — |
 
 #### 題數（以 transcript 測試斷言，`tests/test_setup_questions.py`）
 
@@ -225,7 +224,7 @@ init 的 6 題依序為 `project_description`、`languages`、`project_license`�
 
 | 情境 | 題數 |
 | --- | --- |
-| init，private、`solo-self-hosted` 或 `solo-local`，授權不是 `custom` | 6 |
+| init，private、local（`solo-local`），授權不是 `custom` | 6 |
 | public | ＋1（`security_reporting_channel`） |
 | hosted 且 `csarc-owned` | ＋1（`release_trigger`） |
 | `team` | ＋1（`copilot_review`） |
@@ -267,7 +266,6 @@ WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup
 | `W12-documentation-scope` | `documentation_mode: off`，或雙語 `documentation_languages` |
 | `W13-public-codeql-off` | public、有 CodeQL 支援的語言，明確設 `enable_codeql: false` |
 | `W15-local-actions-minutes` | local 而 `scheduled_checks` 不是空的或 `enable_codeql: true` |
-| `W16-self-hosted-unregistered` | 實際模式是 `self-hosted`，`self_hosted_runner` 尚未登記：列出登記步驟（SPEC-011） |
 | `W20-ui-merge-without-approval` | local＋`beta-only`／`always`：0 個原生必要核准，任何寫入者都能在 UI 合併 |
 | `W21-single-writer-unobserved` | private、GitHub Free、`csarc-owned`，讀取沒有觀察到執行者是唯一寫入者（#1058 決定 27） |
 

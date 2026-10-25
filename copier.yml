@@ -449,14 +449,18 @@ lifecycle:
 # SPEC-011: one verification mode per repository visibility. Each default
 # reads a saved legacy verification_mode first, so an update keeps the
 # earlier mode for both visibilities.
+# self-hosted is accepted only when the answer already says so (saved or
+# --data); it is not offered as a new choice until #1272.
 verification_mode_private:
   type: str
   help: Verification mode while the repository is private
   choices:
-    Verify on a registered self-hosted VM: self-hosted
-    Require trusted GitHub-hosted checks: hosted
     Use local verification with audited admin merge: local
-  default: "{{ verification_mode | default('self-hosted') }}"
+    Require trusted GitHub-hosted checks: hosted
+    Verify on a registered self-hosted VM:
+      value: self-hosted
+      validator: "{% if verification_mode_private | default('') != 'self-hosted' %}Self-hosted verification is not offered yet.{% endif %}"
+  default: "{{ verification_mode | default('local') }}"
 
 verification_mode_public:
   type: str

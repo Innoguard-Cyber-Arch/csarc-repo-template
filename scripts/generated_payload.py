@@ -55,9 +55,9 @@ SOLO_LOCAL: dict[str, object] = {
     "scheduled_checks": [],
     "languages": [],
 }
-# SPEC-011 (ADR self-hosted-verification Q2): the default preset now renders
-# a private self-hosted project; `solo-local` keeps the same budgets.
-SOLO_DEFAULT: dict[str, object] = {
+# SPEC-011 (ADR self-hosted-verification Q2): a private self-hosted render
+# shares the solo budgets; #1272 makes it the default and renames fixtures.
+SOLO_SELF_HOSTED: dict[str, object] = {
     **SOLO_LOCAL,
     "verification_mode_private": "self-hosted",
     "verification_mode_public": "hosted",
@@ -71,8 +71,8 @@ ADOPTED_HOSTED: dict[str, object] = {
     "languages": ["python"],
 }
 FIXTURES: dict[str, dict[str, object]] = {
-    "solo-default": dict(SOLO_DEFAULT),
-    "solo-local": dict(SOLO_LOCAL),
+    "solo-default": dict(SOLO_LOCAL),
+    "solo-self-hosted": dict(SOLO_SELF_HOSTED),
     "solo-python": {**SOLO_LOCAL, "languages": ["python"]},
     "hosted-csarc-owned-python": {
         **HOSTED,
@@ -96,7 +96,7 @@ FIXTURES: dict[str, dict[str, object]] = {
 CONVERSION_REF = "cd0b69d"
 RAW_TARGETS: dict[str, int] = {
     "solo-default": 1_000_000,
-    "solo-local": 1_000_000,
+    "solo-self-hosted": 1_000_000,
     "solo-python": 1_010_000,
     "hosted-csarc-owned-python": 1_200_000,
     "consumer-a": 1_050_000,
@@ -104,7 +104,7 @@ RAW_TARGETS: dict[str, int] = {
 }
 CONVERSION_OFFSETS: dict[str, int] = {
     "solo-default": 215_456,
-    "solo-local": 215_456,
+    "solo-self-hosted": 215_456,
     "solo-python": 215_476,
     "hosted-csarc-owned-python": 278_881,
     "consumer-a": 229_124,
@@ -121,7 +121,7 @@ TARGETS: dict[str, dict[str, int]] = {
         "pull_request_target_workflows": 0,
         "agent_doc_tokens": 14_000,
     },
-    "solo-local": {
+    "solo-self-hosted": {
         "files": 92,
         "canonical_bytes": 784_000,
         "write_workflows": 0,

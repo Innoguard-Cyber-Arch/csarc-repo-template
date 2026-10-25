@@ -67,8 +67,7 @@ def init_transcript(
 # --- Question counts (#1058 Targets) ---------------------------------------
 
 
-def test_init_default_private_asks_six_questions() -> None:
-    """SPEC-011: the default work mode is private self-hosted."""
+def test_init_solo_local_private_asks_six_questions() -> None:
     session, result = init_transcript("")
 
     assert session.asked == [
@@ -79,9 +78,9 @@ def test_init_default_private_asks_six_questions() -> None:
         "documentation_languages",
         "work_mode",
     ]
-    assert result.work_mode == "solo-self-hosted"
-    assert result.values["verification_mode_private"] == "self-hosted"
-    assert result.values["verification_mode_public"] == "hosted"
+    assert result.work_mode == "solo-local"
+    assert result.values["verification_mode_private"] == "local"
+    assert result.values["verification_mode_public"] == "local"
     assert result.values["admin_bypass"] == "always"
     assert result.values["lifecycle"] == []
     assert result.values["scheduled_checks"] == []
@@ -99,7 +98,6 @@ def test_init_default_private_asks_six_questions() -> None:
 @pytest.mark.parametrize(
     ("mode_answers", "extra"),
     [
-        (("solo-local",), []),
         (("solo-hosted", ""), ["release_trigger"]),
         (("team", "", ""), ["copilot_review", "release_trigger"]),
         (
@@ -408,7 +406,7 @@ def test_script_takes_documented_defaults_and_solo_local() -> None:
     )
     session.require_complete("init")
 
-    assert result.work_mode == "solo-self-hosted"
+    assert result.work_mode == "solo-local"
     assert sorted(session.suggested) == [
         "documentation_languages",
         "project_license",
@@ -432,7 +430,7 @@ def test_script_custom_preset_requires_no_guess() -> None:
 
     assert result.work_mode == "custom"
     assert "admin_bypass" not in result.values
-    assert result.values["verification_mode_private"] == "self-hosted"
+    assert result.values["verification_mode_private"] == "local"
     assert result.values["verification_mode_public"] == "hosted"
     assert (
         result.sources["verification_mode_private"]["note"]
