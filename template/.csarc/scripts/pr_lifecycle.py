@@ -2606,13 +2606,14 @@ def base_policy_decision(
             candidate, schema_source = executor.read_candidate_config(
                 candidate_config, labels, provenance
             )
+            base_values = executor.read_config(base_config)
             decision = executor.classify_route(
                 [
                     item.decode("utf-8", "surrogateescape")
                     for item in listing.stdout.split(b"\0")
                     if item
                 ],
-                executor.read_config(base_config),
+                base_values,
                 candidate,
             )
         except (OSError, ValueError) as error:
@@ -2621,6 +2622,12 @@ def base_policy_decision(
                 "'.csarc/config.yml'."
             ) from error
         executor.require_route(decision, labels)
+        # Issue #1270: the repository side of the registration is the
+        # Issue this pull request closes.
+        issues = CLOSING_ISSUE.findall(str(pull.get("body") or ""))
+        executor.require_registration(
+            base_values, candidate, ", ".join(f"#{n}" for n in issues) or "-"
+        )
         changed_files = Path(scratch) / "changed-files"
         changed_files.write_bytes(listing.stdout)
         plan = Path(scratch) / "ci-plan.json"
