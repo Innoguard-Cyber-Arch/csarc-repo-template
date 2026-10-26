@@ -37,7 +37,7 @@ from typing import Any, Protocol
 
 import yaml  # type: ignore[import-untyped]
 
-from csarc_cli import settings_schema
+from csarc_cli import merge_trace, settings_schema
 
 WINDOW = timedelta(hours=24)
 WARN_BEFORE = timedelta(hours=2)
@@ -842,6 +842,18 @@ def verify_runs(session: Session, repo: str) -> list[dict[str, Any]]:
     ]
 
 
+def retire_warning(
+    github: GitHub, repo: str, private: object, mode_private: object
+) -> str:
+    """Return the shared public-log WARNING text (ADR D9, #1287)."""
+    return merge_trace.retire_warning(
+        repo,
+        private,
+        mode_private,
+        lambda path: github.get(f"repos/{repo}/{path}"),
+    )
+
+
 def status(session: Session, repo: str, env: str | None) -> int:
     """`csarc self-hosted status`: read-only (ADR D7, D9)."""
     context = load_context(session.github, repo)
@@ -864,14 +876,10 @@ def status(session: Session, repo: str, env: str | None) -> int:
             ),
         ],
     )
-    if not context.private and (
-        verify_runs(session, repo) or context.mode_private == "self-hosted"
+    if text := retire_warning(
+        session.github, repo, context.private, context.mode_private
     ):
-        warning(
-            f"Self-hosted logs on '{repo}' are public: the repository is "
-            "public and still has self-hosted runs or settings. Run "
-            "'csarc self-hosted retire', then review its inventory."
-        )
+        warning(text)
     if context.mode_private != "self-hosted":
         notice(
             f"verification_mode_private is '{context.mode_private}', so no "

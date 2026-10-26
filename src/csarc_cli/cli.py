@@ -3856,6 +3856,7 @@ def lifecycle_report_model(  # noqa: C901
     ignore_gaps: Mapping[str, Sequence[str]] = MappingProxyType({}),
     conflict_uses: Mapping[str, Sequence[str]] = MappingProxyType({}),
     reviewer_answer: str | None = None,
+    retire_warning: str = "",
 ) -> dict[str, object]:
     """Build the single SPEC-008 report object for one adopt or update plan.
 
@@ -3912,6 +3913,19 @@ def lifecycle_report_model(  # noqa: C901
             ),
             reviewer_answer=reviewer_answer,
         )
+        if retire_warning:
+            # ADR self-hosted D9 (#1287): non-blocking, so no plan changes.
+            actions.append(
+                {
+                    "blocking": False,
+                    "command": "csarc self-hosted retire"
+                    if " are public:" in retire_warning
+                    else "csarc self-hosted status",
+                    "kind": "verification",
+                    "message": retire_warning,
+                    "subject": "self-hosted logs",
+                }
+            )
     if adoption is not None:
         applicable = adoption.get("applicable") is True
     else:
@@ -13097,6 +13111,30 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def update_retire_warning(
+    repository: RepositoryContext, saved: Mapping[str, object]
+) -> str:
+    """Print and return the public self-hosted log WARNING (#1287).
+
+    `csarc self-hosted status` and lifecycle share the check (ADR
+    self-hosted-verification D9). A target without a GitHub origin has no
+    Actions logs to check.
+    """
+    if repository.repository is None:
+        return ""
+    text = self_hosted.retire_warning(
+        self_hosted.GhApi(),
+        repository.repository,
+        repository.visibility != "public" if repository.verified else None,
+        settings_schema.verification_modes(saved).get(
+            "verification_mode_private"
+        ),
+    )
+    if text:
+        print(f"WARNING: {text}", file=sys.stderr)
+    return text
+
+
 def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     """Check, finalize, or apply a Copier smart update."""
     if args.apply_plan is not None:
@@ -13146,6 +13184,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     # A target whose origin names another repository stops before any
     # render or write (Issue #1072 AC5).
     require_repository_identity(saved_answers, explicit_data, repository)
+    retire = update_retire_warning(repository, saved_answers)
     candidate_answers, update_data = update_plan_answers(
         saved_answers, explicit_data, repository
     )
@@ -13544,6 +13583,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             ),
         ),
         reviewer_answer=reviewer_answer,
+        retire_warning=retire,
     )
     check_reviewers_answer(
         files,

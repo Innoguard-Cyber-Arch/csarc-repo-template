@@ -139,7 +139,7 @@ tracking: none
 | `csarc self-hosted verify --pr <N>` | 可見性與實際模式、head repo、head SHA、目標分支、環境、窗口剩餘時間 | repo 是 public、實際模式不是 `self-hosted`、PR 不是 open、PR 來自 fork、目標分支沒有環境、尚未登記、環境未登記、沒有窗口或剩不到 30 分鐘時拒絕。剩不到 2 小時時印出 `WARNING:`。以 `workflow_dispatch` 在目標分支上觸發 `csarc-verify.yml`，輸入 PR 編號、head SHA、環境與窗口結束時間 |
 | `csarc self-hosted retire [--private-mode hosted\|local]` | `csarc-verify.yml` 的 run、它們的 artifact、repository 的 Actions cache（cache 不屬於特定 workflow，所以全部列出）、所有 runner，以及設定變更 | 刪除盤點中的 artifact、run、cache 與 runner。`verification_mode_private` 是 `self-hosted` 時，在預設分支的新分支上執行 `csarc update --data verification_mode_private=<模式> --data project_visibility=public`，建立帶 `governance-switch` label 的 draft PR；新模式預設等於 `verification_mode_public`。不直接修改 repository 設定（Q4）。印出給 csarc-devops 的退出通知。任何一項失敗都以非 0 結束，並說明公開後哪些 log 仍會被看到 |
 
-**`retire` 是轉成 public 之前的必要步驟。**先執行不帶 `--apply` 的盤點，確認後再加 `--apply`；合併它建立的 PR 之後，才改變 repository 的可見性。
+**`retire` 是轉成 public 之前的必要步驟。**先執行不帶 `--apply` 的盤點，確認後再加 `--apply`；合併它建立的 PR 之後，才改變 repository 的可見性。沒有先 `retire` 就公開時，`status`、`csarc update`（終端機與報告）和 lifecycle 的 `check`、`merge` 以同一個判斷（`merge_trace.retire_warning`）印出同一個 `WARNING:` 要求 `retire`；讀不到可見性或 run 清單時改印 `WARNING:` 說明沒有檢查，合併判斷不變（#1287）。
 
 **工具鏈 image（ADR D8、C9）。**`profiles/self-hosted-toolchain.json` 是給 csarc-devops 的機器可讀清單：image 以 sha256 digest 固定、每個 job 一個新容器並以非 root 執行，禁止 docker socket、privileged、host network、metadata endpoint 與長期 secret；基礎工具（含 trusted policy 用的 Python 與 uv）、`install-tool` 下載的掃描工具、依（repo, 環境）分開的快取，以及每個語言 profile 的工具版本。版本與 `profiles/catalog.yaml` 和 hosted workflow 的固定版本一致，由回歸測試檢查。`container` 模組需要 Docker daemon，VM 禁止 docker socket，所以啟用它的 repo 不能在 self-hosted 模式驗證。
 

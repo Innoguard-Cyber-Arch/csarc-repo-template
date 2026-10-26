@@ -954,6 +954,8 @@ hosted 模式仍保留 required `verify`／`title`／`review`。實作中與一�
 
 這份本機證明能防止誤拿舊結果、錯誤 branch／base、測完又改檔或跑錯 tier，但不能防止有寫入權限的人偽造 JSON，也不能證明 GitHub event／權限、第三方服務、實際部署、遠端 runner 或 release provenance。local mode 不把這些項目標成成功；需要這些信任性質時，把生效的 `verification_mode_private` 或 `verification_mode_public` 改成 `hosted`，更新模板並重新套用 repository settings。切換到 hosted 後，下節 #834／#835 的規則完整生效。
 
+- **公開前的 `retire`（ADR D9、#1287）。**`self-hosted` repository 轉成 public 前必須執行 `csarc self-hosted retire`。repository 已是 public，但仍有 self-hosted 設定或 `csarc-verify.yml` 的 run 時，`csarc self-hosted status`、`csarc update`（含報告）與 lifecycle 的 `check`、`merge` 都印出 `WARNING:` 要求執行 `retire`；不改變合併判斷。
+
 ### `verify` 的可信 hosted execution evidence（#834）
 
 #834 supersede #661 將 unsigned commit trailer 當作 required evidence 的設計；#661 希望保留低成本本機回饋
