@@ -3,8 +3,8 @@ title = "repo-template 技術手冊｜模板能力、操作與限制"
 lang = "zh-Hant-TW"
 status = "current"
 footer_version = "版本日期 261026 r6"
-baseline = "approved/261024r5_repo-template-handbook.html"
-baseline_sha256 = "50f463291347976d2f681b8ec787251ea501291833eb17c52dde8a730e9063ed"
+baseline = "approved/261026r6_repo-template-handbook.html"
+baseline_sha256 = "afe235062b54305fe457d41ec4e1e06a39a8a4420c59ecad6a424fb844d014ab"
 +++
 
 <!--

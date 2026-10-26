@@ -1,11 +1,11 @@
 {
   "baseline": {
-    "path": "docs/handbook/approved/261024r5_repo-template-handbook.html",
-    "sha256": "50f463291347976d2f681b8ec787251ea501291833eb17c52dde8a730e9063ed"
+    "path": "docs/handbook/approved/261026r6_repo-template-handbook.html",
+    "sha256": "afe235062b54305fe457d41ec4e1e06a39a8a4420c59ecad6a424fb844d014ab"
   },
   "source": {
     "path": "docs/handbook/handbook.md",
-    "sha256": "39401aff6dc7c40eaec4fccd11cc1515e06525e7dfe05f68247041cc00e84af0"
+    "sha256": "031a3977efd55f164f164e433e62f61075c29d3165d6958275b944daf97be34a"
   },
   "stylesheet": {
     "path": "docs/handbook/handbook.css",
