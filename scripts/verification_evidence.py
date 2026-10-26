@@ -334,12 +334,15 @@ def validate_verification_job(  # noqa: C901
     | None = None,
     annotations: list[dict[str, Any]] | None = None,
     commit_tree: Callable[[str], str | None] | None = None,
+    source_result: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     """Validate exact-tree, toolchain, result, runner, and freshness claims.
 
     A clean sync may cite the full execution of the pull request whose
     squash merge produced main; `commit_tree` then proves that main commit
-    has exactly the verified source tree.
+    has exactly the verified source tree. In the template repository a
+    clean sync may instead cite a Dependabot reverification (Issue #1284),
+    which the caller validates and passes as `source_result`.
     """
     # Issue #1075: the window comes from trusted policy and may only be
     # tightened; reject a widened request before reading any evidence.
@@ -492,7 +495,12 @@ def validate_verification_job(  # noqa: C901
                 "Evidence: reuse source identity does not match. Rerun the "
                 "'verify' job."
             )
-        if (
+        if source_result is not None and not sync:
+            raise RuntimeError(
+                "Evidence: reuse has no direct execution source. Rerun the "
+                "'verify' job."
+            )
+        if source_result is None and (
             needs_route_annotations(source_job)
             or evidence_source_ids(source_job) is not None
         ):
@@ -500,7 +508,7 @@ def validate_verification_job(  # noqa: C901
                 "Evidence: reuse has no direct execution source. Rerun the "
                 "'verify' job."
             )
-        source = validate_verification_job(
+        source = source_result or validate_verification_job(
             source_check,
             source_run,
             source_job,

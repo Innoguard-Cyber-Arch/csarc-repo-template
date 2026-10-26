@@ -1471,10 +1471,23 @@ PR 內自動同步；選擇後者，理由記錄於本 Issue 討論（維護者 
    tree、新鮮度、executor）不再執行，改由重新驗證證據取代，merge evidence 也改為重新驗證的 payload。這是安全
    的，因為 head 的 `verify` 只證明舊 base 上的 head tree，而實際合併的是 test merge 的 tree；重新驗證以同一套
    可信 main 程式、GitHub-hosted runner 跑 full，綁定這個 head 與目前的 main，比 head 的證據更接近合併結果。
-   head 的 required contexts 仍必須存在並通過，producer 身分仍照舊驗證。限制：`check-trusted-verification` 的 `--resolve-merge-source`／`--resolve-release-source`
-   仍要求 tree 相同（這支腳本與 `template/` 逐位元組配對，本修正不改它），所以 main 最新的 commit 是這種合併時，
-   `sync/main-to-*` 的 clean sync 無法沿用它的 full 證據，手動在這個 commit 上 dispatch `release.yml` 也會
-   fail closed，要等 main 下一次前進或人工處理。
+   head 的 required contexts 仍必須存在並通過，producer 身分仍照舊驗證。
+
+   **clean sync 與發版沿用重新驗證（#1284）**：這種合併的 tree 與 head 不同，`check-trusted-verification` 的
+   `--resolve-merge-source`／`--resolve-release-source` 改用 `dependabot_reverify.py` 的 `merged()` 找它的重新驗證，
+   條件全部成立才接受：merge commit 只有一個 parent、來源是 Dependabot 合併到 main 的 PR、head 有可信的
+   `dependabot-merge-eligible` 通過與 Dependabot 座標（與一般 Dependabot release source 同一道檢查，admin
+   bypass 合併而沒有 eligibility 的 head 不算）、那個 parent 上有
+   通過的 `dependabot-reverify (#N)`（上面列的 producer、runner 與 24 小時規則照舊），而且 merge commit 的
+   tree 等於驗證過的 tree，GitHub 讀回的 test merge 的 tree 也相同、parents 正好是「驗證時的 main、未改動的
+   head」。GitHub 把 head 合到較新 main 產生的 tree（上面接受的風險）不符合這些條件，照樣 fail closed。
+   `sync/main-to-*` 的 clean sync 因此可以引用這次重新驗證作為 full 證據，sync PR 合併時 lifecycle 會用同樣
+   的條件再驗一次。在這種 commit 上 dispatch `release.yml` 時，發版改從 merge commit 自己的 history 規劃，
+   不再改用 head。這個模組不下發，產生的專案找不到它，tree 不同時照舊 fail closed。
+
+   生效時間：重新驗證的 producer 必須是 `main` 上的 `dependabot-reverify.yml`。這個 workflow 隨 Milestone 21
+   promotion 進入 main 之後，上述接受路徑才會生效；在那之前 main 上不會有重新驗證的合併，任何 tree 不同的
+   squash 都照舊 fail closed。
 
    **Dependabot 不回應 `@dependabot rebase`／`recreate` 的盤點（#1264）**：#1215 上，2026-10-24 07:25 的
    `rebase` 與 08:16 的 `recreate` 都被 Dependabot 以 👍 接受，各跑了一次 update job（Actions run

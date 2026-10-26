@@ -12,6 +12,7 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+REVERIFY = Path(__file__).resolve().parent / "dependabot_reverify.py"
 
 if TYPE_CHECKING:
     from pr_lifecycle import GitHub
@@ -163,6 +164,12 @@ def _merged_source(
         or not isinstance(source_tree, dict)
         or merge_tree.get("sha") != source_tree.get("sha")
     ):
+        # Issue #1284: only the template repository ships this module.
+        if branch == "main" and REVERIFY.is_file():
+            matches[0]["reverified"] = importlib.import_module(
+                REVERIFY.stem
+            ).merged(github, repo, commit)
+            return matches[0], head_sha
         raise RuntimeError(
             f"Merged {branch} tree does not match: source differs. "
             "Verify the merge."
@@ -182,6 +189,8 @@ def resolve_release_source(
 ) -> str:
     """Select a reviewed source whose pre-squash history owns the version."""
     pull, head_sha = _merged_source(github, repo, commit, branch)
+    if "reverified" in pull:
+        return ""
     head = pull.get("head")
     head_ref = head.get("ref") if isinstance(head, dict) else None
     if isinstance(head_ref, str) and head_ref.startswith("promote/m"):
@@ -259,13 +268,21 @@ def main() -> None:
         # message-pattern: allow X1 JSON output
         sys.stdout.write(json.dumps({"sha": source_sha}) + "\n")
         return
-    head_sha = (
-        resolve_merge_source(
-            github, args.github_repo, args.commit, args.merge_branch
-        )
+    pull, head_sha = (
+        _merged_source(github, args.github_repo, args.commit, args.merge_branch)
         if args.resolve_merge_source
-        else args.commit
+        else ({}, args.commit)
     )
+    if "reverified" in pull:
+        evidence = pull["reverified"]
+        importlib.import_module("evidence_freshness").require_fresh(
+            evidence["completed_at"],
+            subject="Dependabot reverification",
+            max_age_hours=args.max_age_hours,
+        )
+        # message-pattern: allow X1 JSON output
+        sys.stdout.write(json.dumps(evidence, sort_keys=True) + "\n")
+        return
     if args.find_reusable:
         if (
             args.resolve_merge_source

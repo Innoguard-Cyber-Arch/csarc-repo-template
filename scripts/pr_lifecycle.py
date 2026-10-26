@@ -3253,6 +3253,7 @@ def require_trusted_verification(  # noqa: C901
         else []
     )
     source_evidence = None
+    source_result = None
     source_ids = verification_evidence.evidence_source_ids(job, annotations)
     if source_ids is not None:
         source_kind, source_run_id, source_job_id, source_check_id = source_ids
@@ -3265,6 +3266,36 @@ def require_trusted_verification(  # noqa: C901
                 "Verification reuse source: unavailable. Rerun verify."
             )
         source_head = source_check.get("head_sha")
+    if (
+        source_ids is not None
+        and source_kind == "sync"
+        and str(source_check.get("name")).startswith("dependabot-reverify (")
+    ):
+        # Issue #1284: a clean sync of a reverified Dependabot squash cites
+        # the reverification that verified exactly that main tree.
+        source_result = dependabot_reverify.merged(
+            github,
+            repo,
+            verification_evidence.evidence_match(job, annotations)[1].group(9),
+            now=now,
+            max_age_hours=max_age_hours,
+        )
+        if (
+            source_result["run_id"],
+            source_result["job_id"],
+            source_result["check_run_id"],
+        ) != (source_run_id, source_job_id, source_check_id):
+            raise RuntimeError(
+                "Verification reuse source: invalid producer. Rerun verify."
+            )
+        source_result["executor"] = verification_evidence.EXECUTOR_TRUSTED
+        source_evidence = (
+            source_check,
+            source_run,
+            {"id": source_job_id},
+            str(source_result["tree_sha"]),
+        )
+    elif source_ids is not None:
         if not isinstance(source_head, str) or (
             source_kind == "reuse" and source_head != head_sha
         ):
@@ -3336,6 +3367,7 @@ def require_trusted_verification(  # noqa: C901
         source_evidence=source_evidence,
         annotations=annotations,
         commit_tree=lambda sha: commit_tree_sha(github, repo, sha),
+        source_result=source_result,
         full_command=(
             "./scripts/verify-template.sh"
             if Path("scripts/verify-template.sh").is_file()
