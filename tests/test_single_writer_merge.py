@@ -850,10 +850,11 @@ def test_marker_edit_uses_the_leased_writer_and_reads_back(
 
 
 # Issue #1210: a private repository on GitHub Free cannot hold a Ruleset.
+# This is the raw `gh api` stderr; Issue #1293 feeds it through the real
+# command wrapper instead of hand-writing the wrapped message.
 PLAN_UNSUPPORTED = (
-    "Command failed: gh api repos/owner/repo/rules/branches/main: gh: "
-    "Upgrade to GitHub Pro or make this repository public to enable this "
-    "feature. (HTTP 403)"
+    "gh: Upgrade to GitHub Pro or make this repository public to enable "
+    "this feature. (HTTP 403)"
 )
 TEMPLATE_MODULE = runpy.run_path(
     str(
@@ -863,16 +864,42 @@ TEMPLATE_MODULE = runpy.run_path(
 )
 
 
-class RulesFailureGitHub:
-    """Fail the effective-rules read with one exact error message."""
+def failed_gh_read(
+    module: dict[str, Any], path: str, stderr: str
+) -> RuntimeError:
+    """Fail one real `GitHub.get` call through the real `run` wrapper."""
+    namespace = module["run"].__globals__
+    original = namespace["subprocess"]
 
-    def __init__(self, message: str) -> None:
-        self.message = message
+    def gh_failure(command: list[str], **_kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            returncode=1,
+            stdout='{"message":"from stdout","status":"403"}\n',
+            stderr=f"{stderr}\n",
+            args=command,
+        )
+
+    namespace["subprocess"] = SimpleNamespace(run=gh_failure)
+    try:
+        module["GitHub"]().get("owner/repo", path)
+    except RuntimeError as error:
+        return error
+    finally:
+        namespace["subprocess"] = original
+    raise AssertionError("the stubbed gh read did not fail")
+
+
+class RulesFailureGitHub:
+    """Fail the effective-rules read with one raw `gh` stderr."""
+
+    def __init__(self, module: dict[str, Any], stderr: str) -> None:
+        self.module = module
+        self.stderr = stderr
 
     def get(self, _repo: str, path: str) -> object:
-        """Raise the configured error for the rules read."""
+        """Raise the wrapped error that the real adapter would raise."""
         assert path == "rules/branches/main"
-        raise RuntimeError(self.message)
+        raise failed_gh_read(self.module, path, self.stderr)
 
 
 @pytest.mark.parametrize(
@@ -880,41 +907,30 @@ class RulesFailureGitHub:
 )
 @pytest.mark.parametrize("local_mode", [False, True])
 @pytest.mark.parametrize(
-    ("message", "expected"),
+    ("stderr", "expected"),
     [
         (PLAN_UNSUPPORTED, "none"),
         # AC2: every other rules failure stays unknown, judged by content.
-        (
-            "Command failed: gh api repos/owner/repo/rules/branches/main: "
-            "gh: Resource not accessible by integration (HTTP 403)",
-            "unknown",
-        ),
-        (
-            "Command failed: gh api repos/owner/repo/rules/branches/main: "
-            "gh: Not Found (HTTP 404)",
-            "unknown",
-        ),
-        (
-            "Command failed: gh api repos/owner/repo/rules/branches/main: "
-            "gh: Upgrade to GitHub Pro or make this repository public to "
-            "enable this feature. (HTTP 404)",
-            "unknown",
-        ),
-        (
-            "Command failed: gh api repos/owner/repo/rules/branches/main: "
-            "gh: Server Error (HTTP 502)",
-            "unknown",
-        ),
+        ("gh: Resource not accessible by integration (HTTP 403)", "unknown"),
+        ("gh: Not Found (HTTP 404)", "unknown"),
+        (PLAN_UNSUPPORTED.replace("HTTP 403", "HTTP 404"), "unknown"),
+        ("gh: Server Error (HTTP 502)", "unknown"),
+        ("gh: Upgrade to GitHub Pro (HTTP 403)", "unknown"),
         (PLAN_UNSUPPORTED + "\nunexpected trailing output", "unknown"),
+        ("unexpected leading output\n" + PLAN_UNSUPPORTED, "unknown"),
+        ("gh: x " + PLAN_UNSUPPORTED, "unknown"),
         ("HTTP 403", "unknown"),
     ],
 )
 def test_only_the_plan_unsupported_rules_answer_means_no_ruleset(
-    module: dict[str, Any], local_mode: bool, message: str, expected: str
+    module: dict[str, Any], local_mode: bool, stderr: str, expected: str
 ) -> None:
-    """AC1/AC2/AC3: root and template classify rules failures alike."""
+    """#1293 AC1/AC2/AC3: root and template classify wrapped failures."""
     protection, reason, contexts, *_flags = module["effective_protection"](
-        RulesFailureGitHub(message), "owner/repo", "main", local_mode=local_mode
+        RulesFailureGitHub(module, stderr),
+        "owner/repo",
+        "main",
+        local_mode=local_mode,
     )
 
     if expected == "unknown" and local_mode:
@@ -925,13 +941,33 @@ def test_only_the_plan_unsupported_rules_answer_means_no_ruleset(
         assert "does not support Rulesets" in reason
 
 
+@pytest.mark.parametrize(
+    "module", [MODULE, TEMPLATE_MODULE], ids=["root", "template"]
+)
+def test_plan_unsupported_fixture_uses_the_shipped_wrapper(
+    module: dict[str, Any],
+) -> None:
+    """#1293 AC3: pin the downstream-reported text; a format change fails."""
+    path = "rules/branches/dev%2Fm6-self-hosted-runner"
+    error = failed_gh_read(module, path, PLAN_UNSUPPORTED)
+
+    assert str(error) == (
+        f"Command failed: gh api repos/owner/repo/{path}: "
+        f"{PLAN_UNSUPPORTED}. Fix it and retry."
+    )
+    assert module["rules_plan_unsupported"](error)
+    # The same text without the wrapper's raw output stays unknown.
+    assert not module["rules_plan_unsupported"](RuntimeError(str(error)))
+    assert not module["rules_plan_unsupported"](RuntimeError(PLAN_UNSUPPORTED))
+
+
 class FreePrivateGitHub(SingleWriterGitHub):
     """Answer the rules read the way a private Free repository does."""
 
     def get(self, _repo: str, path: str) -> object:
         """Fail the rules read with GitHub's plan-unsupported 403."""
         if path == "rules/branches/main":
-            raise RuntimeError(PLAN_UNSUPPORTED)
+            raise failed_gh_read(MODULE, path, PLAN_UNSUPPORTED)
         return super().get(_repo, path)
 
 
