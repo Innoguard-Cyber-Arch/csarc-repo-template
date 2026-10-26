@@ -15,17 +15,19 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import cast
 
-LIFECYCLE_REPORT_FORMAT_VERSION = "2.3.0"
+LIFECYCLE_REPORT_FORMAT_VERSION = "2.4.0"
 # The reader still validates a 2.0.0, 2.1.0, or 2.2.0 report (for example
 # one embedded in an earlier final plan) by its own rules; the writer emits
-# only 2.3.0.
+# only 2.4.0.
 PREVIOUS_REPORT_FORMAT_VERSION = "2.0.0"
 REPORT_FORMAT_VERSION_2_1 = "2.1.0"
 REPORT_FORMAT_VERSION_2_2 = "2.2.0"
+REPORT_FORMAT_VERSION_2_3 = "2.3.0"
 READABLE_REPORT_FORMAT_VERSIONS = (
     PREVIOUS_REPORT_FORMAT_VERSION,
     REPORT_FORMAT_VERSION_2_1,
     REPORT_FORMAT_VERSION_2_2,
+    REPORT_FORMAT_VERSION_2_3,
     LIFECYCLE_REPORT_FORMAT_VERSION,
 )
 # 2.3.0 adds the read-only writing-guide review prompt (Issue #1224).
@@ -89,6 +91,7 @@ REQUIRED_ACTION_KINDS = (
     "action-pin",
     "code-owner",
     "committed-resolution",
+    "documentation-review",
     "file-conflict",
     "mapping-decision",
     "mapping-review",
@@ -126,6 +129,7 @@ SECTION_HEADINGS = (
 )
 # The tenth H2 appears only when the report carries a writing-guide prompt.
 WRITING_GUIDE_HEADING = "Writing guide"
+POLICY_DOCUMENTATION_HEADING = "Policy documentation"
 WRITING_GUIDE_LISTED = 20
 PRODUCT_SUBSECTIONS = (
     ("release_writers", "Release writers"),
@@ -161,6 +165,7 @@ REPORT_KEYS = frozenset(
 REPORT_KEYS_2_0 = REPORT_KEYS
 REPORT_KEYS_2_1 = REPORT_KEYS | {"setup"}
 REPORT_KEYS_2_3 = REPORT_KEYS_2_1 | {"writing_guide"}
+REPORT_KEYS_2_4 = REPORT_KEYS_2_3 | {"policy_documentation"}
 SETUP_KEYS = frozenset({"approval_route", "questions", "warnings", "work_mode"})
 WARNING_KEYS = frozenset({"code", "command", "message", "subject"})
 WARNING_CODE = re.compile(r"^W[0-9]{2}-[a-z][a-z-]*$")
@@ -200,6 +205,15 @@ PRODUCT_KEYS = frozenset(
 )
 VERIFICATION_KEYS = frozenset({"candidate", "hook", "render_parity"})
 NEXT_STEP_KEYS = frozenset({"command", "text"})
+POLICY_DOCUMENTATION_KEYS = frozenset(
+    {"key", "locations", "reason", "status", "value"}
+)
+POLICY_DOCUMENTATION_STATUSES = (
+    "aligned",
+    "drift",
+    "not-applicable",
+    "inconclusive",
+)
 REDACTED = "[redacted]"
 # Credential shapes that must never reach a report written outside the
 # target. Values are replaced before validation; validation then rejects
@@ -341,7 +355,11 @@ def _validate_files(report: Mapping[str, object]) -> list[Mapping[str, object]]:
         _member(row["reason"], FILE_ACTIONS[action], f"{path}.reason")
         if row["reason"] == COMPATIBILITY_SHIM and report[
             "report_format_version"
-        ] not in (REPORT_FORMAT_VERSION_2_2, LIFECYCLE_REPORT_FORMAT_VERSION):
+        ] not in (
+            REPORT_FORMAT_VERSION_2_2,
+            REPORT_FORMAT_VERSION_2_3,
+            LIFECYCLE_REPORT_FORMAT_VERSION,
+        ):
             raise _fail(f"{path}.reason", "compatibility-shim needs 2.2.0")
         if not isinstance(row["path"], str):
             raise _fail(f"{path}.path", "must be a string")
@@ -366,9 +384,15 @@ def _validate_actions(
     allowed = [
         kind
         for kind in REQUIRED_ACTION_KINDS
-        if operation == "update"
-        or not previous
-        or kind not in UPDATE_ONLY_ACTION_KINDS_2_0
+        if (
+            operation == "update"
+            or not previous
+            or kind not in UPDATE_ONLY_ACTION_KINDS_2_0
+        )
+        and (
+            report["report_format_version"] == LIFECYCLE_REPORT_FORMAT_VERSION
+            or kind != "documentation-review"
+        )
     ]
     for index, row in enumerate(rows):
         path = f"$.required_actions[{index}]"
@@ -533,6 +557,50 @@ def _validate_writing_guide(report: Mapping[str, object]) -> None:
         raise _fail("$.writing_guide.guides", "must name at least one guide")
 
 
+def _validate_policy_documentation(
+    report: Mapping[str, object],
+    actions: Sequence[Mapping[str, object]],
+) -> None:
+    """Validate deterministic per-key policy-documentation results."""
+    rows = _rows(report["policy_documentation"], "$.policy_documentation")
+    keys: list[str] = []
+    for index, row in enumerate(rows):
+        path = f"$.policy_documentation[{index}]"
+        _exact_keys(row, POLICY_DOCUMENTATION_KEYS, path)
+        if not isinstance(row["key"], str):
+            raise _fail(f"{path}.key", "must be a string")
+        keys.append(row["key"])
+        _member(
+            row["status"],
+            POLICY_DOCUMENTATION_STATUSES,
+            f"{path}.status",
+        )
+        if not isinstance(row["reason"], str):
+            raise _fail(f"{path}.reason", "must be a string")
+        locations = row["locations"]
+        if not isinstance(locations, list) or not all(
+            isinstance(item, str) for item in cast(list[object], locations)
+        ):
+            raise _fail(f"{path}.locations", "must be a list of file:line")
+        if locations != sorted(set(locations)):
+            raise _fail(f"{path}.locations", "must be unique and sorted")
+    if keys != sorted(set(keys)):
+        raise _fail("$.policy_documentation", "keys must be unique and sorted")
+    expected = {
+        row["key"] for row in rows if row["status"] in {"drift", "inconclusive"}
+    }
+    actual = {
+        row["subject"]
+        for row in actions
+        if row["kind"] == "documentation-review" and row["blocking"] is True
+    }
+    if actual != expected:
+        raise _fail(
+            "$.required_actions",
+            "documentation-review actions must match blocking policy rows",
+        )
+
+
 def validate_report(report: object) -> Mapping[str, object]:
     """Validate one report object and return it, failing closed.
 
@@ -550,8 +618,10 @@ def validate_report(report: object) -> Mapping[str, object]:
         value,
         REPORT_KEYS_2_0
         if version == PREVIOUS_REPORT_FORMAT_VERSION
-        else REPORT_KEYS_2_3
+        else REPORT_KEYS_2_4
         if version == LIFECYCLE_REPORT_FORMAT_VERSION
+        else REPORT_KEYS_2_3
+        if version == REPORT_FORMAT_VERSION_2_3
         else REPORT_KEYS_2_1,
         "$",
     )
@@ -564,8 +634,10 @@ def validate_report(report: object) -> Mapping[str, object]:
     _validate_summary(value, settings, files, actions)
     _validate_status(value, operation, actions)
     _validate_sections(value)
-    if version == LIFECYCLE_REPORT_FORMAT_VERSION:
+    if version in (REPORT_FORMAT_VERSION_2_3, LIFECYCLE_REPORT_FORMAT_VERSION):
         _validate_writing_guide(value)
+    if version == LIFECYCLE_REPORT_FORMAT_VERSION:
+        _validate_policy_documentation(value, actions)
     if not isinstance(value["generated_at"], str):
         raise _fail("$.generated_at", "must be a string")
     _check_secrets(value, "$")
@@ -1212,6 +1284,32 @@ def _writing_guide_lines(prompt: Mapping[str, object]) -> list[str]:
     return lines
 
 
+def _policy_documentation_lines(report: Mapping[str, object]) -> list[str]:
+    """Render the per-key offline documentation review results."""
+    rows = cast(list[Mapping[str, object]], report["policy_documentation"])
+    if not rows:
+        return ["None."]
+    lines = [
+        "| Policy key | New value | Status | Candidate locations | Reason |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    lines.extend(
+        f"| {cell(row['key'])} | {cell(row['value'])} | "
+        f"{cell(row['status'])} | {cell(row['locations'])} | "
+        f"{markdown_text(row['reason'])} |"
+        for row in rows
+    )
+    lines.extend(
+        [
+            "",
+            "Copy every row into the update pull request's documentation "
+            "review. `drift` and `inconclusive` block delivery. CSARC never "
+            "rewrites project-owned documentation.",
+        ]
+    )
+    return lines
+
+
 def render_markdown(report: object) -> str:
     """Render the human report from one validated report JSON object."""
     value = validate_report(report)
@@ -1240,6 +1338,16 @@ def render_markdown(report: object) -> str:
     for heading, body in zip(SECTION_HEADINGS, sections, strict=True):
         lines.extend(["", f"## {heading}", "", *body])
     prompt = _optional_mapping(value.get("writing_guide"))
+    policy_rows = cast(list[object], value.get("policy_documentation", []))
+    if policy_rows:
+        lines.extend(
+            [
+                "",
+                f"## {POLICY_DOCUMENTATION_HEADING}",
+                "",
+                *_policy_documentation_lines(value),
+            ]
+        )
     if prompt is not None:
         lines.extend(
             [

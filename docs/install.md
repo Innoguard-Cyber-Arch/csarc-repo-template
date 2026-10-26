@@ -33,6 +33,8 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 `adopt` 預設為 dry-run，只在 repo 外產生 machine-readable plan、作為唯一來源的 report JSON 與由它 render 的 Markdown 導入報告（[SPEC-008](specs/SPEC-008-lifecycle-report-format.md)），不修改 repo；確認後才用 `--apply-plan` 套用。
 
+導入報告會把新 managed policy 與既有 project-owned README／`docs/` 逐 key 比對。每列必須是 `aligned`、`drift`、`not-applicable` 或 `inconclusive`；其中 `drift` 與 `inconclusive` 阻擋套用。檢查只使用內建中英文 keyword map，離線執行、不呼叫 AI，也不改寫產品文件；擁有者修正或釐清列出的 `file:line` 後重新產生計畫。
+
 `code_owner` 預設為空值（不產生 CODEOWNERS）；組織 repo 以 `--data code_owner=@<organization>/<team>` 指定 team，個人 repo 則用 `--data code_owner=@<user>`。`repository_url` 只取自 GitHub origin、`GH_REPO` 或明確傳入的值，不由 owner 推導。尚未設定 remote 的本機 repo 會把有值的 owner 標成 `unknown`，允許先審查導入計畫，但需傳入合法的 `--data repository_url=https://github.com/<owner>/<repository>`，即使文件模式關閉也不能省略。push 後再依序執行產生的 repository settings `plan`／`apply`／`check`。檢查不會自動授予 user／team 權限，owner 不存在或沒有 write 以上權限時會停止。
 
 ## 更新已導入的 repo
@@ -182,6 +184,8 @@ csarc update . --to <tag> --expected-sha <full-sha> --check --json --data single
 csarc update . --to <tag> --expected-sha <full-sha> --finalize-plan --data single_writer_merger=<login> --decision <path>=keep-current --report-dir ../<repo>-csarc-update-report
 csarc update . --apply-plan ../<repo>-csarc-update-report/csarc-update-final-plan.json --yes
 ```
+
+`Policy documentation` 報告段落會列出每個變更後的 managed policy key、新值、四態結果與候選 `file:line`。把每列帶入 update PR 的「文件一致性」紀錄；aggregate status 為 `drift` 或 `inconclusive` 時維持 Draft，CLI 也拒絕 finalize／apply。`not-applicable` 表示 project-owned README／`docs/` 沒有提到該 key，仍要在 PR 保留這筆結果。這是 deterministic、離線的提示與門禁，不做通用語意合併；修正文意後重新執行 `--check`。
 
 `github_project_url` 換成 `--data github_project_url=<url>`；兩者都漏掉時兩個 `--data` 一起帶。`--decision` 依該次報告的衝突照常給，沒有衝突時不帶。加回 `single_writer_merger` 屬於 governance relaxation，PR 要走 `governance-switch` route（見 [CI 政策](ci-policy.md)）。
 

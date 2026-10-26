@@ -67,6 +67,8 @@ README 只作為濃縮入口：標題與一句話、少量徽章、二至五項�
 
 `off` 是專案模式，不是 review 結果。PR policy 只做確定性的欄位、狀態與 exact-head 檢查；它不在 GitHub runner 再呼叫 AI。新 push 會讓舊 head 失效，release PR 也必須針對自己的 exact head 更新紀錄。Release job 只消費通過門禁的候選版與既有驗證鏈，不增加 workflow、runner 或另一套測試矩陣。
 
+adopt／update 另在 lifecycle report 的 `Policy documentation` 段落，針對新增或改變的 managed policy 以中英文 keyword map 離線掃描 project-owned README 與 `docs/`；不讀 `.csarc/`、不呼叫 AI、不自動改寫。PR 的 `Reason` 必須逐 key 記錄新值、四態結果與候選 `file:line`，aggregate `drift`／`inconclusive` 繼續阻擋交付；`not-applicable` 也保留理由。這個 deterministic 檢查只能找出已知語句，不能取代擁有者的語意審查。
+
 ## 授權同步
 
 `LICENSE`、README、Python／npm／Cargo manifest、封裝內容、release metadata 與 SPDX SBOM 必須表達同一授權。專有模式使用 `LicenseRef-Proprietary`（Python／SPDX）、`UNLICENSED` 加禁止公開發布（npm），以及 `license-file = "LICENSE"`（Cargo）。既有專案已有授權時一律保留；設定與現有檔案衝突時停止更新並要求 owner 決定，不能猜測或自動換授權。

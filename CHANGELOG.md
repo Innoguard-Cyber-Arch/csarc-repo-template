@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.46.0] - 2026-10-27
+
+### Features
+
+* feat(update): detect policy documentation drift (4c5e5f4)
+
 ## [0.45.2] - 2026-10-26
 
 ### Bug Fixes

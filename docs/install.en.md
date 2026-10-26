@@ -33,6 +33,8 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 `adopt` defaults to a dry run. Outside the repo, it only writes a machine-readable plan, the report JSON that is the only source, and the Markdown adoption report rendered from it ([SPEC-008](specs/SPEC-008-lifecycle-report-format.md)). It does not modify the repo. Apply with `--apply-plan` only after you confirm.
 
+The adoption report compares each new managed policy with the existing project-owned README and `docs/`. Every row is `aligned`, `drift`, `not-applicable`, or `inconclusive`; `drift` and `inconclusive` block apply. The check uses only the built-in English and Chinese keyword map, runs offline without AI, and never rewrites product documentation. The owner corrects or clarifies the listed `file:line` locations, then creates a new plan.
+
 ## Update an adopted repo
 
 `csarc update` is the only update entry point; a direct `copier update` is unsupported. Below, `csarc` stands for `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc`. `<tag>` and `<full-sha>` are the approved Release tag and full commit SHA, and `<repo>` is the target folder name. Run these in a clean clone of the target:
@@ -180,6 +182,8 @@ csarc update . --to <tag> --expected-sha <full-sha> --check --json --data single
 csarc update . --to <tag> --expected-sha <full-sha> --finalize-plan --data single_writer_merger=<login> --decision <path>=keep-current --report-dir ../<repo>-csarc-update-report
 csarc update . --apply-plan ../<repo>-csarc-update-report/csarc-update-final-plan.json --yes
 ```
+
+The `Policy documentation` report section lists each changed managed policy key, its new value, the four-state result, and candidate `file:line` locations. Copy every row into the update pull request's Documentation review record. Keep the pull request Draft when the aggregate status is `drift` or `inconclusive`; the CLI also refuses finalize/apply. `not-applicable` means no project-owned README or `docs/` line mentions the key, and the pull request still records that result. This is a deterministic offline prompt and gate, not a general semantic merge; rerun `--check` after correcting the wording.
 
 For `github_project_url`, pass `--data github_project_url=<url>` instead; pass both when both are missing. Give `--decision` for the conflicts that report lists as usual, and leave it out when there are none. Restoring `single_writer_merger` is a governance relaxation, so its pull request takes the `governance-switch` route (see the [CI policy](ci-policy.md)).
 
