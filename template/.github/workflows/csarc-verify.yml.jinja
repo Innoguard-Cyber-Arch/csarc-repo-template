@@ -161,6 +161,7 @@ jobs:
           CSARC_CI_LABELS: {% raw %}${{ steps.dispatch.outputs.labels }}{% endraw %}
           CSARC_CI_SCOPES: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
           CSARC_CI_TIER: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
+          CSARC_SELF_HOSTED_VM: "true"
           CSARC_VERIFICATION_SUITE: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
         run: |
           entry_root="$RUNNER_TEMP/trusted-executor"
