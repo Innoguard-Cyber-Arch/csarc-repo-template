@@ -65,6 +65,7 @@ def require(
     main_sha: str,
     *,
     now: datetime | None = None,
+    max_age_hours: float | None = None,
 ) -> dict[str, Any]:
     """Return trusted reverification evidence bound to this main, or fail.
 
@@ -152,7 +153,10 @@ def require(
             f"Rerun '{WORKFLOW_PATH}' on main."
         )
     module("evidence_freshness").require_fresh(
-        job.get("completed_at"), subject="Dependabot reverification", now=now
+        job.get("completed_at"),
+        subject="Dependabot reverification",
+        now=now,
+        max_age_hours=max_age_hours,
     )
     claims = [
         match
@@ -167,6 +171,14 @@ def require(
             f"'{WORKFLOW_PATH}' on main."
         )
     number, head, main, merge, tree, raw_scopes, command = claims[0].groups()
+    token = module("verification_evidence").toolchain_token
+    toolchain = [
+        name
+        for step in job.get("steps") or []
+        if isinstance(step, dict) and step.get("conclusion") == "success"
+        for name in [token(str(step.get("name") or ""))]
+        if name is not None
+    ]
     scopes = raw_scopes.split(",")
     valid = module("verification_evidence").VALID_SCOPES
     if scopes != sorted(set(scopes)) or not set(scopes) <= valid:
@@ -194,8 +206,116 @@ def require(
         "job_id": job.get("id"),
         "check_run_id": check.get("id"),
         "runner_labels": sorted(str(item) for item in labels),
+        "toolchain": toolchain,
         "completed_at": job.get("completed_at"),
     }
+
+
+def tree_and_parents(
+    github: GitHub, repo: str, sha: str
+) -> tuple[object, list[object]]:
+    """Return one commit's tree SHA and parent SHAs as GitHub reports them."""
+    commit = github.get(repo, f"git/commits/{sha}")
+    commit = commit if isinstance(commit, dict) else {}
+    return (commit.get("tree") or {}).get("sha"), [
+        item.get("sha")
+        for item in commit.get("parents") or []
+        if isinstance(item, dict)
+    ]
+
+
+def require_eligible(
+    github: GitHub, repo: str, pull: dict[str, Any], head_sha: str
+) -> None:
+    """Require Dependabot coordinates and trusted exact-head eligibility.
+
+    Issue #1284: the same gate the release source applies to an ordinary
+    Dependabot squash, so a reverified squash merged without a passing
+    `dependabot-merge-eligible` (for example by admin bypass) never
+    resolves as a verified source.
+    """
+    head = pull.get("head") or {}
+    user = pull.get("user") or {}
+    auth = module("authenticate_dependabot_head")
+    coordinates, _ = auth.dependabot_coordinates_eligible(
+        str(user.get("login") or ""),
+        str(head.get("ref") or ""),
+        str((head.get("repo") or {}).get("full_name") or ""),
+        repo,
+    )
+    lifecycle = module("pr_lifecycle")
+    identity = (ELIGIBILITY_CONTEXT, GITHUB_ACTIONS_APP_ID)
+    checks = github.collection(
+        repo,
+        f"commits/{head_sha}/check-runs?filter=latest&per_page=100",
+        "check_runs",
+    )
+    selected, _ = lifecycle.trusted_required_check_runs(
+        github, repo, head_sha, {identity}, checks
+    )
+    check = selected.get(identity) or {}
+    if (
+        not coordinates
+        or user.get("type") != "Bot"
+        or check.get("status") != "completed"
+        or check.get("conclusion") != "success"
+    ):
+        raise RuntimeError(
+            "Dependabot source lacks trusted exact-head eligibility: no "
+            "pass. Wait for its 'verify' check."
+        )
+
+
+def merged(
+    github: GitHub,
+    repo: str,
+    commit: str,
+    *,
+    now: datetime | None = None,
+    max_age_hours: float | None = None,
+) -> dict[str, Any]:
+    """Return the reverification that verified this exact main squash.
+
+    Issue #1284: clean sync and release source resolution may stand on a
+    reverified Dependabot merge only when the squash has exactly the
+    verified tree on the main it was verified on, and the verified test
+    merge's parents are that main and the unchanged head. A squash GitHub
+    put on a newer main (the accepted #1264 window) has another parent or
+    tree and fails closed here.
+    """
+    pulls = [
+        pull
+        for pull in github.pages(repo, f"commits/{commit}/pulls?per_page=100")
+        if pull.get("merged_at")
+        and pull.get("merge_commit_sha") == commit
+        and (pull.get("base") or {}).get("ref") == "main"
+        and (pull.get("user") or {}).get("login") == DEPENDABOT_LOGIN
+    ]
+    tree, parents = tree_and_parents(github, repo, commit)
+    if len(pulls) != 1 or len(parents) != 1:
+        raise RuntimeError(
+            "Merged main tree does not match: source differs and no "
+            "Dependabot reverification binds it. Verify the merge."
+        )
+    head_sha = str((pulls[0].get("head") or {}).get("sha") or "")
+    require_eligible(github, repo, pulls[0], head_sha)
+    evidence = require(
+        github,
+        repo,
+        int(pulls[0]["number"]),
+        head_sha,
+        str(parents[0]),
+        now=now,
+        max_age_hours=max_age_hours,
+    )
+    if tree != evidence["tree_sha"] or tree_and_parents(
+        github, repo, evidence["merge_sha"]
+    ) != (tree, [parents[0], head_sha]):
+        raise RuntimeError(
+            f"Reverified Dependabot merge {commit}: tree {tree} was not "
+            "verified. Verify it on main, or revert it."
+        )
+    return {**evidence, "base": "main", "reused": False}
 
 
 def payload(

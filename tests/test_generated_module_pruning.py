@@ -38,6 +38,7 @@ SPLITS: dict[str, tuple[str, ...]] = {
         "sync_milestone_state_hosted.py",
     ),
     "verification_cost.py": ("verification_cost.py",),
+    "verification_evidence.py": ("verification_evidence.py",),
 }
 # Issue #1177: names the first generated file only forwards to the hosted
 # file that holds the root definition. Local renders omit that file.
@@ -124,6 +125,12 @@ ADAPTED: dict[str, dict[str, str]] = {
         "_dispatch": "drops record-promotion-evidence (no generated caller)",
         "hosted_gates": HOSTED_FORWARDER,
         "_hosted_only": HOSTED_FORWARDER,
+    },
+    "verification_evidence.py": {
+        # Issue #1284: only root accepts a pre-validated Dependabot
+        # reverification as a clean-sync source; the generated copy also
+        # names its own `.csarc/scripts/verify` full entry point.
+        "validate_verification_job": ROOT_ONLY_REVERIFY,
     },
     "verification_cost.py": {
         "main": "drops the `report` command no generated caller runs",
