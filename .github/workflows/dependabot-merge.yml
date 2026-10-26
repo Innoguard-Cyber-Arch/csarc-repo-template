@@ -259,8 +259,21 @@ jobs:
         if: ${{ steps.merge.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
+          PR_NUMBER: ${{ needs.resolve-pr.outputs.number }}
         run: |
           release_ownership="$(python3 scripts/csarc_config.py release_ownership)"
-          if [[ "$release_ownership" == "csarc-owned" ]]; then
-            gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
+          if [[ "$release_ownership" != "csarc-owned" ]]; then
+            exit 0
           fi
+          # Issue #1264: a reverified merge squashes a tree other than the
+          # head's. Only direct build(deps) heads take that route and they
+          # plan no release, so the next release run plans from history.
+          merge_sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .merge_commit_sha)"
+          merged_tree="$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$merge_sha" --jq .tree.sha)"
+          head_tree="$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$HEAD_SHA" --jq .tree.sha)"
+          if [[ "$merged_tree" != "$head_tree" ]]; then
+            echo "NOTICE: Skipped the release dispatch for the reverified merge $merge_sha."
+            exit 0
+          fi
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main

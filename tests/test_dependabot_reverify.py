@@ -28,7 +28,6 @@ from test_pr_lifecycle import (
     merge_snapshot,
     require_lease,
 )
-from test_verification_evidence import MergeSourceGitHub, resolve_release_source
 
 # Re-export the autouse fixture so this module pins the same review mode.
 __all__ = ["human_review_mode"]
@@ -581,27 +580,6 @@ def test_acquire_refuses_a_behind_base_off_the_dependabot_path(
         acquire(acquire_args(require_dependabot_head=True), github)
 
 
-# --- release source after a reverified merge --------------------------------
-
-
-def test_release_source_accepts_only_a_reverified_dependabot_tree() -> None:
-    """A Dependabot merge on a newer main plans from the merged commit."""
-    dependabot = MergeSourceGitHub(
-        "d" * 40,
-        head_ref="dependabot/uv/main/routine-1",
-        author="dependabot[bot]",
-        author_type="Bot",
-    )
-    assert resolve_release_source(dependabot, REPO, "c" * 40) == ""
-    for github in (
-        MergeSourceGitHub("d" * 40),
-        MergeSourceGitHub("d" * 40, head_ref="promote/m21-self-hosted"),
-        MergeSourceGitHub("d" * 40, head_ref="dependabot/uv/main/x"),
-    ):
-        with pytest.raises(RuntimeError, match="tree does not match"):
-            resolve_release_source(github, REPO, "c" * 40)
-
-
 # --- workflows (AC1, AC3, R2) ------------------------------------------------
 
 
@@ -699,3 +677,8 @@ def test_merge_workflow_accepts_the_reverify_dispatch() -> None:
         "--require-dependabot-head"
         in steps["Acquire the PR and destination lease"]["run"]
     )
+    release = steps["Dispatch the repository-owned release flow"]["run"]
+    # A reverified merge squashes another tree; release resolution would
+    # refuse it, and its direct build(deps) head plans no release anyway.
+    assert 'if [[ "$merged_tree" != "$head_tree" ]]; then' in release
+    assert release.rstrip().endswith("--ref main")

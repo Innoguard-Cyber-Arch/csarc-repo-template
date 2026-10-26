@@ -1411,10 +1411,12 @@ PR 內自動同步；選擇後者，理由記錄於本 Issue 討論（維護者 
    合併時 head 自己的 hosted `verify` 仍要存在並通過，但 merge evidence 改用重新驗證的結果：`tree_sha` 是
    test merge 的 tree，`base_sha` 是驗證時的 main，原本的 head tree 與 PR base 一併記錄。合併前要求 main 仍是
    那個 SHA；合併後讀回 merge commit，parent 必須是那個 main、tree 必須等於驗證過的 tree，summary 另寫
-   `dependabot-reverify-trace`。`check-trusted-verification --resolve-release-source` 遇到這種 tree 不同的
-   Dependabot 合併時不取 source history，改由 merge commit 本身決定發版；其他 tree 不同的來源仍然失敗。
-   限制：`--resolve-merge-source` 仍要求 tree 相同，所以 main 最新的 commit 是這種合併時，`sync/main-to-*` 的
-   clean sync 無法沿用它的 full 證據，要等 main 下一次前進或人工處理。
+   `dependabot-reverify-trace`。這種合併的 tree 與 head 不同，所以 `dependabot-merge.yml` 不在它之後
+   dispatch `release.yml`：只有直接的 `build(deps)` head 會走這條路，本來就不發版，下一次 release run 會從
+   history 規劃。限制：`check-trusted-verification` 的 `--resolve-merge-source`／`--resolve-release-source`
+   仍要求 tree 相同（這支腳本與 `template/` 逐位元組配對，本修正不改它），所以 main 最新的 commit 是這種合併時，
+   `sync/main-to-*` 的 clean sync 無法沿用它的 full 證據，手動在這個 commit 上 dispatch `release.yml` 也會
+   fail closed，要等 main 下一次前進或人工處理。
 
    **Dependabot 不回應 `@dependabot rebase`／`recreate` 的盤點（#1264）**：#1215 上，2026-10-24 07:25 的
    `rebase` 與 08:16 的 `recreate` 都被 Dependabot 以 👍 接受，各跑了一次 update job（Actions run
