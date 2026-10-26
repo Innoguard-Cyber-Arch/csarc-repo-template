@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -414,6 +415,29 @@ def test_governance_workflows_are_thin_and_least_privilege() -> None:
     assert "pull-requests: write" not in drift
     assert "run: ./.csarc/scripts/check-governance-drift" in drift
     assert "timeout-minutes: 5" in drift
+
+
+def test_docs_describe_a_weekly_governance_drift_check() -> None:
+    """No doc still calls the governance drift schedule daily (#1289)."""
+    stale = re.compile(
+        r"(daily|每日|每天)[^。\n]{0,60}(governance[- _]drift|治理漂移|drift)"
+        r"|(governance[- _]drift|治理漂移)[^。\n]{0,60}(daily|每日|每天)",
+        re.IGNORECASE,
+    )
+    paths = [
+        "README.md",
+        "README.en.md",
+        "docs/ci-policy.md",
+        "site/content/_index.zh-tw.md",
+        "site/content/_index.en.md",
+        "site/data/config_examples.json",
+        "site/data/testing/governance.json",
+        "template/.csarc/docs/ci-policy.md.jinja",
+        "template/.csarc/docs/csarc.md.jinja",
+    ]
+    for name in paths:
+        text = (ROOT / name).read_text(encoding="utf-8")
+        assert not stale.search(text), name
 
 
 def test_docs_reflect_restored_governance_actions() -> None:
