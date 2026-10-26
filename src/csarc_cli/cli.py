@@ -9936,10 +9936,10 @@ def effective_mode_data(answers: Mapping[str, object]) -> dict[str, object]:
     """Pass the render-derived mode as update data (SPEC-011).
 
     Copier evaluates the new template's `_exclude` rules on both sides of
-    an update, and the old side never computes `verification_mode` from the
-    two visibility settings; without it every hosted workflow would look
-    removed. The value equals what the new side computes, which its
-    validator checks.
+    an update, and neither render computes `verification_mode` from the two
+    visibility settings. Each side must receive the value derived from its
+    own settings so a reviewed mode change does not contaminate the old
+    baseline.
     """
     side = (
         "public" if answers.get("project_visibility") == "public" else "private"
@@ -10736,7 +10736,9 @@ def render_old_side(
         new_data = update_plan.new_side_data(
             saved, reconstructed, update_data, settings_schema.HIDDEN_SETTINGS
         )
-        old = reconstructed.with_context(new_data)
+        old = reconstructed.with_context(
+            {**new_data, **effective_mode_data(saved)}
+        )
         baseline = workdir / "old-baseline"
         render(baseline, old.copier_answers())
         return old, new_data, baseline
@@ -10747,7 +10749,7 @@ def render_old_side(
     new_data = update_plan.new_side_data(
         saved, reconstructed, update_data, settings_schema.HIDDEN_SETTINGS
     )
-    old = reconstructed.with_context(new_data)
+    old = reconstructed.with_context({**new_data, **effective_mode_data(saved)})
     baseline = workdir / "old-baseline"
     try:
         update_plan.require_stable_old_inputs(

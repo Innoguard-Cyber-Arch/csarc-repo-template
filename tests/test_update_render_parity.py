@@ -545,3 +545,66 @@ def test_current_schema_update_has_render_parity(
     keys = set(planning["old_side"]["keys"])
     assert {"project_mode", "project_name", "repository_url"} <= keys
     assert "release_ownership" in keys
+
+
+@pytest.mark.large
+@pytest.mark.parametrize(
+    ("old_visibility", "old_private", "old_public", "change"),
+    (
+        ("private", "self-hosted", "hosted", "verification_mode_private=local"),
+        ("private", "local", "hosted", "verification_mode_private=self-hosted"),
+        ("private", "self-hosted", "local", "project_visibility=public"),
+        ("public", "self-hosted", "local", "project_visibility=private"),
+    ),
+)
+def test_mode_changes_keep_old_and_new_render_contexts_separate(
+    old_visibility: str,
+    old_private: str,
+    old_public: str,
+    change: str,
+    template_source: dict[str, str],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """#1308: mode and visibility changes rebuild the old side unchanged."""
+    project = tmp_path / f"mode-{old_visibility}-{old_private}-{change}"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                template_source["source"],
+                "--to",
+                template_source["current"],
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "languages=[]",
+                "--data",
+                f"repository_url={REPOSITORY_URL}",
+                "--data",
+                "security_reporting_channel=security@example.com",
+                "--data",
+                f"project_visibility={old_visibility}",
+                "--data",
+                f"verification_mode_private={old_private}",
+                "--data",
+                f"verification_mode_public={old_public}",
+            ]
+        )
+        == 0
+    )
+    init_repository(project)
+    commit_all(project, "test: current mode consumer")
+    capsys.readouterr()
+
+    assert_parity(
+        project,
+        template_source["following"],
+        tmp_path,
+        capsys,
+        (change,),
+        current_schema=True,
+    )
