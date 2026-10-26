@@ -9849,7 +9849,7 @@ def governance_drift_update_recommendation(
         isinstance(saved, list) and "governance-drift" not in saved
     ):
         return (
-            "new projects enable the daily governance drift check by "
+            "new projects enable the weekly governance drift check by "
             "default; this update preserves the saved choice. Add "
             "governance-drift with --data scheduled_checks=... to add the "
             "scheduled workflow and its read-only checker."

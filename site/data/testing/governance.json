@@ -16,11 +16,11 @@
   "stageLabels": {
     "zh-tw": {
       "milestone": "每張非 draft PR",
-      "release": "每日／手動維運"
+      "release": "每週／手動維運"
     },
     "en": {
       "milestone": "Every non-draft PR",
-      "release": "Daily / manual maintenance"
+      "release": "Weekly / manual maintenance"
     }
   },
   "rows": [
@@ -80,8 +80,8 @@
               "path": ".github/workflows/governance-drift.yml",
               "job": "check",
               "trigger": {
-                "zh-tw": "enable_governance_drift_check 預設開啟；每日或手動",
-                "en": "Daily or manual; enable_governance_drift_check defaults on"
+                "zh-tw": "enable_governance_drift_check 預設開啟；每週或手動",
+                "en": "Weekly or manual; enable_governance_drift_check defaults on"
               },
               "timeout": "5 min"
             }
