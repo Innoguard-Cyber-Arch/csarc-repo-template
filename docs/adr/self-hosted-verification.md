@@ -4,7 +4,7 @@
 - **日期：**2026-10-25
 - **來源 Issues：**[#1266](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1266)、[#1265](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1265)（Milestone 21 tracker，擁有者 2026-10-24、2026-10-25 決定）；部分取代 [#908](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/908) 的新專案預設
 - **實作 PR：**[#1273](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/1273)
-- **修訂：**[#1281](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1281)（2026-10-26，`container` 模組與 VM 上的 Docker：限制 12、D8 第 7 點、C11）。這次修訂需要擁有者核准，以 #1281 PR 的合併授權作為核准。[#1272](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1272)（2026-10-26，D9 事後偵測的條件；擁有者 2026-10-26 核准）。
+- **修訂：**[#1281](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1281)（2026-10-26，`container` 模組與 VM 上的 Docker：限制 12、D8 第 7 點、C11）。這次修訂需要擁有者核准，以 #1281 PR 的合併授權作為核准。[#1272](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1272)（2026-10-26，D9 事後偵測的條件；擁有者 2026-10-26 核准）。[#1300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1300)（2026-10-27，實機開窗確認 C1 ready 時序與 C2 exact labels）。
 
 ## 問題與限制
 
@@ -312,8 +312,8 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 
 | ID | 問題 |
 | --- | --- |
-| C1 | 註冊 token、延長與狀態查詢的交付管道（例如管理員以自己的 VM 帳號透過 SSH）；記錄開始與結束時間、延長時改停止時間、到期停止 runner 並刪除 runner 憑證檔 |
-| C2 | runner label 與 `runner_name` 的通用命名（不含主機名稱或內部網域）、通用工作目錄路徑；VM ID 穩定、可重查 |
+| C1 | 註冊 token、延長與狀態查詢的交付管道（例如管理員以自己的 VM 帳號透過 SSH）；記錄開始與結束時間、延長時改停止時間、到期停止 runner 並刪除 runner 憑證檔；`open` 要等 runner 輸出 `Listening for Jobs` 並上線後才回 `ok` |
+| C2 | runner label 與 `runner_name` 的通用命名（不含主機名稱或內部網域）、通用工作目錄路徑；VM ID 穩定、可重查；以 `--no-default-labels` 註冊，labels 恰好是 `self-hosted`、`csarc-vm-<id>`、`csarc-env-<環境>` |
 | C3 | 每個（repo, 環境）的帳號、目錄與快取 volume；每個 job 一個新容器並在 job 結束時丟棄；容器不掛 docker socket、不用 privileged 與 host network、不能存取 metadata endpoint、以非 root 執行；UAT 快取在窗口結束時刪除，DEV 快取保留到到期或 `retire`；對外網路政策 |
 | C4 | VM 端 runner log 的轉存與保存期限；入侵事件時的停止與重建程序；job log 不含內部資訊的檢查方式 |
 | C5 | 允許清單的格式與核准者：誰可以核准登記、變更與撤銷；撤銷與到期如何讓 VM 拒絕開窗 |

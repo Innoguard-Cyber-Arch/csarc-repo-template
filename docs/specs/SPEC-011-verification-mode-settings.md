@@ -80,6 +80,8 @@ tracking: none
 | `runner_name` | `csarc-<id>-<環境>` |
 | runner group | `Default` |
 
+Labels 必須恰好是表中的三個值。VM 註冊 runner 時使用 `--no-default-labels`，不得加入 GitHub runner 預設的 `Linux`、`X64` 等 label。
+
 **環境。**目標分支是 `main` 時為 `uat`，是 `dev/m*` 或 `dev/i*` 時為 `dev`；其他分支沒有環境，派工與合併都被拒絕。環境必須列在 `self_hosted_environments`。
 
 **`csarc-verify.yml`。**
@@ -124,6 +126,8 @@ tracking: none
 | `registration_token` | 請求 | 只有 `open` 帶；一小時內有效，用完即丟 |
 | `result` | 回應 | `ok` 或 `refused`；`refused` 另帶 `reason`，例如 `registration expired` |
 | `window` | 回應 | 沒有窗口時是 `null`；否則有 `runner_name`、`started_at`、`ends_at` 與 `registration`（`active` 或 `expired`） |
+
+`open` 只有在 runner 已上線並等候 job 時才能回 `ok`；VM 必須先等到 runner 輸出 `Listening for Jobs`，讓後續 GitHub runner 讀回得到 `online`。尚未 ready 或等待逾時都不得回 `ok`。
 
 - 沒有設定管道時 fail closed：`open`、`extend`、`status`、`verify` 以 `ERROR:` 結束，`open` 在取得註冊 token 之前就停止。`close` 仍以管理員憑證移除 runner，並以 `NOTICE:` 說明 VM 會在窗口到期時停止 runner。
 - 回應不是 JSON 物件、`protocol` 不符、`result` 不是 `ok` 或 `refused`、時間或 `registration` 的值不符時都 fail closed，不當作成功。
