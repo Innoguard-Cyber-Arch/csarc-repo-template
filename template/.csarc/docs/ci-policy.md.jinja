@@ -169,5 +169,5 @@ Draft PR 不檢查 PR 與 Issue 的 checklist 是否全勾；轉為 Ready 時對
 {%- endif %}
 - 合併後自動刪除一般來源 branch（`delete_branch_on_merge`，由 `apply-repository-settings.sh check` 回讀）；delivery branch 在確認結案與證據後才刪。`.csarc/scripts/cleanup-worktrees --apply` 只清除乾淨、未鎖定且可證明已合併的本機 worktree。
 - `stale_branch_detection.py` 在 Milestone 與 release preflight 列出 30 天以上沒有 open PR 的 branch，只提示、不刪除。
-- `scheduled_checks` 的 `template-update` {% if 'template-update' in scheduled_checks %}已啟用：每週由 `template-update.yml` 呼叫 `.csarc/scripts/check-template-update`，有新 Release 時開立或更新提醒 Issue{% else %}未啟用；以 `csarc update --check --json` 查看新 Release{% endif %}。`governance-drift` {% if 'governance-drift' in scheduled_checks %}已啟用：每日比對 repository 設定，drift 只開立或更新提醒 Issue{% else %}未啟用；需要時執行 `./.csarc/scripts/apply-repository-settings.sh check`{% endif %}。
+- `scheduled_checks` 的 `template-update` {% if 'template-update' in scheduled_checks %}已啟用：每週由 `template-update.yml` 呼叫 `.csarc/scripts/check-template-update`，有新 Release 時開立或更新提醒 Issue{% else %}未啟用；以 `csarc update --check --json` 查看新 Release{% endif %}。`governance-drift` {% if 'governance-drift' in scheduled_checks %}已啟用：每週比對 repository 設定，drift 只開立或更新提醒 Issue{% else %}未啟用；需要時執行 `./.csarc/scripts/apply-repository-settings.sh check`{% endif %}。
 - 沒有真實成品、owner、權限或 live run 時，狀態保持 manual、blocked 或 not applicable，不以歷史成功補足。
