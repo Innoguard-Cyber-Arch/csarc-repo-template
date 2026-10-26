@@ -126,6 +126,7 @@ OPTIONAL_DEFAULTS: dict[str, object] = {
 # Issue #1298: saved intent whose Copier question is `when: false`. Copier
 # drops the last answer of such a question on update and renders its
 # default, so `csarc update` forwards each saved value as update data.
+# M21 registration keys must also survive stable-to-beta updates (#1304).
 # The only other `when: false` questions are RENDER_KEYS, recomputed from
 # documentation_languages on every render and never saved.
 HIDDEN_SETTINGS = (
