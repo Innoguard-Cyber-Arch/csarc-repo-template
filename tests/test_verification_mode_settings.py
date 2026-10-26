@@ -478,8 +478,11 @@ class Visibility:
         self.private = private
 
     def get(self, repo: str, path: str) -> object:
-        """Return the repository object."""
-        assert (repo, path) == ("acme/product", "")
+        """Return the repository object, or no workflows (#1287)."""
+        assert repo == "acme/product"
+        if path == "actions/workflows?per_page=100":
+            return {"workflows": []}
+        assert path == ""
         return {"private": self.private}
 
 

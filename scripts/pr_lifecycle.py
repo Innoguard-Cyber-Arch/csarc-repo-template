@@ -2658,6 +2658,14 @@ def configured_verification_mode(github: GitHub, repo: str) -> str:
     private = repository.get("private") if isinstance(repository, dict) else 0
     if not isinstance(private, bool):
         raise RuntimeError(f"Repository visibility: unavailable. {GH_RETRY}.")
+    # ADR self-hosted D9 (#1287): warn only; the merge decision is unchanged.
+    if text := merge_trace.retire_warning(
+        repo,
+        private,
+        config.get("verification_mode_private"),
+        lambda path: github.get(repo, path),
+    ):
+        sys.stderr.write(f"WARNING: {text}\n")
     mode = str(
         config[f"verification_mode_{'private' if private else 'public'}"]
     )

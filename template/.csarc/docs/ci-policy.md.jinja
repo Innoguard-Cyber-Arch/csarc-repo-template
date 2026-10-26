@@ -122,7 +122,7 @@ GitHub UI 合併與 `gh pr merge --admin` 不是合法 route，沒有 trailer；
 - `csarc self-hosted verify --pr <N>` 在 PR 的目標分支觸發 `csarc-verify.yml`；外部 fork 的 PR 一律拒絕。
 - `csarc self-hosted status` 顯示剩餘時間。剩不到 2 小時以 `extend` 延長為現在＋24 小時；剩不到 30 分鐘 `verify` 不再派工。`close` 提前關窗。
 
-限制：連續 90 天沒有開窗，VM 端的登記就到期，要重新登記。轉成 public 之前必須先執行 `csarc self-hosted retire`，確認盤點後加 `--apply`，合併它建立的 PR 後才改可見性。`container: true` 不能搭配 `self-hosted`（VM 不提供 Docker daemon），請改用 `local` 或 `hosted`。
+限制：連續 90 天沒有開窗，VM 端的登記就到期，要重新登記。轉成 public 之前必須先執行 `csarc self-hosted retire`，確認盤點後加 `--apply`，合併它建立的 PR 後才改可見性；沒執行就公開時，`status`、`csarc update` 與 lifecycle 都會印出 `WARNING:`。`container: true` 不能搭配 `self-hosted`（VM 不提供 Docker daemon），請改用 `local` 或 `hosted`。
 {%- endif %}
 
 ## 驗證分級
