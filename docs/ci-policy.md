@@ -1380,6 +1380,77 @@ PR 內自動同步；選擇後者，理由記錄於本 Issue 討論（維護者 
    `check` 對被拒的 snapshot 仍以 0 結束，所以 workflow 的 `check` 步驟只在 `merge_mode` 是 `agent` 時成功；
    否則失敗並由同一次 run 釋放自己取得的 lease，重跑不會再被舊 lease 擋 15 分鐘。
 
+   **#1264 修正：落後 main 時以重新驗證代替 rebase（只在模板 repository）**：Dependabot 只在 PR 與 base
+   衝突時才自動 rebase，只是落後 main 時不會動；lifecycle 又要求 PR 的 base 等於目前的 main，所以 main 每前進
+   一次，已核准、檢查全過的 Dependabot PR 就卡住。root 的 `.github/workflows/dependabot-reverify.yml`（不下發到
+   `template/`）在 main 前進（`push`）、上述四個 workflow 對 `dependabot/**` 完成，或手動 dispatch 時執行：
+
+   - `inventory` job 只讀。它先確認觸發的 commit 仍是目前的 main，再由 `scripts/dependabot_reverify.py
+     inventory` 列出每張 open、同 repo 的 Dependabot PR 與狀態（`current`、`conflict`、`pending`、`waiting`、
+     `reverified`、`reverify`），寫進 step summary 之後才採取動作。只有同時符合以下條件的 PR 列為 `reverify`：
+     落後 main、GitHub 回報 mergeable、最新 review 核准 exact head、有 `dependabot-merge-eligible`、只有一個
+     commit，而且這個 main 上還沒有通過的重新驗證。
+   - `reverify` job 每張 PR 產生一個 check（`dependabot-reverify (#N)`），`max-parallel: 1`，權限只有
+     `contents: read` 與 `pull-requests: read`。它先保留這個 main 的可信驗證程式，再 checkout GitHub 的 test
+     merge `refs/pull/<N>/merge`，要求 parents 正好是「目前的 main、未改動的 head」，然後用可信 base 的
+     `verify-template.sh` 跑 full。step 名稱寫明 `pr`、`head`、`main`、`merge`、`tree`、`scopes`。這個
+     workflow 不 push、不改 Dependabot 的分支或 commit，也不使用 GitHub 的 Update branch。這個 job 在 main
+     ref 的事件上執行候選程式，所以所有工具設定都關閉快取（`setup-uv` 的 `enable-cache: false`、`setup-node`
+     的 `package-manager-cache: false`、`setup-go` 的 `cache: false`），不留下之後 main workflow 會還原的快取。
+   - `dispatch` job 只對通過的 PR 以 `workflow_dispatch` 喚醒 `dependabot-merge.yml`，輸入 PR 編號與 exact
+     head；`notice` job 在有衝突的 PR 留一則帶隱藏標記的提示，同一張 PR 不重複留言。整個 workflow 以
+     concurrency 串行、不取消進行中的 run，較新的 pending run 會取代較舊的。
+
+   lifecycle 只在 `--require-dependabot-head` 路徑（`acquire`、`check`、`merge`）接受落後 main 的 base。
+   PR head 未變、maintainer 對該 head 的核准、eligibility 與 required checks 照舊重新驗證；另外必須有
+   `dependabot-reverify (#N)` 在**目前** main 的 commit 上通過，producer 是 `dependabot-reverify.yml` 在
+   `main` 上的 `push`／`workflow_run`／`workflow_dispatch` run，跑在 GitHub-hosted runner，24 小時內完成，且
+   step 名稱綁定同一個 PR、head 與 main。main 再前進、head 改變、核准失效、驗證失敗或跑在 self-hosted
+   runner，都 fail closed。只接受直接建在 base 上的 Dependabot commit；#1052 的 sync child 帶有對舊 base
+   物化的 stable 版本，仍需要 Dependabot rebase。PR 標題與每個 commit 的 release intent（用
+   `release_policy.py` 的 `release_intent` 與 BREAKING CHANGE 判斷）都必須是 no-release；`fix(deps)` 這類會
+   發版的 head 在 inventory 標為 `rebase`，`bind` 與 lifecycle 也都拒絕，訊息要求等 Dependabot rebase。這條路徑只用於 `hosted` 模式，local／self-hosted 的下游專案
+   照舊由操作者處理。一般 PR 仍要求 base 等於目前的 main。
+
+   合併時 head 自己的 hosted `verify` 仍要存在並通過，但 merge evidence 改用重新驗證的結果：`tree_sha` 是
+   test merge 的 tree，`base_sha` 是驗證時的 main，原本的 head tree 與 PR base 一併記錄。合併前要求 main 仍是
+   那個 SHA；合併後讀回 merge commit，parent 必須是那個 main、tree 必須等於驗證過的 tree，summary 另寫
+   `dependabot-reverify-trace`。這種合併的 tree 與 head 不同，所以 `dependabot-merge.yml` 不在它之後
+   dispatch `release.yml`：上述 no-release 檢查保證這條路只有不發版的 head，下一次 release run 會從 history
+   規劃。
+
+   **接受的風險（只能事後偵測）**：GitHub 的 merge API 只能綁定 head SHA，不能綁定 base。lifecycle 在 merge
+   前一刻確認 main 仍是驗證過的 SHA，但如果 main 在這之後、squash 之前前進，GitHub 會把 head 合到較新的 main，
+   產生沒驗證過的 tree。這個空窗無法用 API 關閉，所以只做響亮的事後偵測：讀回的 parent 或 tree 不符時，
+   `pr_lifecycle.py merge` 以非零結束，輸出 `ERROR: Reverified Dependabot merge <sha>: unverified tree ...`，
+   並要求在 main 上驗證該 commit 或 revert；workflow 的 merge step 因此失敗，不再 dispatch 任何後續流程。
+
+   **信任轉移**：在這條路徑上，head 自己 `verify` 的深度證據檢查（`require_trusted_verification`：exact
+   tree、新鮮度、executor）不再執行，改由重新驗證證據取代，merge evidence 也改為重新驗證的 payload。這是安全
+   的，因為 head 的 `verify` 只證明舊 base 上的 head tree，而實際合併的是 test merge 的 tree；重新驗證以同一套
+   可信 main 程式、GitHub-hosted runner 跑 full，綁定這個 head 與目前的 main，比 head 的證據更接近合併結果。
+   head 的 required contexts 仍必須存在並通過，producer 身分仍照舊驗證。限制：`check-trusted-verification` 的 `--resolve-merge-source`／`--resolve-release-source`
+   仍要求 tree 相同（這支腳本與 `template/` 逐位元組配對，本修正不改它），所以 main 最新的 commit 是這種合併時，
+   `sync/main-to-*` 的 clean sync 無法沿用它的 full 證據，手動在這個 commit 上 dispatch `release.yml` 也會
+   fail closed，要等 main 下一次前進或人工處理。
+
+   **Dependabot 不回應 `@dependabot rebase`／`recreate` 的盤點（#1264）**：#1215 上，2026-10-24 07:25 的
+   `rebase` 與 08:16 的 `recreate` 都被 Dependabot 以 👍 接受，各跑了一次 update job（Actions run
+   40074062990、40077368888），也都 force-push 了新的 head（08:17 的 `a72617` 建在當時的 main `fd5f9ac`）。
+   main 隨後又前進兩次，PR 再次落後。之後 09:51、10:07、14:09 的三次指令沒有任何 reaction，也沒有新的 update
+   job。job 紀錄顯示 Dependabot 記得的 group PR 是 ty 0.0.89，PR 實際是 0.0.90，所以每次都判定「目標版本已變、
+   應取代舊 PR」，再建立同樣的內容。設定（`.github/dependabot.yml`）、權限（下指令的是 admin）與 PR 狀態都正常；
+   後續指令為何沒被受理，GitHub 沒有可查的 API 或日誌，repository 端無法消除。重新驗證上線後，只是落後 main
+   的 Dependabot PR 不再需要 rebase。
+
+   人工處理步驟（有衝突，或 Dependabot 不回應時）：
+
+   1. 留言 `@dependabot rebase`，確認 Dependabot 以 👍 回應，並在 Actions 看到新的 Dependabot update job。
+   2. 沒有回應時，關閉這張 PR，到 repository 的 Insights → Dependency graph → Dependabot，對該 ecosystem 按
+      「Check for updates」（或等下一次排程），讓 Dependabot 開新的 PR。
+   3. 仍無法自動合併時，由維護者依 Journey 08 人工合併。不要自己修改 Dependabot 的分支，也不要用 Update
+      branch：Dependabot 路徑會驗證 commit 由 Dependabot 簽章（#1052）。
+
    同步 commit 的訊息固定用 `fix(deps): ...`，不是 `chore:`：完成條件第五項要求「會改變 template/ 內容的
    依賴更新，合併後要進入下一次發版」，`release-please`（`release-type: simple`）只認 `fix`／`feat` 升版號；
    這裡只在 `sync-paired-files.sh` 找到 drift（代表這次 bump 改到 `copier update` 會下發的內容）時
@@ -1442,7 +1513,7 @@ CLI fail closed 五個案例，root 與 `template/tests/test_check_action_pins.p
 | Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**：本檔尚未進入 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待進入 main＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |
 | Work item lifecycle | `.github/workflows/work-item-lifecycle.yml` | #400／#401／#574（合併）／#886（runner guard） | `issues`、`issue_comment`、`milestone`、`pull_request.closed` 事件；job guard 在 runner 前排除 PR comment、非 delivery-branch PR close 與沒有任何 owner step 的 Issue 事件 | 單一 job 內所有 step 共用的最小權限集合：`checks: write`、`contents: read`、`issues: write`、`pull-requests: read`；5 分鐘 | label／milestone routing、lifecycle gate 狀態與 closure 同步、對應 Issue 關閉 | `scripts/test-issue-triage`、`tests/test_journey06_workflows.py`、`tests/test_milestone_approval.py`、`tests/test_milestone_closure.py`、`tests/test_work_pr_closure.py` | #574 單一 job 已實作；#886 job guard 待 live evidence | candidate |
 | Spec to Issue | `.github/workflows/spec-to-issue.yml` | Spec 轉換 | spec 檔案變更事件／manual dispatch | 最小 Issue metadata write | 可審查 Issue 草稿 | `tests/test_spec_to_issue.py` | run [33490382161](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33490382161)，2026-09-01，success | active |
-| Dependabot | `.github/dependabot.yml`、`.github/workflows/dependabot-auto-merge.yml`、`.github/workflows/dependabot-merge.yml` | GitHub 原生＋依賴安全；與一般 PR 共用可信 hosted verification（#834）；template 同步、Actions pin 一致性（#755）與 exact-head merge（#830／#886） | schedule／manifest 變更；`pull_request_target`；只有 `dependabot/**` branch 的 trusted workflow completions | authentication 只讀；sync 精確 branch write；merge 透過 lifecycle lease 使用必要 PR／contents write | dependency PR；同張 PR 補齊 paired template 副本；minor／patch 在 required checks 後重新驗證並 atomic merge，major 保留人工審核；一般 PR 不建立 exact-merge workflow run | `tests/test_authenticate_dependabot_head.py`；`tests/test_dependabot_auto_merge.py`；`tests/test_sync_template_action_pins.py`；`tests/test_pr_lifecycle.py`；`scripts/sync-paired-files.sh --check` | GitHub 原生 Dependabot active；`dependabot/**` pre-trigger filter 待 live evidence | candidate |
+| Dependabot | `.github/dependabot.yml`、`.github/workflows/dependabot-auto-merge.yml`、`.github/workflows/dependabot-merge.yml`、`.github/workflows/dependabot-reverify.yml`（root only，#1264） | GitHub 原生＋依賴安全；與一般 PR 共用可信 hosted verification（#834）；template 同步、Actions pin 一致性（#755）與 exact-head merge（#830／#886） | schedule／manifest 變更；`pull_request_target`；只有 `dependabot/**` branch 的 trusted workflow completions；main `push` 與 reverify 的 `workflow_dispatch`（#1264） | authentication 只讀；sync 精確 branch write；merge 透過 lifecycle lease 使用必要 PR／contents write | dependency PR；同張 PR 補齊 paired template 副本；minor／patch 在 required checks 後重新驗證並 atomic merge，major 保留人工審核；一般 PR 不建立 exact-merge workflow run | `tests/test_authenticate_dependabot_head.py`；`tests/test_dependabot_auto_merge.py`；`tests/test_sync_template_action_pins.py`；`tests/test_pr_lifecycle.py`；`tests/test_dependabot_reverify.py`；`scripts/sync-paired-files.sh --check` | GitHub 原生 Dependabot active；`dependabot/**` pre-trigger filter 待 live evidence | candidate |
 | Version／Release | `.github/workflows/release.yml` | #369／#430／#588／#591／#598／#699／#834／#900 | `release_trigger=main` 時接 main push；`manual` 時只接受明確 dispatch／本機入口 | top-level read；release job 另有 `actions: read`、`checks: read`、`contents`／PR／Issue／status write；60 分鐘 | 固定以 Conventional Commits 判定 major／minor／patch／no-release；no-release 不建候選，只有 materialized 且驗證完成的候選才發布 GitHub Release、checksum 與 SBOM | `tests/test_release_policy.py`、`tests/test_release_bundle.py`、`tests/test_journey07_release.py`、`tests/test_verification_evidence.py` | #900 trigger candidate；Immutable Release post-hoc 驗證沿用 #770 |
 | Pages | `.github/workflows/pages.yml` | #926 路徑限定的靜態文件部署 | hosted＋`documentation_mode=template-and-content` 才產生；`docs/**` push 或手動 dispatch | `contents: read`、`pages: write`、`id-token: write`；10 分鐘 | 上傳已 commit 的 `docs/` 並部署，不在 hosted runner 重建網站 | `tests/test_language_profiles.py`、`tests/test_root_config.py`、`tests/test_apply_repository_settings.py` | 合併後須由管理員套用 `build_type=workflow` policy 並觀察首次部署 | candidate |
 | Release publish drift alert | `.github/workflows/release-drift.yml` | #605／#933（源自 #589 item 4） | daily schedule＋`workflow_dispatch`（`hours` input） | `actions: read`、`contents: read`、`issues: write`；5 分鐘 | 偵測到 drift 時開立或更新追蹤 Issue 後成功；未偵測到時只印出證據；偵測或通知寫入失敗才讓 run 失敗 | `scripts/test-check-release-drift` | 尚未 merge 進 `main`，故無排程或手動觸發的 live run 證據 | candidate（待進入 main＋首次排程／手動觸發） |

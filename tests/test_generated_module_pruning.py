@@ -67,6 +67,8 @@ HOSTED_FORWARDER = "loads the hosted-only sibling local renders omit (#1177)"
 # generated copy; each value records why.
 GENERATED_PATHS = "generated `.csarc/` layout paths"
 NO_TEMPLATE_ISSUE = "messages name no template-repository Issue"
+# Issue #1264 (ADR #1266 rev 5): Dependabot reverification never ships.
+ROOT_ONLY_REVERIFY = "Dependabot reverification is template-repository only"
 ADAPTED: dict[str, dict[str, str]] = {
     "authenticate_dependabot_head.py": {},
     "pr_lifecycle.py": {
@@ -74,6 +76,15 @@ ADAPTED: dict[str, dict[str, str]] = {
         "_hosted_only": HOSTED_FORWARDER,
         "_hosted_globals": HOSTED_FORWARDER,
         "__getattr__": HOSTED_FORWARDER,
+        "acquire": ROOT_ONLY_REVERIFY,
+        "merge": ROOT_ONLY_REVERIFY,
+        "merge_evidence": ROOT_ONLY_REVERIFY,
+        "merge_snapshot": ROOT_ONLY_REVERIFY,
+        "merge_trailers": ROOT_ONLY_REVERIFY,
+        "parser": ROOT_ONLY_REVERIFY,
+        "require_lease": ROOT_ONLY_REVERIFY,
+        "require_successful_checks": ROOT_ONLY_REVERIFY,
+        "trace_lines": ROOT_ONLY_REVERIFY,
         "require_trusted_verification": (
             "drops the template-repository toolchain check; no generated "
             "project renders verify-template.sh"

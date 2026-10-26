@@ -4,17 +4,29 @@ name: Dependabot exact merge
 # Read-only readiness checks avoid taking a lease until every required check
 # appears ready; pr_lifecycle.py remains the security boundary and revalidates
 # the exact head, trusted producer identities, authorization, and Rulesets.
+# Issue #1264: `Dependabot reverify` dispatches one exact pull request and
+# head after verifying it on the current main; the same proof applies.
 on:
   workflow_run:
     workflows: ["CI", "PR policy", "PR review", "Dependabot auto-merge"]
     branches: ["dependabot/**"]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Dependabot pull request number
+        required: true
+        type: number
+      head_sha:
+        description: Exact Dependabot head SHA
+        required: true
+        type: string
 
 permissions: {}
 
 concurrency:
   group: >-
-    dependabot-exact-merge-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.head_sha }}
+    dependabot-exact-merge-${{ github.event.workflow_run.head_repository.full_name || github.repository }}-${{ github.event.workflow_run.head_branch || 'dispatch' }}-${{ github.event.workflow_run.head_sha || inputs.head_sha }}
   cancel-in-progress: false
 
 jobs:
@@ -22,6 +34,7 @@ jobs:
     name: resolve Dependabot pull request
     if: >-
       ${{
+        github.event_name == 'workflow_dispatch' ||
         github.event.workflow_run.event == 'pull_request_target' ||
         github.event.workflow_run.event == 'pull_request_review'
       }}
@@ -40,13 +53,31 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.sha }}
+      - name: Read the dispatched coordinates
+        id: dispatched
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        # The inputs are only data: the resolver and lifecycle below prove the
+        # same exact live Dependabot identity as for a completed run.
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" > "$RUNNER_TEMP/dispatched.json"
+          jq -e --arg head_sha "$HEAD_SHA" '.head.sha == $head_sha' \
+            "$RUNNER_TEMP/dispatched.json" > /dev/null
+          {
+            echo "head_sha=$HEAD_SHA"
+            echo "head_branch=$(jq -r .head.ref "$RUNNER_TEMP/dispatched.json")"
+            echo "head_repository=$(jq -r .head.repo.full_name "$RUNNER_TEMP/dispatched.json")"
+          } >> "$GITHUB_OUTPUT"
       - name: Resolve the unique triggering pull request
         id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch || steps.dispatched.outputs.head_branch }}
+          HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name || steps.dispatched.outputs.head_repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha || steps.dispatched.outputs.head_sha }}
         # Issue #1087: zero exact open Dependabot pull requests is an ordinary
         # no-op (success, no writes); many, incomplete, or contradictory
         # candidates fail closed. Closed or merged records are never reused.
@@ -69,9 +100,9 @@ jobs:
         if: ${{ steps.resolve.outputs.outcome == 'merge' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch || steps.dispatched.outputs.head_branch }}
+          HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name || steps.dispatched.outputs.head_repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha || steps.dispatched.outputs.head_sha }}
           PR_NUMBER: ${{ steps.resolve.outputs.number }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" > "$RUNNER_TEMP/pull.json"
@@ -169,7 +200,8 @@ jobs:
             --owner "$OWNER" \
             --actor 'github-actions[bot]' \
             --ttl-seconds 900 \
-            --output "$RUNNER_TEMP/dependabot-lease.json"
+            --output "$RUNNER_TEMP/dependabot-lease.json" \
+            --require-dependabot-head
       - name: Revalidate lifecycle merge eligibility
         id: check
         if: ${{ steps.acquire.outcome == 'success' }}
@@ -227,8 +259,21 @@ jobs:
         if: ${{ steps.merge.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
+          PR_NUMBER: ${{ needs.resolve-pr.outputs.number }}
         run: |
           release_ownership="$(python3 scripts/csarc_config.py release_ownership)"
-          if [[ "$release_ownership" == "csarc-owned" ]]; then
-            gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
+          if [[ "$release_ownership" != "csarc-owned" ]]; then
+            exit 0
           fi
+          # Issue #1264: a reverified merge squashes a tree other than the
+          # head's. Only direct build(deps) heads take that route and they
+          # plan no release, so the next release run plans from history.
+          merge_sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .merge_commit_sha)"
+          merged_tree="$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$merge_sha" --jq .tree.sha)"
+          head_tree="$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$HEAD_SHA" --jq .tree.sha)"
+          if [[ "$merged_tree" != "$head_tree" ]]; then
+            echo "NOTICE: Skipped the release dispatch for the reverified merge $merge_sha."
+            exit 0
+          fi
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
