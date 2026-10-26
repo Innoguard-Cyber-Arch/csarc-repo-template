@@ -897,7 +897,9 @@ def rules(
 
 
 @pytest.mark.large
-def test_new_project_defaults_to_self_hosted_verification(tmp_path: Path) -> None:
+def test_new_project_defaults_to_self_hosted_verification(
+    tmp_path: Path,
+) -> None:
     """A new private project avoids hosted validation and uses the E1 fallback.
 
     #1272: the private default is self-hosted, which renders the local
