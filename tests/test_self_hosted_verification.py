@@ -166,6 +166,7 @@ def test_dispatch_check_runs_first_and_execution_declares_its_identity() -> (
     assert "mode=self-hosted" in execute["name"]
     assert "trusted_executor.py" in execute["run"]
     assert "CSARC_VERIFICATION_SUBJECT_ROOT" in execute["run"]
+    assert execute["env"]["CSARC_SELF_HOSTED_VM"] == "true"
 
 
 # ---------------------------------------------------------------------------

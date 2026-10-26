@@ -180,6 +180,8 @@ def record(
     expected_base_sha: str = "",
 ) -> dict[str, Any] | None:
     """Write evidence only after a canonical local suite has succeeded."""
+    if os.environ.get("CSARC_SELF_HOSTED_VM") == "true":
+        return None
     root = repository_root()
     if verification_mode(root) != "local":
         return None

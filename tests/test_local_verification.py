@@ -158,6 +158,20 @@ def test_hosted_mode_does_not_write_local_evidence(
     assert not local_verification.evidence_path(head_sha).exists()
 
 
+def test_self_hosted_vm_skips_local_evidence_on_detached_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#1301: VM evidence comes from GitHub, not the detached worktree."""
+    repo = repository(tmp_path)
+    git(repo, "switch", "--detach")
+    monkeypatch.chdir(repo)
+    monkeypatch.setenv("CSARC_SELF_HOSTED_VM", "true")
+    head_sha = git(repo, "rev-parse", "HEAD")
+
+    assert local_verification.record("full", ["all"], "main") is None
+    assert not local_verification.evidence_path(head_sha).exists()
+
+
 def test_uncommitted_local_project_passes_without_merge_evidence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
