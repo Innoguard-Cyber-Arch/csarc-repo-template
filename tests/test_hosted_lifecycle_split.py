@@ -1,11 +1,11 @@
 """Hosted-only lifecycle paths stay out of local renders (Issue #1230).
 
-`close-work` runs only from the hosted work-item lifecycle workflow, and
-`actions_run_url` only reads hosted Actions check runs. Their code lives in
-`pr_lifecycle_hosted.py`, which only hosted projects render; a local
-project's `pr_lifecycle.py` keeps a forwarder that fails closed. An existing
-project that updates sees the shrunk module as an ordinary template change,
-and a local project never gains the hosted file.
+`actions_run_url` only reads hosted Actions check runs, so its code lives in
+`pr_lifecycle_hosted.py`, which only hosted projects render. `close-work`
+moved back to the shared module (Issue #1294): local and self-hosted
+projects close Milestone work Issues with it too. An existing project that
+updates sees the module change as an ordinary template change, and a local
+project never gains the hosted file.
 """
 
 from __future__ import annotations
@@ -28,12 +28,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "template/.csarc/scripts"
 LIFECYCLE = ".csarc/scripts/pr_lifecycle.py"
 HOSTED = ".csarc/scripts/pr_lifecycle_hosted.py"
-MOVED = (
-    "WORK_CLOSURE_MARKER",
-    "actions_run_url",
-    "close_work_issue",
-    "work_closure_message",
-)
+MOVED = ("actions_run_url",)
+# Issue #1294: close-work runs in every verification mode.
+SHARED = ("WORK_CLOSURE_MARKER", "close_work_issue", "work_closure_message")
 
 
 def top_level_names(path: Path) -> dict[str, str]:
@@ -55,27 +52,33 @@ def test_hosted_only_paths_live_in_the_hosted_sibling() -> None:
     hosted = top_level_names(SCRIPTS / "pr_lifecycle_hosted.py")
     for name in MOVED:
         assert name in hosted, name
-    # The shared module only keeps the forwarder its parser needs.
-    assert {name for name in MOVED if name in shared} == {"close_work_issue"}
-    assert shared["close_work_issue"] == "assign"
+        assert name not in shared, name
+    for name in SHARED:
+        assert name in shared, name
+        assert name not in hosted, name
+    assert shared["close_work_issue"] == "def"
 
 
-def test_local_render_fails_closed_without_the_hosted_paths(
+def test_local_render_runs_close_work_without_the_hosted_paths(
     tmp_path: Path,
 ) -> None:
-    """AC1: a local render lacks the code and `close-work` stays blocked."""
+    """#1294 AC1: a local render lacks hosted code but runs `close-work`."""
     project = minimal_render(tmp_path)
     assert not (project / HOSTED).exists()
     local = runpy.run_path(str(project / LIFECYCLE))
     for name in MOVED:
-        assert name not in local or name == "close_work_issue", name
+        assert name not in local, name
     arguments = argparse.Namespace(
         repo="owner/repo", pr_number=44, head_sha="a" * 40
     )
-    with pytest.raises(
-        RuntimeError, match="close_work_issue: needs verification_mode: hosted"
-    ):
-        local["close_work_issue"](arguments, object())
+
+    class Unavailable:
+        def get(self, _repo: str, _path: str) -> None:
+            return None
+
+    # It reaches the GitHub checks instead of the hosted-mode refusal.
+    with pytest.raises(RuntimeError, match="Work Issue closure: state"):
+        local["close_work_issue"](arguments, Unavailable())
     # Read through the module as review_gate does: absent, not a crash.
     with pytest.raises(AttributeError):
         local["__getattr__"]("actions_run_url")
@@ -89,7 +92,7 @@ def test_hosted_render_reads_the_moved_paths(tmp_path: Path) -> None:
         "https://github.com/owner/repo/actions/runs/7/job/9", "owner/repo"
     )
     assert run_url == "https://github.com/owner/repo/actions/runs/7"
-    assert hosted["__getattr__"]("WORK_CLOSURE_MARKER")
+    assert hosted["WORK_CLOSURE_MARKER"]
 
 
 def main(arguments: list[str]) -> int:

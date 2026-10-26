@@ -183,6 +183,12 @@ typescript/tests/index.test.ts
 - 只由 hosted workflow 呼叫的 `pr_lifecycle.py close-work`（work-item lifecycle workflow 在 Milestone work PR 合併後關閉 Issue）與 `actions_run_url`（只讀 hosted Actions check run）移到 `pr_lifecycle_hosted.py`。生成的 `pr_lifecycle.py` 保留 `close_work_issue` 轉交函式與完整命令列；local render 執行 `close-work` 時以 exit 1 失敗並說明需要 `verification_mode: hosted`。沒有新增或停止 render 的檔案，`copier.yml` 與下方 payload 表不變。
 - 既有 local 專案 update 時，`pr_lifecycle.py` 的縮減列為一般的模板修改，不會新增 `pr_lifecycle_hosted.py`；hosted 專案兩個檔案一起更新，沒有檔案被移除（`tests/test_hosted_lifecycle_split.py`）。
 
+### `close-work` 回到共用模組（#1294）
+
+- 上一節對 `close-work` 的部分由本節取代：local 模式沒有 work-item lifecycle workflow，Milestone 工作 PR 合併進 `dev/m*` 後只能由操作者自己執行 `close-work`，放在 hosted sibling 會讓這些 Issue 只能人工關閉。`close_work_issue`、`work_closure_message` 與 `WORK_CLOSURE_MARKER` 因此移回生成的 `pr_lifecycle.py`，與 root 定義一致；`actions_run_url` 仍留在 `pr_lifecycle_hosted.py`。
+- 關單條件與 hosted 相同，判斷不讀 `verification_mode`，所以任何非 hosted 模式都能使用；條件不符時 fail closed。local 專案的生成 `ci-policy.md` 說明合併後的指令。
+- 沒有新增或停止 render 的檔案，`copier.yml` 不變；local fixture 的 canonical bytes 增加，hosted fixture 不增加（PR 記錄 `scripts/generated_payload.py` 的 exact head 量測）。
+
 ### 生成副本只保留 docstring 摘要行（#1227）
 
 - 沒有與 root 逐位元組配對（`scripts/sync-paired-files.sh`）的生成 Python 副本，函式與類別的 docstring 只保留第一行摘要；完整說明只留在 root 模組一份，不再於每個生成專案重複付出 payload。模組 docstring 會成為 `--help` 說明，維持不變；註解與程式碼不變，因此行為不變，也不改變任何 render 的檔案清單。`tests/test_generated_module_pruning.py` 的 `test_generated_python_keeps_summary_docstrings` 防止多行 docstring 回到生成副本；`test_generated_copy_only_removes_root_code` 本來就忽略 docstring 比對定義。

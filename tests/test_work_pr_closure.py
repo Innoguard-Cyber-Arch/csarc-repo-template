@@ -8,11 +8,17 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+from test_generated_runtime_boundary import minimal_render
 
 ROOT = Path(__file__).parents[1]
 MODULE_PATH = ROOT / "scripts" / "pr_lifecycle.py"
-# Issue #1230: the generated copy forwards close-work to its hosted sibling.
-GENERATED_PATH = ROOT / "template" / ".csarc" / "scripts" / "pr_lifecycle.py"
+# Issue #1294: the generated copy runs close-work in every verification
+# mode, with or without the hosted sibling that only hosted renders keep.
+RENDERS = {
+    "generated-hosted": ("hosted", ("pr_lifecycle_hosted.py",)),
+    "generated-local": ("local", ()),
+    "generated-self-hosted": ("self-hosted", ()),
+}
 WORKFLOW_PATH = (
     Path(__file__).parents[1]
     / ".github"
@@ -33,16 +39,27 @@ def load(name: str, path: Path) -> ModuleType:
     return module
 
 
-MODULES = {
-    "root": load("work_pr_closure", MODULE_PATH),
-    "generated": load("work_pr_closure_generated", GENERATED_PATH),
-}
+ROOT_MODULE = load("work_pr_closure", MODULE_PATH)
 
 
-@pytest.fixture(params=sorted(MODULES))
-def lifecycle(request: pytest.FixtureRequest) -> ModuleType:
-    """Return the root module or the generated hosted copy."""
-    return MODULES[request.param]
+def rendered(tmp_path: Path, name: str) -> ModuleType:
+    """Load the generated module from one mode's rendered script set."""
+    mode, keep = RENDERS[name]
+    project = minimal_render(tmp_path, *keep)
+    (project / ".csarc" / "config.yml").write_text(
+        f"languages: []\nverification_mode: {mode}\n", encoding="utf-8"
+    )
+    scripts = project / ".csarc" / "scripts"
+    assert (scripts / "pr_lifecycle_hosted.py").exists() == bool(keep)
+    return load(f"work_pr_closure_{mode}", scripts / "pr_lifecycle.py")
+
+
+@pytest.fixture(params=["root", *sorted(RENDERS)])
+def lifecycle(request: pytest.FixtureRequest, tmp_path: Path) -> ModuleType:
+    """Return the root module or one mode's generated copy."""
+    if request.param == "root":
+        return ROOT_MODULE
+    return rendered(tmp_path, request.param)
 
 
 HEAD = "a" * 40
