@@ -3100,6 +3100,10 @@ def reverified_destination(
             "Dependabot reverification: hosted mode only. Ask Dependabot to "
             "rebase."
         )
+    # Only no-release heads: no release follows a reverified merge.
+    dependabot_reverify.require_no_release(
+        pull, pull_commit_messages(github, repo, int(pull["number"]))
+    )
     return dependabot_reverify.require(
         github, repo, int(pull["number"]), head_sha, main_sha
     )
@@ -4849,6 +4853,35 @@ def trace_lines(
     return lines
 
 
+def require_reverified_result(
+    snapshot: dict[str, object],
+    merge_sha: str,
+    merge_commit: object,
+    target_base: str,
+) -> None:
+    """Fail loudly when a reverified merge landed on another main.
+
+    Issue #1264: GitHub's merge API cannot pin the base, so main may move
+    between the last check and the squash. Detection is all that remains.
+    """
+    reverified = snapshot.get("dependabot_reverification")
+    if not isinstance(reverified, dict):
+        return
+    commit = merge_commit if isinstance(merge_commit, dict) else {}
+    parents = [
+        item.get("sha")
+        for item in commit.get("parents") or []
+        if isinstance(item, dict)
+    ]
+    tree = (commit.get("tree") or {}).get("sha")
+    if parents != [target_base] or tree != reverified["tree_sha"]:
+        raise RuntimeError(
+            f"Reverified Dependabot merge {merge_sha}: unverified tree {tree} "
+            f"on parent {','.join(map(str, parents)) or 'none'}. Verify "
+            f"{merge_sha} on main, or revert it."
+        )
+
+
 def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     """Merge only when the lease and exact-head controls are enforced."""
     lease = caller_lease(args, github)
@@ -4925,6 +4958,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     parents = (
         merge_commit.get("parents") if isinstance(merge_commit, dict) else None
     )
+    require_reverified_result(snapshot, merge_sha, merge_commit, target_base)
     if (
         not isinstance(merged, dict)
         or merged.get("merged") is not True

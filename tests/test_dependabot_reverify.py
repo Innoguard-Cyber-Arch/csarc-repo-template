@@ -26,7 +26,10 @@ from test_pr_lifecycle import (
     human_review_mode,
     lease_fixture,
     merge_snapshot,
+    patch_merge_boundary,
     require_lease,
+    run_merge,
+    traced_snapshot,
 )
 
 # Re-export the autouse fixture so this module pins the same review mode.
@@ -150,6 +153,9 @@ class ReverifyGitHub:
             return list(self.pulls.values())
         if path.startswith("pulls/") and "/reviews" in path:
             return self.reviews.get(int(path.split("/")[1]), [])
+        if path.startswith("pulls/") and "/commits" in path:
+            title = self.pulls[int(path.split("/")[1])]["title"]
+            return [{"commit": {"message": title}}]
         if path.startswith("issues/"):
             return self.comments
         raise AssertionError(path)
@@ -169,6 +175,7 @@ def pull_fixture(
     """Return one open same-repository Dependabot pull request."""
     return {
         "number": number,
+        "title": "build(deps-dev): bump ty from 0.0.88 to 0.0.90",
         "state": "open",
         "commits": 1,
         "mergeable": mergeable,
@@ -294,14 +301,21 @@ def test_inventory_lists_every_pull_request_before_acting() -> None:
         NUMBER: pull_fixture(),
         43: pull_fixture(43, "c" * 40, mergeable=False),
         44: pull_fixture(44, "d" * 40, base="5" * 40),
+        45: {**pull_fixture(45, "f" * 40), "title": "fix(deps): bump copier"},
     }
-    github.reviews = {NUMBER: [approve]}
-    github.eligible = {HEAD}
+    approve_45 = {**approve, "commit_id": "f" * 40}
+    github.reviews = {NUMBER: [approve], 45: [approve_45]}
+    github.eligible = {HEAD, "f" * 40}
 
     rows = REVERIFY["inventory"](github, REPO, "5" * 40)
     states = {row["number"]: row["state"] for row in rows}
 
-    assert states == {NUMBER: "reverify", 43: "conflict", 44: "current"}
+    assert states == {
+        NUMBER: "reverify",
+        43: "conflict",
+        44: "current",
+        45: "rebase",
+    }
     table = REVERIFY["inventory_markdown"](rows, "5" * 40)
     assert "| #43 |" in table
     assert "conflict" in table
@@ -334,10 +348,73 @@ def test_bind_requires_the_test_merge_of_this_head_on_main(
     pull = {**pull_fixture(), **mutation}
     bind = REVERIFY["bind"]
     if not mutation and parents == [MAIN, HEAD]:
-        bind(pull, NUMBER, HEAD, MAIN, MERGE, parents)
+        bind(
+            pull,
+            NUMBER,
+            HEAD,
+            MAIN,
+            MERGE,
+            parents,
+            ["build(deps-dev): bump ty from 0.0.88 to 0.0.90"],
+        )
         return
     with pytest.raises(RuntimeError):
-        bind(pull, NUMBER, HEAD, MAIN, MERGE, parents)
+        bind(
+            pull,
+            NUMBER,
+            HEAD,
+            MAIN,
+            MERGE,
+            parents,
+            ["build(deps-dev): bump ty from 0.0.88 to 0.0.90"],
+        )
+
+
+@pytest.mark.parametrize(
+    ("title", "message"),
+    [
+        ("fix(deps): bump copier", "fix(deps): bump copier"),
+        (
+            "build(deps-dev): bump ty from 0.0.88 to 0.0.90",
+            "fix(deps): bump copier",
+        ),
+        (
+            "build(deps-dev): bump ty from 0.0.88 to 0.0.90",
+            "build(deps): bump ty\n\nBREAKING CHANGE: drop 3.12",
+        ),
+        (
+            "build(deps)!: bump ty",
+            "build(deps-dev): bump ty from 0.0.88 to 0.0.90",
+        ),
+    ],
+)
+def test_only_no_release_heads_take_the_reverified_route(
+    title: str, message: str
+) -> None:
+    """Review: a head with release intent waits for a Dependabot rebase."""
+    pull = {**pull_fixture(), "title": title}
+    with pytest.raises(RuntimeError, match="Wait for a Dependabot rebase"):
+        REVERIFY["bind"](
+            pull, NUMBER, HEAD, MAIN, MERGE, [MAIN, HEAD], [message]
+        )
+    assert (
+        REVERIFY["classify"](
+            pull,
+            MAIN[:-1] + "9",
+            approved=True,
+            eligible=True,
+            reverified=False,
+            no_release=False,
+        )
+        == "rebase"
+    )
+    no_release = {
+        **pull_fixture(),
+        "title": "build(deps-dev): bump ty from 0.0.88 to 0.0.90",
+    }
+    REVERIFY["require_no_release"](
+        no_release, ["build(deps-dev): bump ty from 0.0.88 to 0.0.90"]
+    )
 
 
 # --- lifecycle on the Dependabot path (AC2, AC5) -----------------------------
@@ -367,6 +444,28 @@ def reverification(main: str = MAIN) -> dict[str, Any]:
 CALLS: dict[int, list[tuple[int, str, str]]] = {}
 
 
+def no_release_title(
+    monkeypatch: pytest.MonkeyPatch, github: DependabotGitHub
+) -> None:
+    """Give the fixture a no-release Dependabot title and commit."""
+    original = github.pull
+
+    def pull(number: int = NUMBER) -> dict[str, Any]:
+        return {
+            **original(number),
+            "title": "build(deps-dev): bump ty from 0.0.88 to 0.0.90",
+        }
+
+    monkeypatch.setattr(github, "pull", pull)
+    github.pull_commits = [
+        {
+            "commit": {
+                "message": "build(deps-dev): bump ty from 0.0.88 to 0.0.90"
+            }
+        }
+    ]
+
+
 def behind_dependabot(
     monkeypatch: pytest.MonkeyPatch,
     require: object = None,
@@ -394,8 +493,11 @@ def behind_dependabot(
         return reverification(main)
 
     module = SimpleNamespace(
-        require=require or accept, payload=REVERIFY["payload"]
+        require=require or accept,
+        payload=REVERIFY["payload"],
+        require_no_release=REVERIFY["require_no_release"],
     )
+    no_release_title(monkeypatch, github)
     monkeypatch.setitem(
         merge_snapshot.__globals__, "dependabot_reverify", module
     )
@@ -569,15 +671,81 @@ def test_acquire_refuses_a_behind_base_off_the_dependabot_path(
     monkeypatch.setitem(
         acquire.__globals__,
         "dependabot_reverify",
-        SimpleNamespace(require=missing),
+        SimpleNamespace(
+            require=missing,
+            require_no_release=REVERIFY["require_no_release"],
+        ),
     )
     monkeypatch.setitem(
         MODULE["reverified_destination"].__globals__,
         "configured_verification_mode",
         lambda *_: "hosted",
     )
+    with pytest.raises(RuntimeError, match="Wait for a Dependabot rebase"):
+        acquire(acquire_args(require_dependabot_head=True), github)
+    no_release_title(monkeypatch, github)
     with pytest.raises(RuntimeError, match="none on main"):
         acquire(acquire_args(require_dependabot_head=True), github)
+
+
+def test_release_intent_head_is_refused_by_lifecycle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review: a fix(deps) head never merges on the reverified route."""
+    github = behind_dependabot(monkeypatch)
+    github.pull_commits = [{"commit": {"message": "fix(deps): bump copier"}}]
+
+    with pytest.raises(RuntimeError, match="release intent patch"):
+        merge_snapshot(github, lease_fixture(), require_dependabot_head=True)
+    assert CALLS[id(github)] == []
+
+
+def reverified_merge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, parent: str, tree: str
+) -> FakeGitHub:
+    """Merge through the lifecycle with a reverified snapshot."""
+    patch_merge_boundary(
+        monkeypatch,
+        traced_snapshot(
+            dependabot_reverification=reverification(),
+            hosted_verification=REVERIFY["payload"](
+                reverification(), REPO, "e" * 40, OLD_BASE
+            ),
+            trailer_route="dependabot",
+        ),
+    )
+    github = FakeGitHub(HEAD)
+    github.destination_sha = MAIN
+    github.merge_parent = parent
+    github.merged_tree = tree
+    github.commit_payloads[f"compare/{OLD_BASE}...{HEAD}"] = {"status": "ahead"}
+    run_merge(tmp_path, github)
+    return github
+
+
+def test_reverified_merge_reads_back_the_verified_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The squash lands on the verified main with the verified tree."""
+    github = reverified_merge(tmp_path, monkeypatch, MAIN, TREE)
+
+    assert github.merged
+    assert f"CSARC-Evidence-Tree: {TREE}" in github.merge_message
+
+
+@pytest.mark.parametrize(
+    ("parent", "tree"), [("9" * 40, TREE), (MAIN, "8" * 40)]
+)
+def test_unverified_reverified_merge_fails_loudly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, parent: str, tree: str
+) -> None:
+    """Review: main moving under the squash is detected, named, and loud."""
+    with pytest.raises(RuntimeError) as error:
+        reverified_merge(tmp_path, monkeypatch, parent, tree)
+
+    message = str(error.value)
+    assert message.startswith(f"Reverified Dependabot merge {'d' * 40}:")
+    assert f"Verify {'d' * 40} on main, or revert it." in message
 
 
 # --- workflows (AC1, AC3, R2) ------------------------------------------------
@@ -682,3 +850,22 @@ def test_merge_workflow_accepts_the_reverify_dispatch() -> None:
     # refuse it, and its direct build(deps) head plans no release anyway.
     assert 'if [[ "$merged_tree" != "$head_tree" ]]; then' in release
     assert release.rstrip().endswith("--ref main")
+    # A failed merge step (including an unverified reverified merge)
+    # dispatches nothing further.
+    dispatch = steps["Dispatch the repository-owned release flow"]
+    assert dispatch["if"] == "${{ steps.merge.outcome == 'success' }}"
+
+
+def test_reverify_job_never_saves_a_cache() -> None:
+    """Review: candidate code on a main-ref event cannot poison a cache."""
+    for step in load(WORKFLOW)["jobs"]["reverify"]["steps"]:
+        uses = str(step.get("uses", ""))
+        options = step.get("with") or {}
+        assert not uses.startswith("actions/cache")
+        assert options.get("cache") in (None, False), uses
+        if uses.startswith("astral-sh/setup-uv@"):
+            assert options["enable-cache"] is False
+        if uses.startswith("actions/setup-node@"):
+            assert options["package-manager-cache"] is False
+        if uses.startswith("actions/setup-go@"):
+            assert options["cache"] is False

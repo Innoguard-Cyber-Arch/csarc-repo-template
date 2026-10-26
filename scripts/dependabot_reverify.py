@@ -259,6 +259,41 @@ def approved_head(reviews: list[dict[str, Any]], head_sha: str) -> bool:
     )
 
 
+def release_intent(title: str, messages: list[str]) -> str:
+    """Return the highest release intent of the title and every commit.
+
+    The squash merge keeps the title, and planning reads the commits; both
+    use `release_policy.py`'s own intent rules.
+    """
+    policy = module("release_policy")
+    highest = policy.release_intent(title)
+    for message in messages:
+        subject, _, body = message.partition("\n")
+        intent = (
+            "major"
+            if policy._is_breaking(subject, body)
+            else policy.release_intent(subject)
+        )
+        if policy.INTENT_RANK[intent] > policy.INTENT_RANK[highest]:
+            highest = intent
+    return highest
+
+
+def require_no_release(pull: dict[str, Any], messages: list[str]) -> None:
+    """Refuse a head whose merge would plan a release (Issue #1264).
+
+    A reverified merge squashes a tree other than the head's, so no source
+    history can own a version and no release is dispatched after it.
+    """
+    intent = release_intent(str(pull.get("title") or ""), messages)
+    if intent != "no-release":
+        raise RuntimeError(
+            f"Pull request #{pull.get('number')}: release intent {intent} "
+            "cannot be reverified on a newer main. Wait for a Dependabot "
+            "rebase."
+        )
+
+
 def classify(
     pull: dict[str, Any],
     main_sha: str,
@@ -266,6 +301,7 @@ def classify(
     approved: bool,
     eligible: bool,
     reverified: bool,
+    no_release: bool = True,
 ) -> str:
     """Return one inventory state; only `reverify` starts a verification.
 
@@ -273,6 +309,7 @@ def classify(
     rebase or a human, `pending` waits for GitHub's mergeability, `waiting`
     lacks an exact-head approval, eligibility, or a single direct commit, and
     `reverified` already has a result on this main (deduplication).
+    `rebase` plans a release, so only a Dependabot rebase can merge it.
     """
     if (pull.get("base") or {}).get("sha") == main_sha:
         return "current"
@@ -282,6 +319,8 @@ def classify(
         return "pending"
     if not (approved and eligible and pull.get("commits") == 1):
         return "waiting"
+    if not no_release:
+        return "rebase"
     if reverified:
         return "reverified"
     return "reverify"
@@ -338,6 +377,11 @@ def inventory(github: GitHub, repo: str, main_sha: str) -> list[dict[str, Any]]:
         )
         reviews = github.pages(repo, f"pulls/{number}/reviews?per_page=100")
         try:
+            require_no_release(pull, commit_messages(github, repo, number))
+            no_release = True
+        except RuntimeError:
+            no_release = False
+        try:
             require(github, repo, number, head_sha, main_sha)
             reverified = True
         except RuntimeError:
@@ -354,6 +398,7 @@ def inventory(github: GitHub, repo: str, main_sha: str) -> list[dict[str, Any]]:
                     approved=approved_head(reviews, head_sha),
                     eligible=eligible,
                     reverified=reverified,
+                    no_release=no_release,
                 ),
             }
         )
@@ -378,6 +423,14 @@ def inventory_markdown(rows: list[dict[str, Any]], main_sha: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def commit_messages(github: GitHub, repo: str, number: int) -> list[str]:
+    """Read every commit message of one pull request."""
+    return [
+        str((item.get("commit") or {}).get("message") or "")
+        for item in github.pages(repo, f"pulls/{number}/commits?per_page=100")
+    ]
+
+
 def bind(
     pull: dict[str, Any],
     pr_number: int,
@@ -385,6 +438,7 @@ def bind(
     main_sha: str,
     merge_sha: str,
     parents: list[str],
+    messages: list[str],
 ) -> None:
     """Refuse a candidate that is not the test merge of this head into main."""
     if (
@@ -404,6 +458,7 @@ def bind(
             f"Test merge of #{pr_number}: not this head on main {main_sha}. "
             "Wait for GitHub to refresh it, then rerun."
         )
+    require_no_release(pull, messages)
 
 
 def post_notices(github: GitHub, repo: str, numbers: list[int]) -> list[int]:
@@ -496,6 +551,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.main_sha,
                 args.merge_sha,
                 args.parents.split(),
+                commit_messages(github, args.repo, args.pr_number),
             )
         elif args.command == "passed":
             ready = []
