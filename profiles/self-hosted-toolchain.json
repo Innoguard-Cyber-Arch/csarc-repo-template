@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "contract": "ADR self-hosted-verification D8 and C9; SPEC-011 §8",
+  "owner": "csarc-devops builds each image, pins it by sha256 digest, and announces updates",
+  "image": {
+    "pinned_by": "sha256-digest",
+    "job_isolation": "a new container per job, discarded when the job ends",
+    "user": "non-root",
+    "forbidden": [
+      "docker-socket",
+      "privileged",
+      "host-network",
+      "cloud-metadata-endpoint",
+      "long-lived-secrets"
+    ],
+    "log_hygiene": "runner name, working directory, and hook output carry no host name, internal domain, account, or address"
+  },
+  "base": {
+    "tools": [
+      "bash",
+      "ca-certificates",
+      "curl",
+      "git",
+      "gzip",
+      "python3",
+      "sha256sum",
+      "tar"
+    ],
+    "python3_minimum": "3.12",
+    "trusted_policy_python": "3.14",
+    "uv": "0.12.15",
+    "downloaded_by_install_tool": [
+      "actionlint",
+      "gitleaks",
+      "osv-scanner",
+      "shellcheck",
+      "syft"
+    ]
+  },
+  "cache": {
+    "scope": "repository and environment",
+    "key": "lockfile digest",
+    "uat": "deleted when the window ends",
+    "dev": "kept until the registration expires or 'csarc self-hosted retire' runs"
+  },
+  "profiles": {
+    "python": {
+      "tools": {
+        "python": "3.14",
+        "uv": "0.12.15"
+      },
+      "additional_runtimes": ["3.12", "3.13"]
+    },
+    "typescript": {
+      "tools": {
+        "node": "24",
+        "pnpm": "11.22.0"
+      }
+    },
+    "go": {
+      "tools": {
+        "go": "1.27.1"
+      },
+      "environment": {
+        "GOTOOLCHAIN": "local"
+      }
+    },
+    "rust": {
+      "tools": {
+        "rust": "1.98.0"
+      },
+      "components": ["clippy", "rustfmt"]
+    }
+  },
+  "unsupported_modules": {
+    "container": "needs a Docker daemon and Trivy; the VM forbids the docker socket (D8), so a repository with this module cannot verify in self-hosted mode"
+  }
+}

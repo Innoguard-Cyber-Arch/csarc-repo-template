@@ -7,6 +7,14 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.46.0-beta.1] - 2026-10-25
+
+### Features
+
+* feat(lifecycle): route self-hosted verification to registered VMs (8e4f56a)
+* feat(cli): manage self-hosted verification windows (7ef2029)
+* feat(lifecycle): require a linked registration for self-hosted mode (3dc1ca1)
+
 ## [0.45.0-beta.1] - 2026-10-25
 
 ### Features

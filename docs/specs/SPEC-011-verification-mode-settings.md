@@ -102,17 +102,60 @@ tracking: none
 
 **離開 self-hosted 的出口（ADR Q1）。**trusted base 的 `verification_mode_private` 是 `self-hosted`，candidate 改成其他值，而且兩邊設定只有 `verification_mode_private`、`self_hosted_runner`、`self_hosted_environments` 不同、變更的路徑都在 `.csarc/`、`.github/` 或 `AGENTS.md` 下時，這張 governance-switch PR 改用 `local` 的本機證據合併。trailer 是 `CSARC-Trust: self-attested-local`，summary 多一行 `self-hosted-exit-trace` 說明原因。其他 PR 都不適用。
 
+## 8. 窗口指令與工具鏈 image（#1271）
+
+依 ADR D7、D8、D9、D10、D11 與 Q4。指令都在 `csarc` CLI（`src/csarc_cli/self_hosted.py`），不進生成專案。
+
+**共同規則。**
+
+- 每個指令先印出唯讀盤點（`Inventory: <動作> (read-only)`）。會改變狀態的 `open`、`extend`、`close`、`verify`、`retire` 只在加上 `--apply` 時動作；沒有 `--apply` 時印出一行 `NOTICE:`，什麼都不改，以 0 結束。`status` 永遠唯讀。
+- GitHub 呼叫一律使用操作者自己的 `gh` 登入，不讀取、不保存 `gh auth token`。設定以 contents API 從 trusted ref 讀取：`verify` 讀 PR 的目標分支，其他指令讀預設分支。
+- `open`、`extend`、`close`、`retire` 需要 repository 管理員；`open` 與 `extend` 還要求 repository 是 private、`verification_mode_private` 是 `self-hosted`、已登記，而且環境列在 `self_hosted_environments`，任一項不符就在取得 token 之前停止。
+- 窗口紀錄只在 VM 端，經交付管道讀取；不寫 repository variable。
+
+**交付管道（ADR C1）。**csarc-devops 提供一個本機指令，操作者以環境變數 `CSARC_SELF_HOSTED_CHANNEL` 指定（以 shell 規則切成參數）。csarc 每次請求執行它一次：從標準輸入送一個 JSON 物件，從標準輸出讀一個 JSON 物件，不經命令列參數或檔案。子程序的環境移除 `GH_TOKEN`、`GITHUB_TOKEN`、`GH_ENTERPRISE_TOKEN` 與 `GITHUB_ENTERPRISE_TOKEN`。
+
+| 欄位 | 方向 | 內容 |
+| --- | --- | --- |
+| `protocol` | 請求與回應 | `csarc-self-hosted-channel/1` |
+| `action` | 請求 | `open`、`extend`、`close` 或 `status` |
+| `repository`、`vm`、`environment`、`runner_name` | 請求 | repo 全名、`self_hosted_runner.id`、`dev` 或 `uat`、§7 的 runner 名稱；`open` 與 `status` 另帶 §7 的 `labels` |
+| `ends_at` | 請求 | `open` 與 `extend` 的新結束時間（UTC，例如 `2026-10-25T09:00Z`） |
+| `registration_token` | 請求 | 只有 `open` 帶；一小時內有效，用完即丟 |
+| `result` | 回應 | `ok` 或 `refused`；`refused` 另帶 `reason`，例如 `registration expired` |
+| `window` | 回應 | 沒有窗口時是 `null`；否則有 `runner_name`、`started_at`、`ends_at` 與 `registration`（`active` 或 `expired`） |
+
+- 沒有設定管道時 fail closed：`open`、`extend`、`status`、`verify` 以 `ERROR:` 結束，`open` 在取得註冊 token 之前就停止。`close` 仍以管理員憑證移除 runner，並以 `NOTICE:` 說明 VM 會在窗口到期時停止 runner。
+- 回應不是 JSON 物件、`protocol` 不符、`result` 不是 `ok` 或 `refused`、時間或 `registration` 的值不符時都 fail closed，不當作成功。
+
+**指令。**
+
+| 指令 | 盤點 | `--apply` 之後 |
+| --- | --- | --- |
+| `csarc self-hosted open --env dev\|uat` | repo 與可見性、管理員、VM、登記 URL、環境、runner 名稱與 labels、窗口內只會執行唯讀的 `csarc-verify.yml`、既有 runner、結束時間（現在＋24 小時） | 已有出現預期之外的 runner 就拒絕。以操作者的 `gh` 取得註冊 token，只放在記憶體並經管道交給 VM；之後讀回 runner 清單，要求只有一個符合 §7 命名的線上 runner。出現任何預期之外的 runner 時移除全部 runner 並以錯誤結束。同一環境已有 runner 時等同 `extend`，不取得 token |
+| `csarc self-hosted extend --env dev\|uat` | 目前與新的結束時間（現在＋24 小時，不累加） | 要求窗口有效、同一 runner 在線；不取得 token，經管道把結束時間改為現在＋24 小時。VM 回報的結束時間超過現在＋24 小時就以錯誤結束；讀回時仍只有一個 runner |
+| `csarc self-hosted close --env dev\|uat` | 該環境的 runner | 以管理員憑證刪除該環境的 runner，並經管道通知 VM |
+| `csarc self-hosted status [--env dev\|uat]` | 模式、登記、runner；每個環境的開始、結束與剩餘時間 | 唯讀。剩不到 2 小時印出 `WARNING:` 要求 `extend`；剩不到 30 分鐘印出 `WARNING:` 說明不再接受新的 job；登記到期印出 `WARNING:`；repo 是 public 但仍有 `csarc-verify.yml` 的 run 或 self-hosted 設定時，印出 `WARNING:` 要求 `retire`；尚未登記時以 `NOTICE:` 印出登記步驟 |
+| `csarc self-hosted verify --pr <N>` | 可見性與實際模式、head repo、head SHA、目標分支、環境、窗口剩餘時間 | repo 是 public、實際模式不是 `self-hosted`、PR 不是 open、PR 來自 fork、目標分支沒有環境、尚未登記、環境未登記、沒有窗口或剩不到 30 分鐘時拒絕。剩不到 2 小時時印出 `WARNING:`。以 `workflow_dispatch` 在目標分支上觸發 `csarc-verify.yml`，輸入 PR 編號、head SHA、環境與窗口結束時間 |
+| `csarc self-hosted retire [--private-mode hosted\|local]` | `csarc-verify.yml` 的 run、它們的 artifact、repository 的 Actions cache（cache 不屬於特定 workflow，所以全部列出）、所有 runner，以及設定變更 | 刪除盤點中的 artifact、run、cache 與 runner。`verification_mode_private` 是 `self-hosted` 時，在預設分支的新分支上執行 `csarc update --data verification_mode_private=<模式> --data project_visibility=public`，建立帶 `governance-switch` label 的 draft PR；新模式預設等於 `verification_mode_public`。不直接修改 repository 設定（Q4）。印出給 csarc-devops 的退出通知。任何一項失敗都以非 0 結束，並說明公開後哪些 log 仍會被看到 |
+
+**`retire` 是轉成 public 之前的必要步驟。**先執行不帶 `--apply` 的盤點，確認後再加 `--apply`；合併它建立的 PR 之後，才改變 repository 的可見性。
+
+**工具鏈 image（ADR D8、C9）。**`profiles/self-hosted-toolchain.json` 是給 csarc-devops 的機器可讀清單：image 以 sha256 digest 固定、每個 job 一個新容器並以非 root 執行，禁止 docker socket、privileged、host network、metadata endpoint 與長期 secret；基礎工具（含 trusted policy 用的 Python 與 uv）、`install-tool` 下載的掃描工具、依（repo, 環境）分開的快取，以及每個語言 profile 的工具版本。版本與 `profiles/catalog.yaml` 和 hosted workflow 的固定版本一致，由回歸測試檢查。`container` 模組需要 Docker daemon，VM 禁止 docker socket，所以啟用它的 repo 不能在 self-hosted 模式驗證。
+
 ## Acceptance criteria
 
 - [x] 兩個模式設定、登記設定、依可見性 render 與 migration 如 §1–§6（#1268）。
 - [x] self-hosted 的唯讀驗證 workflow、VM 證據綁定與離開出口如 §7（#1269）。
 - [x] 登記 PR 的盤點與 `registration` 格式檢查如 §5（#1270）。
+- [x] 窗口指令、交付管道與工具鏈 image 契約如 §8（#1271）。
 
 ## Out of scope
 
-窗口指令（#1271），以及文件與手冊（#1272）。
+文件與手冊（#1272）。窗口指令（#1271）見 §8；交付管道本身、VM、hook 與 image 的建置由 csarc-devops 負責。
 
 ## Verification
 
 - root 與 template 的回歸測試涵蓋三種模式與兩種可見性、migration 不改變行為、public 設成 `self-hosted` 被拒絕，以及合併時的模式判斷。
 - payload：`solo-default` 維持量測 `local` 預設；另加 `solo-self-hosted` fixture，沿用同一組預算（ADR Q2）。#1272 切換預設時再調整 fixture 名稱。
+- §8：`tests/test_self_hosted_window.py` 以 GitHub 與交付管道的 stub 涵蓋每個指令的盤點與拒絕路徑、沒有 `--apply` 時不改變任何東西、沒有管道時 fail closed、`extend` 不取得 token 也不註冊第二個 runner、預期之外的 runner 被全部移除、token 不出現在命令列、輸出與檔案，以及工具鏈清單與語言 profile 一致。

@@ -46,6 +46,7 @@ from csarc_cli import (
     release_phase,
     repository_facts,
     risk_tools,
+    self_hosted,
     settings_schema,
     setup_plan,
     update_plan,
@@ -13905,6 +13906,8 @@ def parser() -> argparse.ArgumentParser:
     for command in (risk_suggest, risk_register, risk_backfill):
         command.add_argument("--repo", default="", metavar="OWNER/NAME")
         command.add_argument("--json", action="store_true")
+    # Issue #1271: self-hosted verification windows (ADR D7, D9).
+    self_hosted.add_parser(subparsers)
     return result
 
 
@@ -14007,6 +14010,8 @@ def main(arguments: list[str] | None = None) -> int:
             return command_status(args)
         if args.command in {"issue", "risk"}:
             return command_risk(args)
+        if args.command == "self-hosted":
+            return self_hosted.command(args)
         if args.json and not args.check:
             raise CliError(
                 "--json is only valid with update --check: other modes print "
@@ -14018,6 +14023,7 @@ def main(arguments: list[str] | None = None) -> int:
         CliError,
         risk_tools.RiskToolError,
         project_roadmap.ProjectSyncError,
+        self_hosted.SelfHostedError,
         OSError,
         subprocess.SubprocessError,
     ) as error:
