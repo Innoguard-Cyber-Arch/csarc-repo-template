@@ -752,7 +752,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | 層級 | `.csarc/config.yml` key | 預設／允許值 | 產生或驗證位置 |
 | --- | --- | --- | --- |
 | 治理意圖 | `governance_mode`、`lifecycle` | `managed`／`observe`；`issues`／`milestones` | repository policy 與工作項目 side effects |
-| 驗證信任 | `verification_mode_private`／`verification_mode_public` | 新專案預設 `local`；可選 `hosted` | local self-attestation＋audited bypass，不產生 hosted CI、PR 治理、Pages／release workflow；或 trusted GitHub-hosted checks |
+| 驗證信任 | `verification_mode_private`／`verification_mode_public` | 新專案 private 預設 `self-hosted`、public 預設 `hosted`；也可選 `local` | self-hosted 在 csarc-devops 登記的 VM 驗證，登記前不能合併；local self-attestation＋audited bypass；兩者都不產生 hosted CI、PR 治理、Pages／release workflow；或 trusted GitHub-hosted checks |
 | 審查意圖 | `admin_bypass`、`copilot_review` | admin bypass 新專案預設 `always`、可選 `beta-only`／`off`；Copilot 為 `allowed`／`off` | exact-head `review` gate；Copilot 不可用時回到同行核准或設定允許的管理員授權 |
 | 發版意圖 | `release_ownership`、`release_trigger`、`project_maturity` | ownership 三選一；trigger 為 `main`／`manual`；成熟度預設 early | 公開 beta／stable 通道、固定 Conventional Commits 演算法與發版候選觸發 |
 | 文件治理 | `documentation_mode` | `template-and-content`／`content-only`／`off` | 文件模板與 project-owned 內容分層；Pages 只在 hosted＋完整模板時啟用，且只因 `docs/**` 或手動觸發 |

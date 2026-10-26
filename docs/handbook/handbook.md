@@ -2,7 +2,7 @@
 title = "repo-template 技術手冊｜模板能力、操作與限制"
 lang = "zh-Hant-TW"
 status = "current"
-footer_version = "版本日期 261024 r5"
+footer_version = "版本日期 261026 r6"
 baseline = "approved/261024r5_repo-template-handbook.html"
 baseline_sha256 = "50f463291347976d2f681b8ec787251ea501291833eb17c52dde8a730e9063ed"
 +++
@@ -24,7 +24,7 @@ An approved wording change replaces approved/ with the newly approved copy in th
 
 **適用範圍：**本手冊描述首個完整實作本文能力的 stable release；實際使用版本、來源與 full SHA 以該 Release 的 `release-prompt.txt` 為準。候選版本未通過手冊、SPEC、Repository 規則、程式與測試的一致性檢查前，不得宣稱已提供本文能力。 {: .compact}
 
-**目前狀態：**CLI、Ready、migration 與 Roadmap 自 v0.35.x 起提供；設定開啟的 single-writer 合併與新設定盤點自 v0.41.x 起提供；寫作指引與訊息句型檢查隨 Milestone 20 的 stable 提供。版本：2026-10-24；核准 SHA-256 見 manifest。 {: .compact}
+**目前狀態：**CLI、Ready、migration 與 Roadmap 自 v0.35.x 起提供；設定開啟的 single-writer 合併與新設定盤點自 v0.41.x 起提供；寫作指引與訊息句型檢查隨 Milestone 20 的 stable 提供。版本：2026-10-26；核准 SHA-256 見 manifest。 {: .compact}
 
 ## 1. repo-template 的功能與使用方式
 
@@ -214,6 +214,19 @@ push 或建立 PR。
 | 預覽 | create：dry-run 列出檔案與設定，不產生報告；adopt：在目標外寫出 plan、report JSON 與 Markdown；update：`--check` 寫出報告與 stage-1 plan，人工決策寫入 final plan。 | 計畫沒有未授權的產品內容或外部變更。 |
 | 套用 | create：以相同 tag、SHA 與答案套用；adopt：`--apply-plan <plan>`；update：`--apply-plan <final plan>`。全部交易式寫入，成功後報告標為 applied，失敗維持原狀。 | 明確確認後才可寫入、push、建立 PR 或修改 GitHub。 |
 
+### 2.6 驗證模式與 self-hosted 登記 {: .mt-3}
+
+{: table.stage-table.dense stage}
+| 模式 | 在哪裡驗證 | 適用 |
+|---|---|---|
+| self-hosted | csarc-devops 登記的 VM，結果由 GitHub 記錄；治理與 local 相同。 | 新建 private 專案的預設。登記前 PR 不能合併；只限 private。 |
+| local | 操作者電腦，證據是自我證明。 | private 或 public，不需要遠端證據時。 |
+| hosted | GitHub-hosted runner。 | 新建 public 專案的預設；需要 Ruleset、Pages 或 release provenance 時。 |
+
+**設定與限制：**模式依可見性分成 `verification_mode_private` 與 `verification_mode_public`，public 不能用 self-hosted。GitHub Free 的 private Repository 沒有 Ruleset，local 與 self-hosted 的合併只由 lifecycle 執行，在 UI 直接合併記為 untraced。啟用 container 時暫不能用 self-hosted。既有專案不自動切換，`csarc update` 只提出建議。 {: .compact}
+
+**登記與使用：**本 Repository 與 csarc-devops 各開一張互相連結的 Issue，雙方人工核准，並列出可觸發驗證的帳號；再以 governance-switch PR 設定 `self_hosted_runner`，Actions log 建議保存 7 天。管理員以 `csarc self-hosted open` 開 24 小時窗口，可 `extend`，再以 `verify --pr` 派工。90 天未開窗，登記到期；轉 public 前必須先執行 `retire`。 {: .compact}
+
 :::
 
 ::: sheet daily-workflow | 第 3 章 · 日常使用
@@ -363,7 +376,7 @@ push 或建立 PR。
 
 ## 4. 測試、證據與交付控制
 
-實際檢查由 Repository 設定、變更路徑及可信 base 的政策自動選擇。新建的 solo 專案預設使用 local 證據；團隊可明確選擇 Hosted CI，由 GitHub Actions 在遠端 runner 驗證 PR 精確版本。使用者不必自行組合測試命令。
+實際檢查由 Repository 設定、變更路徑及可信 base 的政策自動選擇。新建的 private 專案預設在登記的 VM 驗證（self-hosted，見 2.6）；團隊可明確選擇 Hosted CI，由 GitHub Actions 在遠端 runner 驗證 PR 精確版本。使用者不必自行組合測試命令。
 
 ### 4.1 到底會測試哪些內容
 
@@ -417,7 +430,7 @@ push 或建立 PR。
 {: table.stage-table.dense stage}
 | 來源 | 用途 | 何時可作為交付證據 |
 |---|---|---|
-| 本機 | 新建 solo 專案的預設。在已 commit、乾淨的 exact head 執行一次 `verify-fast`；工具依相同判斷升級為 Full，結果綁定 SHA／tree，24 小時內有效。 | 證據只存在執行者的 Git metadata；寫入者可同時改程式與證據，因此不能證明 GitHub event、權限或遠端 runner。 |
+| 本機 | 選擇 local 時使用。在已 commit、乾淨的 exact head 執行一次 `verify-fast`；工具依相同判斷升級為 Full，結果綁定 SHA／tree，24 小時內有效。 | 證據只存在執行者的 Git metadata；寫入者可同時改程式與證據，因此不能證明 GitHub event、權限或遠端 runner。 |
 | Hosted CI | 明確選擇 hosted 時，由可信 base 選擇 gate，在遠端 runner 驗證 exact head／tree。 | 作為 hosted 模式的合併證據；預設 24 小時內有效，逾期或 head 改變即重跑。 |
 
 ### 4.4 一項需求如何進入合併 {: .mt-3}
