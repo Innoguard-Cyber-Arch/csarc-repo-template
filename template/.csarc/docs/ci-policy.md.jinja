@@ -96,7 +96,7 @@ GitHub UI 合併與 `gh pr merge --admin` 不是合法 route，沒有 trailer；
 
 實作中只跑 focused checks；`./.csarc/scripts/verify-fast` 是可選診斷，不因 trusted plan 選到 full 就在本機重跑。`./.csarc/scripts/check-trusted-verification <head-sha> --github-repo <owner/repo>` 讀回 hosted 證據。Workflow YAML 只負責事件、權限與呼叫；所有第三方 Actions 固定在完整 commit SHA。
 {%- elif verification_mode == 'self-hosted' -%}
-本專案使用 `self-hosted`，治理與 `local` 相同：不產生 hosted workflow，required-checks Ruleset 保持停用。合併證據來自登記的 VM：操作者在 PR 的目標分支以 `workflow_dispatch` 觸發唯讀的 `csarc-verify.yml`，`pr_lifecycle.py merge` 讀回 GitHub 記錄的執行，綁定 exact head／tree、runner、環境與 24 小時期限，合併後留下 `self-hosted-registered` trace。本機 `./.csarc/scripts/verify-fast` 只是自我證明，只有離開 self-hosted 的 governance-switch PR 能以它合併。
+本專案使用 `self-hosted`，治理與 `local` 相同：不產生 hosted workflow，required-checks Ruleset 保持停用。合併證據來自登記的 VM：操作者在 PR 的目標分支以 `workflow_dispatch` 觸發唯讀的 `csarc-verify.yml`，`pr_lifecycle.py merge` 讀回 GitHub 記錄的執行，綁定 exact head／tree、runner、環境與 24 小時期限，合併後留下 `self-hosted-registered` trace。本機 `./.csarc/scripts/verify-fast` 只是自我證明，只有離開 self-hosted 的 governance-switch PR 能以它合併。轉成 public 前先執行 `csarc self-hosted retire`；沒執行就公開時，`status`、`csarc update` 與 lifecycle 都會印出 `WARNING:`。
 {%- else -%}
 本專案使用 `local`，因此不產生 `ci.yml`、`pr-policy.yml`、`pr-review.yml`、reviewer assignment 或 Dependabot 自動合併 workflow，required-checks Ruleset 保持停用。候選 commit 乾淨後執行一次 `./.csarc/scripts/verify-fast`；成功時把 head／tree、base、tier、scopes、command 與結果寫進 Git metadata，24 小時內有效。尚未 commit 或仍有未提交修改時，測試照常回報，但不產生可合併的證據。`pr_lifecycle.py merge` 在合併前重讀 GitHub metadata、review、lease 與這份證據，從 trusted base 執行 PR policy，合併讀回後留下 `self-attested-local` trace。
 
