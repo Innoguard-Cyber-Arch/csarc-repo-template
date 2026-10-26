@@ -180,7 +180,6 @@ require_successful_checks = _hosted_only("require_successful_checks")
 require_trusted_dependabot_head = _hosted_only(
     "require_trusted_dependabot_head"
 )
-close_work_issue = _hosted_only("close_work_issue")
 
 
 # Shared next steps of raised messages (#1253).
@@ -208,6 +207,7 @@ ISSUE_WORK_BRANCH = re.compile(
     r"([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$"
 )
 ADMIN_BYPASS_MARKER = "Admin bypass / 管理員略過審核"
+WORK_CLOSURE_MARKER = "Work Issue closure evidence"
 HOTFIX_POST_REVIEW_MARKER = "Emergency hotfix post-review"
 UNCHECKED = re.compile(r"(?m)^\s*[-*+]\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(
@@ -300,6 +300,17 @@ def parse_time(value: object, label: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
+class CommandError(RuntimeError):
+    """One failed local command that keeps its raw output as `detail`."""
+
+    def __init__(self, command: list[str], detail: str) -> None:
+        """Wrap `detail` for people and keep it unchanged for classifiers."""
+        super().__init__(
+            f"Command failed: {' '.join(command)}: {detail}. Fix it and retry."
+        )
+        self.detail = detail
+
+
 def run(
     command: list[str],
     *,
@@ -317,9 +328,7 @@ def run(
     )
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip()
-        raise RuntimeError(
-            f"Command failed: {' '.join(command)}: {detail}. Fix it and retry."
-        )
+        raise CommandError(command, detail)
     return result.stdout.strip()
 
 
@@ -1964,7 +1973,11 @@ RULES_PLAN_UNSUPPORTED = (
 
 def rules_plan_unsupported(error: RuntimeError) -> bool:
     """Return whether a rules read failed only because the plan lacks it."""
-    return str(error).endswith(f"gh: {RULES_PLAN_UNSUPPORTED}")
+    # Issue #1293: compare the raw `gh` output, never the wrapped text.
+    return (
+        isinstance(error, CommandError)
+        and error.detail == f"gh: {RULES_PLAN_UNSUPPORTED}"
+    )
 
 
 def malformed_check(item: object) -> bool:
@@ -4211,6 +4224,152 @@ def edit_standalone_issue(args: argparse.Namespace, github: GitHub) -> None:
     elif args.remove_type:
         command.append("--remove-type")
     run(command)
+
+
+def work_closure_message(binding: dict[str, object]) -> str:
+    """Return exact, replay-safe evidence for one work Issue closure."""
+    return f"{WORK_CLOSURE_MARKER}\n\n`{canonical_json(binding)}`"
+
+
+def close_work_issue(  # noqa: C901
+    args: argparse.Namespace, github: GitHub
+) -> None:
+    """Close one Issue only after its exact work PR reaches its dev branch."""
+    if (
+        REPOSITORY.fullmatch(args.repo) is None
+        or args.pr_number < 1
+        or SHA.fullmatch(args.head_sha) is None
+    ):
+        raise RuntimeError(
+            "Work Issue closure: invalid input. Pass --pr-number and "
+            "--head-sha."
+        )
+    repository = github.get(args.repo, "")
+    pull = github.get(args.repo, f"pulls/{args.pr_number}")
+    if not isinstance(repository, dict) or not isinstance(pull, dict):
+        raise RuntimeError(
+            f"Work Issue closure: state unavailable. {GH_RETRY}."
+        )
+    head = pull.get("head") or {}
+    base = pull.get("base") or {}
+    head_repo = head.get("repo") or {} if isinstance(head, dict) else {}
+    merge_sha = pull.get("merge_commit_sha")
+    if (
+        pull.get("number") != args.pr_number
+        or pull.get("state") != "closed"
+        or pull.get("merged") is not True
+        or not isinstance(pull.get("merged_at"), str)
+        or not isinstance(head, dict)
+        or head.get("sha") != args.head_sha
+        or not isinstance(head_repo, dict)
+        or str(head_repo.get("full_name", "")).casefold()
+        != args.repo.casefold()
+        or not isinstance(base, dict)
+        or not isinstance(merge_sha, str)
+        or SHA.fullmatch(merge_sha) is None
+    ):
+        raise RuntimeError(
+            "Merged pull request: invalid identity or head. Pass the merged PR "
+            "number and head SHA."
+        )
+    parse_time(pull["merged_at"], "Pull request merge")
+    default_branch = repository.get("default_branch")
+    base_ref = base.get("ref")
+    head_ref = head.get("ref")
+    if not isinstance(default_branch, str) or not isinstance(base_ref, str):
+        raise RuntimeError(
+            f"Pull request: destination unavailable. {GH_RETRY}."
+        )
+    if base_ref == default_branch:
+        sys.stdout.write(
+            f"NOTICE: PR #{args.pr_number}: default-branch closing remains "
+            "GitHub-native.\n"
+        )
+        return
+    delivery = DELIVERY_BRANCH.fullmatch(base_ref)
+    work = ISSUE_WORK_BRANCH.fullmatch(str(head_ref or ""))
+    if delivery is None or work is None:
+        raise RuntimeError(
+            "Merged pull request: not a Milestone work route. Run close-work "
+            "only for dev/m* work."
+        )
+    issue_number = int(work.group(1))
+    closing_issues = [
+        int(value)
+        for value in CLOSING_ISSUE.findall(str(pull.get("body") or ""))
+    ]
+    if closing_issues != [issue_number]:
+        raise RuntimeError(
+            "Work pull request: does not close its Issue. Fix the body."
+        )
+    issue = github.get(args.repo, f"issues/{issue_number}")
+    if (
+        not isinstance(issue, dict)
+        or issue.get("number") != issue_number
+        or issue.get("pull_request") is not None
+    ):
+        raise RuntimeError(
+            "Work Issue: invalid identity. Fix the work branch name."
+        )
+    expected_milestone = int(delivery.group(1))
+    issue_milestone = issue.get("milestone") or {}
+    pull_milestone = pull.get("milestone") or {}
+    if (
+        not isinstance(issue_milestone, dict)
+        or not isinstance(pull_milestone, dict)
+        or issue_milestone.get("number") != expected_milestone
+        or pull_milestone.get("number") != expected_milestone
+    ):
+        raise RuntimeError(
+            "Work Issue: PR or dev branch disagrees. Fix the route."
+        )
+    binding: dict[str, object] = {
+        "base_ref": base_ref,
+        "head_sha": args.head_sha,
+        "issue": issue_number,
+        "merge_commit_sha": merge_sha,
+        "pull_request": args.pr_number,
+        "repository": args.repo,
+        "schema_version": 1,
+    }
+    message = work_closure_message(binding)
+    comments = github.pages(args.repo, f"issues/{issue_number}/comments")
+    evidence = [
+        str(comment.get("body") or "")
+        for comment in comments
+        if str(comment.get("body") or "").startswith(WORK_CLOSURE_MARKER)
+    ]
+    if len(evidence) > 1 or (evidence and evidence != [message]):
+        raise RuntimeError(
+            "Work Issue: conflicting closure evidence. Run 'gh issue view'."
+        )
+    state = issue.get("state")
+    if state == "closed":
+        if issue.get("state_reason") != "completed" or evidence != [message]:
+            raise RuntimeError(
+                "Work Issue: closed without matching evidence. Reopen it."
+            )
+        sys.stdout.write(
+            f"NOTICE: Issue #{issue_number} is already closed by PR "
+            f"#{args.pr_number}.\n"
+        )
+        return
+    if state != "open":
+        raise RuntimeError("Work Issue: invalid state. Run 'gh issue view'.")
+    if not evidence:
+        github.comment(args.repo, issue_number, message)
+    result = github.close_issue(args.repo, issue_number)
+    if (
+        result.get("number") != issue_number
+        or result.get("state") != "closed"
+        or result.get("state_reason") != "completed"
+    ):
+        raise RuntimeError(
+            "Issue closure: GitHub did not confirm it. Run 'gh issue view'."
+        )
+    sys.stdout.write(
+        f"OK: Issue #{issue_number} closed by merged PR #{args.pr_number}.\n"
+    )
 
 
 def compact_tokens(text: str) -> str:

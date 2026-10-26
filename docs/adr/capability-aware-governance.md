@@ -176,6 +176,16 @@ exact current-main、base/head、同 repository 與雙父 merge topology 驗證�
 的 trusted publisher。該 publisher 仍用 exact head 與完整 sync route 判定，不能執行 PR
 head 的 evaluator，也不會把等待或真正的政策錯誤改成成功。
 
+## 2026-10-26 治理漂移排程改為每週一次（#1289）
+
+生成專案的 `governance-drift.yml` 從每日改為每週一執行一次，時間避開同為週一的
+`template-update.yml` 與 `osv.yml`。設定偏離不常發生，每天執行耗用 Actions 額度，
+產生的結果也多半沒有變化。這項決定取代 #72／#75 與上方 #746 段落中「每日」的頻率；
+#746 的預設啟用、opt-out 保留與 tracking Issue 語意不變。漂移最多晚六天才被排程發現，
+需要立即確認時，用 `workflow_dispatch` 手動觸發，或執行
+`./.csarc/scripts/apply-repository-settings.sh check`。`release-drift.yml` 是另一個檢查，
+維持每日。
+
 ## 重新評估條件
 
 Repository 方案、organization policy、fleet 規模或實測 drift 頻率改變時，重新執行 capability preflight 與 fleet threshold review；不要把安裝時快照當永久真相。

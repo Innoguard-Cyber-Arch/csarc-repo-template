@@ -202,21 +202,27 @@ def test_render_context_template_records_the_closed_context() -> None:
     )
 
 
-def test_every_released_question_is_classified() -> None:
-    """AC1: every key any release tag ever asked has one class."""
+def unclassified_release_questions(
+    root: Path, classes: dict[str, str]
+) -> set[str]:
+    """Return questions of release tags reachable from HEAD with no class.
+
+    Only tags merged into the tested HEAD belong to this line's history; a
+    prerelease tag on another delivery branch may ask questions this line
+    has not classified yet (#1291).
+    """
     tags = subprocess.run(  # noqa: S603
-        ["git", "-C", str(ROOT), "tag", "-l", "v*"],  # noqa: S607
+        ["git", "-C", str(root), "tag", "--merged", "HEAD", "--list", "v*"],  # noqa: S607
         capture_output=True,
         text=True,
         check=False,
     ).stdout.split()
     if not tags:
         pytest.skip("release tags are not available in this clone")
-    classes = settings_schema.classification()
     unknown: set[str] = set()
     for tag in tags:
         result = subprocess.run(  # noqa: S603
-            ["git", "-C", str(ROOT), "show", f"{tag}:copier.yml"],  # noqa: S607
+            ["git", "-C", str(root), "show", f"{tag}:copier.yml"],  # noqa: S607
             capture_output=True,
             text=True,
             check=False,
@@ -229,4 +235,68 @@ def test_every_released_question_is_classified() -> None:
             for key in payload
             if not str(key).startswith("_") and key not in classes
         )
+    return unknown
+
+
+def test_every_released_question_is_classified() -> None:
+    """AC1: every key a reachable release tag ever asked has one class."""
+    unknown = unclassified_release_questions(
+        ROOT, settings_schema.classification()
+    )
     assert not unknown, sorted(unknown)
+
+
+def git(repo: Path, *args: str) -> None:
+    """Run one git command in a fixture repository."""
+    subprocess.run(  # noqa: S603
+        ["git", "-C", str(repo), *args],  # noqa: S607
+        check=True,
+        capture_output=True,
+    )
+
+
+def tagged_repository(tmp_path: Path) -> Path:
+    """Build a repository whose HEAD reaches only the classified tag v1.0.0."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "main")
+    git(repo, "config", "user.email", "test@example.com")
+    git(repo, "config", "user.name", "Test")
+    git(repo, "config", "commit.gpgsign", "false")
+    git(repo, "config", "tag.gpgsign", "false")
+    (repo / "copier.yml").write_text("_min: 1\nknown: 1\n", encoding="utf-8")
+    git(repo, "add", "copier.yml")
+    git(repo, "commit", "-q", "-m", "init")
+    git(repo, "tag", "v1.0.0")
+    return repo
+
+
+def add_unknown_question_tag(repo: Path, tag: str) -> None:
+    """Commit a new unclassified question on the current branch and tag it."""
+    (repo / "copier.yml").write_text(
+        "known: 1\nunknown_key: 1\n", encoding="utf-8"
+    )
+    git(repo, "commit", "-q", "-am", tag)
+    git(repo, "tag", tag)
+
+
+def test_unreachable_tag_with_unknown_question_is_ignored(
+    tmp_path: Path,
+) -> None:
+    """#1291 AC2: another branch's prerelease tag does not fail the check."""
+    repo = tagged_repository(tmp_path)
+    git(repo, "switch", "-q", "-c", "dev/m1-other")
+    add_unknown_question_tag(repo, "v1.1.0-beta.1")
+    git(repo, "switch", "-q", "main")
+    assert unclassified_release_questions(repo, {"known": "intent"}) == set()
+
+
+def test_reachable_tag_with_unknown_question_still_fails(
+    tmp_path: Path,
+) -> None:
+    """#1291 AC2: a reachable tag with an unclassified question is reported."""
+    repo = tagged_repository(tmp_path)
+    add_unknown_question_tag(repo, "v1.1.0")
+    assert unclassified_release_questions(repo, {"known": "intent"}) == {
+        "unknown_key"
+    }
