@@ -16,6 +16,7 @@ import json
 import runpy
 from pathlib import Path
 
+import jinja2
 import pytest
 import settings_support
 import yaml
@@ -210,3 +211,20 @@ def test_update_plan_moves_hosted_paths_without_removing_files(
     changed = {*files["overwrite"], *files["automatic_merge"]}
     assert {LIFECYCLE, HOSTED} <= changed
     assert not {*files["remove"], *files["delete"]}
+
+
+@pytest.mark.parametrize("mode", ["hosted", "local", "self-hosted"])
+def test_ci_policy_names_close_work_outside_hosted(mode: str) -> None:
+    """#1294 AC3: non-hosted docs say how to close Milestone work Issues."""
+    template = ROOT / "template/.csarc/docs/ci-policy.md.jinja"
+    rendered = (
+        jinja2.Environment(autoescape=False)  # noqa: S701
+        .from_string(template.read_text(encoding="utf-8"))
+        .render(
+            verification_mode=mode,
+            release_ownership="csarc-owned",
+            lifecycle=["issues", "milestones"],
+        )
+    )
+    expected = mode != "hosted"
+    assert ("pr_lifecycle.py close-work --repo" in rendered) is expected
