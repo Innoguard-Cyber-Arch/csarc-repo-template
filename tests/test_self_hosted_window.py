@@ -102,6 +102,15 @@ class FakeGitHub:
             return {"content": content}
         if endpoint.startswith(f"repos/{REPO}/pulls/"):
             return self.pulls[int(endpoint.rsplit("/", 1)[1])]
+        # The shared public-log check (#1287) reads one workflow's runs.
+        verify = [
+            r for r in self.runs if r["path"] == self_hosted.WORKFLOW_PATH
+        ]
+        if endpoint == f"repos/{REPO}/actions/workflows?per_page=100":
+            flow = {"id": 9, "path": self_hosted.WORKFLOW_PATH}
+            return {"workflows": [flow] if verify else []}
+        if endpoint == f"repos/{REPO}/actions/workflows/9/runs?per_page=1":
+            return {"total_count": len(verify)}
         raise AssertionError(endpoint)
 
     def collection(self, endpoint: str, key: str) -> list[dict[str, Any]]:
