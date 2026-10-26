@@ -990,12 +990,11 @@ def retire_warning(
     `read` GETs one path below `repos/<repo>/`. An unknown visibility or
     an unreadable answer is never silent: the text says it was not checked.
     """
+    if private is True:
+        return ""
+    reason = "visibility is unknown"
     try:
-        if not isinstance(private, bool):
-            raise RecordUnavailableError("visibility is unknown")
-        if private:
-            return ""
-        if mode_private != "self-hosted":
+        if private is False and mode_private != "self-hosted":
             ids = [
                 flow["id"]
                 for flow in read("actions/workflows?per_page=100")["workflows"]
@@ -1009,11 +1008,12 @@ def retire_warning(
     except (RuntimeError, ValueError) as error:
         reason = str(error).rstrip(".")
     else:
-        return (
-            f"Self-hosted logs on '{repo}' are public: the repository is "
-            "public and still has self-hosted runs or settings. Run "
-            "'csarc self-hosted retire', then review its inventory."
-        )
+        if private is False:
+            return (
+                f"Self-hosted logs on '{repo}' are public: the repository is "
+                "public and still has self-hosted runs or settings. Run "
+                "'csarc self-hosted retire', then review its inventory."
+            )
     return (
         f"Self-hosted logs on '{repo}': not checked ({reason}). Run "
         "'csarc self-hosted status' when GitHub answers."
