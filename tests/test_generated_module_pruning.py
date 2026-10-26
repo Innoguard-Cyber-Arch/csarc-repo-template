@@ -46,7 +46,6 @@ FORWARDED: dict[str, frozenset[str]] = {
     "authenticate_dependabot_head.py": frozenset({"main"}),
     "pr_lifecycle.py": frozenset(
         {
-            "close_work_issue",
             "declared_required_contexts",
             "require_successful_checks",
             "require_trusted_dependabot_head",

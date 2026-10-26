@@ -34,6 +34,24 @@ CHANGELOG 的 tag。
 * feat(cli): manage self-hosted verification windows (7ef2029)
 * feat(lifecycle): require a linked registration for self-hosted mode (3dc1ca1)
 
+## [0.45.2] - 2026-10-26
+
+### Bug Fixes
+
+* fix(update): keep saved hidden settings on update (3341bc0)
+
+## [0.45.1] - 2026-10-26
+
+### Bug Fixes
+
+* fix(lifecycle): allow close-work in local mode (e4e3c05)
+
+## [0.45.0] - 2026-10-26
+
+### Features
+
+* feat(drift): run the governance drift check weekly (5dc8fa7)
+
 ## [0.45.0-beta.1] - 2026-10-25
 
 ### Features
@@ -45,6 +63,12 @@ CHANGELOG 的 tag。
 * fix(agent-docs): point the governance-switch route at its rendered section (058d428)
 * fix(settings): keep the local default and do not offer self-hosted yet (d1a04ba)
 * fix(update): pass the derived verification mode to both render sides (69d3155)
+
+## [0.44.5] - 2026-10-26
+
+### Bug Fixes
+
+* fix(lifecycle): recognize the Free private rules 403 after message wrapping (1a559c7)
 
 ## [0.44.4] - 2026-10-24
 

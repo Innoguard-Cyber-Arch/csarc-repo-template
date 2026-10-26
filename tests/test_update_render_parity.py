@@ -137,6 +137,61 @@ def test_self_hosted_settings_are_forwarded_when_copier_hides_them() -> None:
     )
 
 
+def test_new_side_forwards_saved_hidden_settings() -> None:
+    """#1298 AC1: a saved `when: false` setting reaches the new side."""
+    saved = {"single_writer_merger": "agent", "verification_mode": "local"}
+    old = update_plan.OldSideInputs(
+        answers=saved, sources=dict.fromkeys(saved, "x"), dropped=()
+    )
+    hidden = settings_schema.HIDDEN_SETTINGS
+    assert update_plan.new_side_data(saved, old, {}, hidden) == {
+        "single_writer_merger": "agent"
+    }
+    # An explicit --data change still wins over the saved value.
+    assert update_plan.new_side_data(
+        saved, old, {"single_writer_merger": "peer"}, hidden
+    ) == {"single_writer_merger": "peer"}
+    assert update_plan.new_side_data(saved, old, {}) == {}
+
+
+def test_every_hidden_question_is_forwarded_or_recomputed() -> None:
+    """#1298 AC2: inventory every `when: false` question in copier.yml.
+
+    Copier drops the saved answer of such a question on update, so each
+    one is either forwarded as saved intent or recomputed on every render.
+    """
+    questions = yaml.safe_load((ROOT / "copier.yml").read_text("utf-8"))
+    hidden = {
+        key
+        for key, value in questions.items()
+        if isinstance(value, dict) and value.get("when") is False
+    }
+    assert hidden == {
+        *settings_schema.HIDDEN_SETTINGS,
+        *settings_schema.RENDER_KEYS,
+    }
+    assert set(settings_schema.HIDDEN_SETTINGS) <= set(
+        settings_schema.INTENT_SETTINGS
+    )
+    assert not set(settings_schema.RENDER_KEYS) & set(
+        settings_schema.INTENT_SETTINGS
+    )
+
+
+def test_written_settings_view_reports_a_lost_setting() -> None:
+    """#1298 AC3: a setting the candidate drops or changes is reported."""
+    answers = {"single_writer_merger": "agent", "copilot_review": "allowed"}
+    keys = {"single_writer_merger", "copilot_review"}
+    assert update_plan.written_settings_view(answers, None, keys) == answers
+    assert update_plan.written_settings_view(
+        answers, {"copilot_review": "off"}, keys
+    ) == {"copilot_review": "off"}
+    assert (
+        update_plan.written_settings_view(answers, dict(answers), keys)
+        == answers
+    )
+
+
 def test_unstable_old_question_set_fails_closed() -> None:
     """AC3: an old baseline that changes once inputs are filtered fails."""
     update_plan.require_stable_old_inputs({"a", "b"}, {"b", "a"})

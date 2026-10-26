@@ -22,7 +22,7 @@ release recovery 則依本文件各自的 Issue 核可 gate。所有 fallback �
 branch，最後由一張受審查的交付 PR 送回 `main`。
 
 Reviewer assignment（`.github/workflows/governance-comment.yml`）已在本 repo 與所有生成
-repo 啟用；生成 repo 預設產生治理漂移排程（`governance-drift.yml`）並每日執行，
+repo 啟用；生成 repo 預設產生治理漂移排程（`governance-drift.yml`）並每週執行，
 可從 `scheduled_checks` 移除 `governance-drift` 關閉。本模板 source repo 保留同一支
 `scripts/check-governance-drift` 供本機驗證，不另外啟用排程。
 
