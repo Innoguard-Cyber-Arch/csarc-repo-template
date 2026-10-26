@@ -143,12 +143,19 @@ tracking: none
 
 **工具鏈 image（ADR D8、C9）。**`profiles/self-hosted-toolchain.json` 是給 csarc-devops 的機器可讀清單：image 以 sha256 digest 固定、每個 job 一個新容器並以非 root 執行，禁止 docker socket、privileged、host network、metadata endpoint 與長期 secret；基礎工具（含 trusted policy 用的 Python 與 uv）、`install-tool` 下載的掃描工具、依（repo, 環境）分開的快取，以及每個語言 profile 的工具版本。版本與 `profiles/catalog.yaml` 和 hosted workflow 的固定版本一致，由回歸測試檢查。`container` 模組需要 Docker daemon，VM 禁止 docker socket，所以啟用它的 repo 不能在 self-hosted 模式驗證。
 
+## 9. `container` 模組的限制（#1281）
+
+- **限制。**VM 目前不給 job Docker daemon（ADR D8 第 4 點），`verify_container` 因此無法在 VM 上執行。`container: true` 加上 `verification_mode_private: self-hosted` 一律 fail closed：root 與 template 的 reader（`csarc_config.py`，lifecycle 與 VM 證據 reader 都經過它）、`csarc update`／`csarc init` 寫入設定時的 schema 檢查，以及 Copier 的 `container` validator。訊息說明原因（ADR D8），並建議把 `verification_mode_private` 改成 `local` 或 `hosted`，或關閉 `container`。
+- **判斷依據。**reader 看不到 repository 的可見性，所以以 `verification_mode_private` 判斷：只有它能讓實際模式成為 `self-hosted`（§1）。`verification_mode_public` 不受影響，`container` 加上 `hosted` 或 `local` 照常可用。
+- **解除條件。**ADR 修訂（D8 第 7 點：job 容器內隔離的 Docker daemon）經擁有者核准，而且 csarc-devops 在 C11 確認可行之後，以後續 Issue 移除這個限制；`verify.jinja` 的 Docker 步驟不變。
+
 ## Acceptance criteria
 
 - [x] 兩個模式設定、登記設定、依可見性 render 與 migration 如 §1–§6（#1268）。
 - [x] self-hosted 的唯讀驗證 workflow、VM 證據綁定與離開出口如 §7（#1269）。
 - [x] 登記 PR 的盤點與 `registration` 格式檢查如 §5（#1270）。
 - [x] 窗口指令、交付管道與工具鏈 image 契約如 §8（#1271）。
+- [x] `container` 加上 self-hosted 的限制與解除條件如 §9（#1281）。
 
 ## Out of scope
 
@@ -159,3 +166,4 @@ tracking: none
 - root 與 template 的回歸測試涵蓋三種模式與兩種可見性、migration 不改變行為、public 設成 `self-hosted` 被拒絕，以及合併時的模式判斷。
 - payload：`solo-default` 維持量測 `local` 預設；另加 `solo-self-hosted` fixture，沿用同一組預算（ADR Q2）。#1272 切換預設時再調整 fixture 名稱。
 - §8：`tests/test_self_hosted_window.py` 以 GitHub 與交付管道的 stub 涵蓋每個指令的盤點與拒絕路徑、沒有 `--apply` 時不改變任何東西、沒有管道時 fail closed、`extend` 不取得 token 也不註冊第二個 runner、預期之外的 runner 被全部移除、token 不出現在命令列、輸出與檔案，以及工具鏈清單與語言 profile 一致。
+- §9：`tests/test_verification_mode_settings.py` 的 container 測試涵蓋 root 與 template：self-hosted 加上 `container` 在 reader、CLI 寫入、lifecycle 與 Copier validator 都被拒絕；`hosted`、`local` 與每個 public 模式加上 `container` 不受影響。

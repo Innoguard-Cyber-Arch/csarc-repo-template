@@ -4,6 +4,7 @@
 - **日期：**2026-10-25
 - **來源 Issues：**[#1266](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1266)、[#1265](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1265)（Milestone 21 tracker，擁有者 2026-10-24、2026-10-25 決定）；部分取代 [#908](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/908) 的新專案預設
 - **實作 PR：**[#1273](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/1273)
+- **修訂：**[#1281](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1281)（2026-10-26，`container` 模組與 VM 上的 Docker：限制 12、D8 第 7 點、C11）。這次修訂需要擁有者核准，以 #1281 PR 的合併授權作為核准。
 
 ## 問題與限制
 
@@ -37,6 +38,7 @@
 9. **repo 轉成 public 後，過去的 Actions log 也一起公開。**
 10. **payload：**`scripts/generated_payload.py` 在 `2035b0d` 實測，solo-default（`local`）為 640,215／784,000 B、87／92 個檔案、寫入 workflow 0、agent 文件 token 12,829／13,500；hosted 距總閘 2,828 B。#1231 規定預算只能下調，上調要由擁有者核准。
 11. **[先盤點、再動作](dry-run-inventory-before-action.md) 適用**於登記、開窗、派工與清除。
+12. **`container` 模組需要 Docker daemon（#1281 補記 [#554](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/554)）。**#554（2026-09-03）決定的 Docker 能力包：`container: true` 產生可選的 `Dockerfile` 與 `docker-compose.yml`，並加上 build-and-scan 驗證。hosted 模式由 `docker-build-scan.yml` 在 GitHub runner 上執行；其他模式由 `verify` 的 `verify_container` 執行 `docker compose config`、`docker build` 與 Trivy 掃描。image 只在本機建置，不推送，不登入 registry，也不取得 registry 權限或 secret（[selective-ci-automation-adoption](selective-ci-automation-adoption.md) 的邊界）。#554 當時只有 `local` 與 `hosted`，兩者都有 Docker daemon，所以沒有另寫 ADR。self-hosted 的 job 容器禁止 docker socket（D8 第 4 點），所以啟用這個模組的 repo 目前不能在 self-hosted 模式驗證（D8 第 7 點）。
 
 不在本 ADR 範圍：VM 的建置與維運、csarc-devops 允許清單本身的實作、產品部署管線（CD）、修改下游 repo 設定，以及未來研究項目。
 
@@ -196,6 +198,7 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 4. **容器權限。**不掛 docker socket、不用 privileged、不用 host network、不能存取雲端 metadata endpoint；以非 root 帳號執行。每個（repo, 環境）在 VM 上另有專用 OS 帳號與目錄，彼此不可讀寫（C3）。
 5. **Secrets。**VM 與容器內都不放長期 secret；job 只有唯讀 token；註冊 token 用完即丟。
 6. **log 衛生。**job log 在 repo 公開後會被看到，所以 runner 名稱、容器內工作目錄（例如 `/runner/_work`）與 hook 輸出都不含主機名稱、內部網域、帳號或位址。登記指引建議 Actions log 保存 7 天。VM 自己的 runner log 轉存到 csarc-devops 的外部儲存供事件調查（C4）。
+7. **job 容器內隔離的 Docker daemon（#1281，擁有者 2026-10-26 決定）。**為了讓 `container` 模組在 self-hosted 模式驗證，允許 VM 在每個 job 的容器內提供一個只屬於該 job 的 Docker daemon，例如 sysbox runtime 或 rootless Docker。daemon 隨 job 容器建立與丟棄，模板的驗證腳本不變。以下做法一律不允許：掛載主機的 docker socket、privileged 容器、host network、讓 job 看到主機或其他 job 的 daemon、image 或 volume，以及在 job 結束後保留 daemon 狀態。csarc-devops 確認可行（C11）之前，模板在設定階段拒絕 `container: true` 加上 self-hosted 的組合，訊息說明這一點並建議改用 `local` 或 `hosted`（SPEC-011 §9）；確認後以後續 Issue 移除這個限制。
 
 ### D9. 公開前清除（`retire`）與事後偵測
 
@@ -254,6 +257,7 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 | `open`、`extend`、`close`、`status`、`verify`、`retire`、工具鏈契約 | #1271 | 盤點與失敗路徑的 CLI 測試；延長不註冊第二個 runner；`retire` 預設不刪除；不寫入管理員憑證 |
 | Dependabot 落後 main 的重新驗證（只在模板 repository） | #1264 | 依 #1264 AC5，只在 root；不下發到 `template/` |
 | 文件、登記指引、手冊 r6、下游通知、#908 一節 | #1272 | 文件一致性紀錄 |
+| C11 確認前拒絕 `container: true` 加上 self-hosted（D8 第 7 點） | #1281 | reader、`csarc update`／`init` 與 lifecycle 的 root／template 回歸測試；`verification_mode_public` 不受影響 |
 | VM、允許清單與觸發者允許清單、交付管道、hook、定期檢查、90 天到期、容器與工具鏈 image | csarc-devops 對應 Issue | csarc-devops 自己的驗收 |
 
 **#1264 的範圍（Q10，已決）。**#1264（Dependabot PR 落後 main 時改為重新驗證）只屬於模板 repository，不下發到 `template/`；它的 lifecycle 規則與模式無關。下游的 self-hosted 專案仍由操作者在 UAT 窗口以 `verify` 驗證 Dependabot PR、以指令合併。下游 fixture 因此不需要為 #1264 保留空間。
@@ -318,6 +322,7 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 | C8 | 90 天未開窗的登記到期：移除允許清單、刪除快取與資料、在 csarc-devops 開 Issue；`open` 回應 registration expired |
 | C9 | 工具鏈 image：依語言 profile 建置、以 digest 固定、更新節奏與更新時的通知 |
 | C10 | 觸發者允許清單的儲存位置（VM 端、與登記放在一起）與修改流程（雙邊 Issue） |
+| C11 | job 容器內隔離的 Docker daemon（D8 第 7 點，#1281）：評估 sysbox runtime 或 rootless Docker 在 VM 上是否可行，以及 CPU、記憶體、磁碟與 image 快取的資源限制；確認不掛主機 docker socket、不用 privileged 與 host network、daemon 隨 job 丟棄；確認後在雙邊 Issue 記錄，模板再以後續 Issue 解除 `container` 的限制 |
 
 ## 評估過的替代方案
 
@@ -355,3 +360,4 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 - 未來研究成案時：重新評估環境清單與 `self_hosted_services`。
 - GitHub 改變 self-hosted runner、registration token、runner hook、`workflow_dispatch`、不帶憑證 API 的限制，或 Jobs API 回傳的 runner 欄位。
 - #1267 無法取得足夠空間：重新評估哪些能力先做、哪些延後。
+- csarc-devops 確認 C11：以後續 Issue 解除 `container` 加上 self-hosted 的限制（D8 第 7 點）。

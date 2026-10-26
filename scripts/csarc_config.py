@@ -274,10 +274,17 @@ def _validate_modes(config: dict[str, object], path: Path) -> None:
                 path, f"{LEGACY_MODE} is {legacy!r}; use local or hosted, alone"
             )
         config.update(dict.fromkeys(MODES, config.pop(LEGACY_MODE)))
+    self_hosted = config.get("verification_mode_private") == "self-hosted"
+    if self_hosted and config.get("container") is True:
+        # The VM gives jobs no Docker daemon yet (ADR D8, #1281).
+        raise settings_error(
+            path,
+            "container needs Docker, which self-hosted verification lacks "
+            "(ADR D8); set verification_mode_private to local or hosted",
+        )
     runner = config.get(SELF_HOSTED_KEYS[0], {})
     if (
-        [key in config for key in SELF_HOSTED_KEYS]
-        != [config.get("verification_mode_private") == "self-hosted"] * 2
+        [key in config for key in SELF_HOSTED_KEYS] != [self_hosted] * 2
         or not (
             runner == {}
             or (
