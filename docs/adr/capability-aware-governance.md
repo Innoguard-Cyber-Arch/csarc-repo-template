@@ -101,13 +101,13 @@ Issue #681/#682 決定 R 前是獨立的「進階安裝」附錄頁，後併入 
 ## 2026-09-20 下游治理漂移檢查改為預設啟用（#746）
 
 在既有下游 repository 以目前 workflow、`GITHUB_TOKEN` 與公開 GitHub API 實測後，
-治理漂移排程檢查改為新專案預設啟用（排程頻率見下方 #1289）；不引入 PAT、額外 GitHub App、secret 或專用測試
+每日治理漂移檢查改為新專案預設啟用；不引入 PAT、額外 GitHub App、secret 或專用測試
 repository。明確不選 `governance-drift`（Issue #1071 起為 `scheduled_checks`；舊 `enable_governance_drift_check: false` 由 migration registry 對應）仍是支援的 opt-out，Copier
 update 必須保留既有的 `false`，只在計畫中提供一次啟用建議與影響，不得靜默翻轉。
 
 檢查結果維持能力感知語意：可讀且不符 policy 才是 actionable drift；目前 workflow
 token 無法讀取的管理員設定標成 `DEGRADED`，不得宣稱 drift 或 aligned。真正 drift
-只使用單一 tracking Issue；輸出未改變時不得 edit 該 Issue，避免每次排程重複通知。無法辨識
+只使用單一 tracking Issue；輸出未改變時不得 edit 該 Issue，避免每天重複通知。無法辨識
 的 API 錯誤仍依本 ADR 既有決定 fail closed。
 
 ## 2026-09-20 隔離 PR policy 的治理寫入權限（#829）
