@@ -260,7 +260,7 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 | C11 確認前拒絕 `container: true` 加上 self-hosted（D8 第 7 點） | #1281 | reader、`csarc update`／`init` 與 lifecycle 的 root／template 回歸測試；`verification_mode_public` 不受影響 |
 | VM、允許清單與觸發者允許清單、交付管道、hook、定期檢查、90 天到期、容器與工具鏈 image | csarc-devops 對應 Issue | csarc-devops 自己的驗收 |
 
-**#1264 的範圍（Q10，已決）。**#1264（Dependabot PR 落後 main 時改為重新驗證）只屬於模板 repository，不下發到 `template/`；它的 lifecycle 規則與模式無關。下游的 self-hosted 專案仍由操作者在 UAT 窗口以 `verify` 驗證 Dependabot PR、以指令合併。下游 fixture 因此不需要為 #1264 保留空間。
+**#1264 的範圍（Q10，已決）。**#1264（Dependabot PR 落後 main 時改為重新驗證）只屬於模板 repository，不下發到 `template/`；它的 lifecycle 規則與模式無關。下游的 self-hosted 專案仍由操作者在 UAT 窗口以 `verify` 驗證 Dependabot PR、以指令合併。下游 fixture 因此不需要為 #1264 保留空間。#1284 在逐位元組配對的 `check-trusted-verification` 加了一段不作用的 hook：只有旁邊有 `dependabot_reverify.py`（只在 root）時才生效，下游行為不變，產生的 payload 約多 561 B。
 
 擁有者核准後，本 ADR 隨 #1266 的 PR 合併並改為 `Accepted`；之後實作與本 ADR 不同的地方，在該實作 PR 修訂本 ADR。#1264、#1268、#1269、#1270、#1271、#1272 的完成條件依本版改寫（Q9，已授權）。
 
