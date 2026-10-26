@@ -639,9 +639,9 @@ def test_documentation_stays_within_its_budget() -> None:
     """
     budget = generated_payload.DOC_TARGETS
     values = measured()
-    solo = values["solo-default"]
-    assert solo["docs_lines"] <= budget["solo_docs_lines"]
-    assert solo["ci_policy_lines"] <= budget["solo_ci_policy_lines"]
+    for solo in (values["solo-default"], values["solo-local"]):
+        assert solo["docs_lines"] <= budget["solo_docs_lines"]
+        assert solo["ci_policy_lines"] <= budget["solo_ci_policy_lines"]
     hosted = values["hosted-csarc-owned-python"]
     assert hosted["ci_policy_lines"] <= budget["hosted_ci_policy_lines"]
     for name, data in generated_payload.FIXTURES.items():

@@ -4805,10 +4805,14 @@ def print_update_recommendation(update: dict[str, object] | None) -> None:
     """Print an optional update recommendation."""
     if update is None:
         return
-    recommendation = update.get("governance_drift_recommendation")
-    if isinstance(recommendation, str):
-        # message-pattern: allow X5 recommendation line of the plan report
-        print(f"Recommendation: {recommendation}")
+    for key in (
+        "governance_drift_recommendation",
+        "self_hosted_recommendation",
+    ):
+        recommendation = update.get(key)
+        if isinstance(recommendation, str):
+            # message-pattern: allow X5 recommendation line of the plan report
+            print(f"Recommendation: {recommendation}")
 
 
 def print_plan(plan: ResolvedPlan) -> None:
@@ -9858,6 +9862,33 @@ def governance_drift_update_recommendation(
     return None
 
 
+def self_hosted_update_recommendation(
+    answers: Mapping[str, object], explicit_data: Mapping[str, str]
+) -> str | None:
+    """Recommend self-hosted verification for a private repository (#1272).
+
+    ADR self-hosted-verification D2: an existing project never switches
+    automatically; the update keeps the saved mode and lists the
+    registration steps. A container project is skipped, because the VM has
+    no Docker daemon yet (SPEC-011 section 9).
+    """
+    if (
+        "verification_mode_private" in explicit_data
+        or answers.get("project_visibility") == "public"
+        or answers.get("verification_mode_private") not in {"local", "hosted"}
+        or answers.get("container") is True
+    ):
+        return None
+    return (
+        "new private projects verify on a registered csarc-devops VM "
+        "(verification_mode_private: self-hosted); this update keeps the "
+        "saved mode. To switch, open linked Issues here and in csarc-devops "
+        "and get both approvals. Then pass --data "
+        "verification_mode_private=self-hosted and --data "
+        "self_hosted_runner=... in a governance-switch pull request."
+    )
+
+
 # SPEC-011 transition (#1069 decision 8): the template writes the one legacy
 # mode key while the target's trusted-base reader predates both settings.
 LEGACY_MODE_FLAG = "csarc_legacy_verification_mode"
@@ -13479,6 +13510,11 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         status["governance_drift_recommendation"] = (
             governance_drift_recommendation
         )
+    self_hosted_recommendation = self_hosted_update_recommendation(
+        answers, explicit_data
+    )
+    if self_hosted_recommendation is not None:
+        status["self_hosted_recommendation"] = self_hosted_recommendation
     target_snapshot: dict[str, object] = {}
     if not args.check:
         require_clean_repository(target)

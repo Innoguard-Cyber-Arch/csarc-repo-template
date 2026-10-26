@@ -1999,10 +1999,17 @@ def test_init_json_uses_one_complete_resolved_plan(
     assert payload["answers"]["project_visibility"] == visibility
     assert payload["answers"]["enable_codeql"] is enabled
     assert payload["answers"]["review"] == "peer"
-    # The non-interactive solo-local work mode expands into these (#1078).
+    # The non-interactive solo-self-hosted work mode expands into these
+    # (#1078, #1272).
     assert payload["answers"]["copilot_review"] == "allowed"
     assert payload["answers"]["lifecycle"] == []
-    assert payload["setup"]["work_mode"] == "solo-local"
+    assert payload["setup"]["work_mode"] == "solo-self-hosted"
+    assert payload["answers"]["verification_mode_private"] == "self-hosted"
+    assert payload["answers"]["verification_mode_public"] == "hosted"
+    unregistered = "W22-self-hosted-unregistered" in [
+        row["code"] for row in payload["setup"]["warnings"]
+    ]
+    assert unregistered is (visibility != "public")
     assert payload["setup"]["questions"] == []
     assert payload["answers"]["features"] == ["repo-site"]
     assert "reviewers" not in payload["answers"]

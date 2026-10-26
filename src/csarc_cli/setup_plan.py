@@ -19,15 +19,24 @@ import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
-WORK_MODES = ("solo-local", "solo-hosted", "team", "custom")
-DEFAULT_WORK_MODE = "solo-local"
+WORK_MODES = ("solo-self-hosted", "solo-local", "solo-hosted", "team", "custom")
+DEFAULT_WORK_MODE = "solo-self-hosted"
 MODE_KEYS = ("verification_mode_private", "verification_mode_public")
 GOVERNANCE_KEYS = (*MODE_KEYS, "admin_bypass", "copilot_review")
 SOLO_AUTOMATION: dict[str, object] = {"lifecycle": [], "scheduled_checks": []}
 # #1058 decision 14: a preset only expands into saved intent; its name is
-# never stored. The local preset also turns hosted-only automation off.
-# SPEC-011: no preset offers self-hosted until #1272.
+# never stored. The solo presets that verify off GitHub-hosted runners also
+# turn hosted-only automation off. #1272: the default verifies a private
+# repository on a registered self-hosted VM and a public one on hosted
+# checks (ADR self-hosted-verification D2).
 PRESET_VALUES: dict[str, dict[str, object]] = {
+    "solo-self-hosted": {
+        "verification_mode_private": "self-hosted",
+        "verification_mode_public": "hosted",
+        "admin_bypass": "always",
+        "copilot_review": "allowed",
+        **SOLO_AUTOMATION,
+    },
     "solo-local": {
         **dict.fromkeys(MODE_KEYS, "local"),
         "admin_bypass": "always",
@@ -44,6 +53,7 @@ PRESET_VALUES: dict[str, dict[str, object]] = {
 }
 # Keys a preset leaves to one more question each.
 PRESET_QUESTIONS: dict[str, tuple[str, ...]] = {
+    "solo-self-hosted": (),
     "solo-local": (),
     "solo-hosted": (),
     "team": ("copilot_review",),
@@ -60,8 +70,7 @@ LICENSES = ("proprietary", "MIT", "Apache-2.0", "custom")
 LANGUAGES = ("go", "python", "rust", "typescript")
 DOCUMENTATION_LANGUAGES = ("zh-tw", "en", "zh-tw+en", "en+zh-tw")
 CHOICES: dict[str, tuple[str, ...]] = {
-    # SPEC-011: setup does not offer self-hosted until #1272.
-    "verification_mode_private": ("local", "hosted"),
+    "verification_mode_private": ("self-hosted", "local", "hosted"),
     "verification_mode_public": ("hosted", "local"),
     "admin_bypass": ("off", "beta-only", "always"),
     "copilot_review": ("allowed", "off"),
@@ -115,6 +124,7 @@ WARNINGS = {
     "W15": "local-actions-minutes",
     "W20": "ui-merge-without-approval",
     "W21": "single-writer-unobserved",
+    "W22": "self-hosted-unregistered",
 }
 
 Ask = Callable[[str], str]
@@ -413,7 +423,7 @@ def plan_work_mode(
             result.set(key, value, source, note)
     for key in PRESET_QUESTIONS[mode]:
         default = {
-            "verification_mode_private": "local",
+            "verification_mode_private": "self-hosted",
             "verification_mode_public": "hosted",
             "admin_bypass": "always",
             "copilot_review": "allowed",
@@ -738,6 +748,17 @@ def invalid_combinations(
         errors.append(
             "The Rust library starter builds no binary for the Docker "
             "starter; pass --data container=false."
+        )
+    # SPEC-011 section 9 (#1281): stop before any render now that the
+    # default work mode verifies on a self-hosted VM (#1272).
+    if (
+        _truthy(values.get("container"))
+        and values.get("verification_mode_private") == "self-hosted"
+    ):
+        errors.append(
+            "container needs Docker, which self-hosted verification lacks; "
+            "pass --preset solo-local, --data "
+            "verification_mode_private=hosted, or --data container=false."
         )
     if _truthy(values.get("enable_codeql")) and not language_set & {
         "go",
@@ -1235,6 +1256,20 @@ def setup_warnings(  # noqa: C901
                 "Without Ruleset enforcement a csarc-owned release needs one "
                 "observed writer; this read did not observe the runner as "
                 "the only writer, so merges stay manual and untraced.",
+            )
+        )
+    # ADR self-hosted-verification D2 (#1272): print the registration steps
+    # when the project is created, before the first pull request is blocked.
+    if mode == "self-hosted" and not values.get("self_hosted_runner"):
+        rows.append(
+            _warning(
+                "W22",
+                "self_hosted_runner",
+                "Pull requests cannot merge until csarc-devops registers "
+                "this repository for self-hosted verification. Open linked "
+                "Issues here and in csarc-devops, get both approvals, then "
+                "set self_hosted_runner in a governance-switch pull request. "
+                "'csarc self-hosted status' lists the steps.",
             )
         )
     return rows

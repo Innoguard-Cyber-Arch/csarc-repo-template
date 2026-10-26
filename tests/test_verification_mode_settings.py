@@ -282,8 +282,8 @@ def test_render_uses_the_mode_for_its_visibility(
 
 
 def test_new_project_defaults_and_legacy_answers() -> None:
-    """AC1/AC2: defaults stay local/hosted; a legacy mode fills both."""
-    assert question_default("verification_mode_private", {}) == "local"
+    """#1272 AC6: defaults are self-hosted/hosted; a legacy mode fills both."""
+    assert question_default("verification_mode_private", {}) == "self-hosted"
     assert question_default("verification_mode_public", {}) == "hosted"
     for legacy in ("local", "hosted"):
         saved = {"verification_mode": legacy}
@@ -291,21 +291,24 @@ def test_new_project_defaults_and_legacy_answers() -> None:
         assert question_default("verification_mode_public", saved) == legacy
 
 
-def test_self_hosted_is_not_offered_but_accepted_when_given() -> None:
-    """AC1: self-hosted is disabled as a new choice, valid from data."""
+def test_self_hosted_is_offered_and_the_new_private_default() -> None:
+    """#1272 AC6: Copier and csarc init offer self-hosted as the default."""
     choices = COPIER["verification_mode_private"]["choices"]
-    entry = next(
-        value
-        for value in choices.values()
-        if isinstance(value, dict) and value["value"] == "self-hosted"
+    assert list(choices.values()) == ["self-hosted", "local", "hosted"]
+    assert (
+        "self-hosted"
+        not in COPIER["verification_mode_public"]["choices"].values()
     )
-    disabled = ENV.from_string(entry["validator"])
-    assert disabled.render({}) == "Self-hosted verification is not offered yet."
-    assert disabled.render({"verification_mode_private": "self-hosted"}) == ""
-    assert "self-hosted" not in setup_plan.CHOICES["verification_mode_private"]
-    for values in setup_plan.PRESET_VALUES.values():
-        assert values.get("verification_mode_private") != "self-hosted"
-    assert setup_plan.DEFAULT_WORK_MODE == "solo-local"
+    assert setup_plan.CHOICES["verification_mode_private"][0] == "self-hosted"
+    assert "self-hosted" not in setup_plan.CHOICES["verification_mode_public"]
+    assert setup_plan.DEFAULT_WORK_MODE == "solo-self-hosted"
+    assert setup_plan.WORK_MODES[0] == "solo-self-hosted"
+    preset = setup_plan.PRESET_VALUES["solo-self-hosted"]
+    assert preset["verification_mode_private"] == "self-hosted"
+    assert preset["verification_mode_public"] == "hosted"
+    for name, values in setup_plan.PRESET_VALUES.items():
+        if name != "solo-self-hosted":
+            assert values.get("verification_mode_private") != "self-hosted"
 
 
 def render_settings(**answers: object) -> dict[str, object]:
@@ -570,24 +573,21 @@ def test_registered_self_hosted_still_waits_for_vm_evidence(
         )
 
 
-def test_payload_fixtures_keep_the_default_and_add_self_hosted() -> None:
-    """AC6 (ADR Q2): solo-default stays local; solo-self-hosted shares it."""
+def test_payload_fixtures_measure_the_self_hosted_default() -> None:
+    """#1272 AC6 (ADR Q2): solo-default measures self-hosted; solo-local
+    keeps the former default on the same budgets."""
     payload = runpy.run_path(str(ROOT / "scripts/generated_payload.py"))
     fixtures = payload["FIXTURES"]
-    assert fixtures["solo-default"]["verification_mode_private"] == "local"
-    assert (
-        fixtures["solo-self-hosted"]["verification_mode_private"]
-        == "self-hosted"
-    )
+    assert "solo-self-hosted" not in fixtures
+    preset = setup_plan.PRESET_VALUES[setup_plan.DEFAULT_WORK_MODE]
+    for key in (*settings_schema.MODE_KEYS, "lifecycle", "scheduled_checks"):
+        assert fixtures["solo-default"][key] == preset[key]
+    assert fixtures["solo-local"]["verification_mode_private"] == "local"
     for table in ("TARGETS", "RAW_TARGETS", "CONVERSION_OFFSETS"):
-        assert (
-            payload[table]["solo-self-hosted"] == payload[table]["solo-default"]
-        )
-    assert json.dumps(
-        fixtures["solo-self-hosted"], sort_keys=True
-    ) == json.dumps(
+        assert payload[table]["solo-local"] == payload[table]["solo-default"]
+    assert json.dumps(fixtures["solo-default"], sort_keys=True) == json.dumps(
         {
-            **fixtures["solo-default"],
+            **fixtures["solo-local"],
             "verification_mode_private": "self-hosted",
             "verification_mode_public": "hosted",
         },
@@ -644,3 +644,59 @@ def test_copier_refuses_container_for_self_hosted() -> None:
             )
             refused = container and private == "self-hosted"
             assert bool(re.search(GATE, message)) is refused
+
+
+def test_update_recommends_self_hosted_for_private_repositories(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """#1272 AC6: update keeps the saved mode and lists the registration."""
+    recommend = cli.self_hosted_update_recommendation
+    for visibility, mode in (("private", "local"), ("internal", "hosted")):
+        text = recommend(
+            {
+                "project_visibility": visibility,
+                "verification_mode_private": mode,
+            },
+            {},
+        )
+        assert text is not None
+        for part in (
+            "verification_mode_private=self-hosted",
+            "self_hosted_runner",
+            "csarc-devops",
+            "governance-switch",
+            "keeps the saved mode",
+        ):
+            assert part in text
+    private = {
+        "project_visibility": "private",
+        "verification_mode_private": "local",
+    }
+    assert recommend({**private, "project_visibility": "public"}, {}) is None
+    assert (
+        recommend({**private, "verification_mode_private": "self-hosted"}, {})
+        is None
+    )
+    assert recommend(private, {"verification_mode_private": "hosted"}) is None
+    # SPEC-011 section 9: the VM has no Docker daemon for container yet.
+    assert recommend({**private, "container": True}, {}) is None
+    cli.print_update_recommendation(
+        {"self_hosted_recommendation": recommend(private, {})}
+    )
+    assert capsys.readouterr().out.startswith("Recommendation: new private")
+
+
+def test_setup_stops_container_with_the_self_hosted_default() -> None:
+    """#1272 AC6 keeps the #1281 gate: setup stops before any render."""
+    values = {
+        "container": True,
+        "languages": [],
+        "verification_mode_private": "self-hosted",
+    }
+    for mode in ("init", "adopt"):
+        errors = setup_plan.invalid_combinations(values, {}, mode=mode)
+        assert any("self-hosted verification lacks" in e for e in errors)
+    for private in ("local", "hosted"):
+        assert not setup_plan.invalid_combinations(
+            {**values, "verification_mode_private": private}, {}, mode="init"
+        )

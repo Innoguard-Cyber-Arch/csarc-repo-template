@@ -67,7 +67,8 @@ def init_transcript(
 # --- Question counts (#1058 Targets) ---------------------------------------
 
 
-def test_init_solo_local_private_asks_six_questions() -> None:
+def test_init_solo_self_hosted_private_asks_six_questions() -> None:
+    """#1272 AC6: the default work mode verifies on a self-hosted VM."""
     session, result = init_transcript("")
 
     assert session.asked == [
@@ -78,9 +79,9 @@ def test_init_solo_local_private_asks_six_questions() -> None:
         "documentation_languages",
         "work_mode",
     ]
-    assert result.work_mode == "solo-local"
-    assert result.values["verification_mode_private"] == "local"
-    assert result.values["verification_mode_public"] == "local"
+    assert result.work_mode == "solo-self-hosted"
+    assert result.values["verification_mode_private"] == "self-hosted"
+    assert result.values["verification_mode_public"] == "hosted"
     assert result.values["admin_bypass"] == "always"
     assert result.values["lifecycle"] == []
     assert result.values["scheduled_checks"] == []
@@ -98,10 +99,20 @@ def test_init_solo_local_private_asks_six_questions() -> None:
 @pytest.mark.parametrize(
     ("mode_answers", "extra"),
     [
+        (("solo-local",), []),
         (("solo-hosted", ""), ["release_trigger"]),
         (("team", "", ""), ["copilot_review", "release_trigger"]),
         (
             ("custom", "local", "", "", ""),
+            [
+                "verification_mode_private",
+                "verification_mode_public",
+                "admin_bypass",
+                "copilot_review",
+            ],
+        ),
+        (
+            ("custom", "", "", "", ""),
             [
                 "verification_mode_private",
                 "verification_mode_public",
@@ -406,7 +417,7 @@ def test_script_takes_documented_defaults_and_solo_local() -> None:
     )
     session.require_complete("init")
 
-    assert result.work_mode == "solo-local"
+    assert result.work_mode == "solo-self-hosted"
     assert sorted(session.suggested) == [
         "documentation_languages",
         "project_license",
@@ -430,7 +441,7 @@ def test_script_custom_preset_requires_no_guess() -> None:
 
     assert result.work_mode == "custom"
     assert "admin_bypass" not in result.values
-    assert result.values["verification_mode_private"] == "local"
+    assert result.values["verification_mode_private"] == "self-hosted"
     assert result.values["verification_mode_public"] == "hosted"
     assert (
         result.sources["verification_mode_private"]["note"]
@@ -1005,6 +1016,52 @@ def test_each_warning_has_a_stable_code(
         single_writer=None,
     )
     assert code not in [row["code"] for row in baseline]
+
+
+def test_unregistered_self_hosted_prints_the_registration_steps() -> None:
+    """#1272 AC6: init warns until csarc-devops registers the repository."""
+
+    def codes(values: dict[str, object]) -> list[object]:
+        return [
+            row["code"]
+            for row in setup_plan.setup_warnings(
+                values,
+                approval=None,
+                runner_role=None,
+                plan_name=None,
+                single_writer=None,
+            )
+        ]
+
+    base: dict[str, object] = {
+        "project_visibility": "private",
+        "verification_mode_private": "self-hosted",
+        "verification_mode_public": "hosted",
+        "admin_bypass": "off",
+    }
+    rows = setup_plan.setup_warnings(
+        base,
+        approval=None,
+        runner_role=None,
+        plan_name=None,
+        single_writer=None,
+    )
+    assert [row["code"] for row in rows] == ["W22-self-hosted-unregistered"]
+    message = str(rows[0]["message"])
+    for step in ("csarc-devops", "governance-switch", "self-hosted status"):
+        assert step in message
+    registered = {
+        **base,
+        "self_hosted_runner": {
+            "id": "vm1",
+            "registration": "https://github.com/example/csarc-devops/issues/1",
+        },
+    }
+    assert codes(registered) == []
+    assert codes({**base, "project_visibility": "public"}) == []
+    assert codes({**base, "verification_mode_private": "local"}) == [
+        "W02-local-verification"
+    ]
 
 
 def test_warning_codes_are_documented_in_spec_009() -> None:
