@@ -196,14 +196,18 @@ def new_side_data(
     saved: Mapping[str, object],
     old: OldSideInputs,
     update_data: Mapping[str, object],
+    hidden: Collection[str] = (),
 ) -> dict[str, object]:
     """Return the data the new side receives on top of the old answers.
 
     Answers dropped from the old side are still the repository's saved
     intent, so the new side receives them explicitly; reviewed update data
-    (migrations, explicit ``--data`` and repository facts) wins.
+    (migrations, explicit ``--data`` and repository facts) wins. Copier
+    never reuses the last answer of a ``when: false`` question, so each
+    saved ``hidden`` setting is forwarded the same way (Issue #1298).
     """
     data = {key: saved[key] for key in old.dropped}
+    data.update((key, saved[key]) for key in hidden if key in saved)
     data.update(update_data)
     return dict(sorted(data.items()))
 
@@ -230,6 +234,13 @@ class UpdatePlanning:
     shims: tuple[str, ...] = field(default=())
     # Rendered files restored after Copier's update deleted them (#1083).
     restored: tuple[str, ...] = field(default=())
+    # Issue #1298: the settings the candidate's Copier update wrote, so the
+    # report reads the same values the apply keeps; None when the
+    # candidate has no readable schema 2 settings file. The digest binds
+    # the inputs that determine it (new_data and the old side).
+    written_settings: Mapping[str, object] | None = field(
+        default=None, compare=False
+    )
 
     def changed_paths(self) -> frozenset[str]:
         """Return every path the plan expects the update to change."""
@@ -274,6 +285,31 @@ class UpdatePlanning:
             "shims": list(self.shims),
             "restored": list(self.restored),
         }
+
+
+def written_settings_view(
+    answers: Mapping[str, object],
+    written: Mapping[str, object] | None,
+    keys: Collection[str],
+) -> dict[str, object]:
+    """Return ``answers`` with each listed setting as the candidate wrote it.
+
+    The check report and ``answers_changed`` describe ``answers``; the
+    apply keeps what Copier's update wrote. A listed setting the candidate
+    changed takes the written value and one it removed is dropped, so a
+    saved setting the update would lose is reported, never shown as
+    unchanged (Issue #1298, #1153). Without a readable written file the
+    answers are returned unchanged.
+    """
+    result = dict(answers)
+    if written is None:
+        return result
+    for key in keys:
+        if key in written:
+            result[key] = written[key]
+        else:
+            result.pop(key, None)
+    return result
 
 
 def classify_changes(

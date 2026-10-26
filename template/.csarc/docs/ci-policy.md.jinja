@@ -46,6 +46,10 @@ Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─→ main
 
 {% if 'milestones' in lifecycle -%}
 PR 從唯一的 linked Issue 繼承 Milestone{% if hosted %}；`pr-policy-writes.yml` 在 PR 事件同步 classification、assignee 與 Milestone，Issue 改掛 Milestone 時 `work-item-lifecycle.yml` 同步所有 linked open PR{% else %}；local 模式不自動同步，由建立者以本機 wrapper 設定，`pr_lifecycle.py check` 在合併前比對{% endif %}。PR 指向多張 Issue、或 Issue 與 PR 的 Milestone 不一致時 fail closed。`promote/m<N>-*` PR 由 `pr_lifecycle.py create` 掛上 `Refs #<tracker>` 的 Milestone；tracker 標題或 Milestone 不符 `<N>` 時不建立 PR。
+{%- if not hosted %}
+
+工作 PR 合併進 `dev/m*` 時，GitHub 不會依 `Closes #N` 關閉 Issue，本模式也沒有 workflow 補關。合併後執行 `python3 .csarc/scripts/pr_lifecycle.py close-work --repo <owner/repo> --pr-number <PR> --head-sha <head SHA>`：PR 已合併進 linked Issue 所屬 Milestone 的 `dev/m*`、head 與 PR 相符時，它在 Issue 留下綁定 PR 與 head 的證據並關閉 Issue，重跑不會重複寫入。條件不符時以 exit 1 結束並說明要修正什麼，Issue 保持 open。
+{%- endif %}
 {%- else -%}
 本專案未啟用 Milestone 自動化；PR 與 linked Issue 的 Milestone 仍必須一致，不一致時 PR policy fail closed。
 {%- endif %}
@@ -187,5 +191,5 @@ Draft PR 不檢查 PR 與 Issue 的 checklist 是否全勾；轉為 Ready 時對
 {%- endif %}
 - 合併後自動刪除一般來源 branch（`delete_branch_on_merge`，由 `apply-repository-settings.sh check` 回讀）；delivery branch 在確認結案與證據後才刪。`.csarc/scripts/cleanup-worktrees --apply` 只清除乾淨、未鎖定且可證明已合併的本機 worktree。
 - `stale_branch_detection.py` 在 Milestone 與 release preflight 列出 30 天以上沒有 open PR 的 branch，只提示、不刪除。
-- `scheduled_checks` 的 `template-update` {% if 'template-update' in scheduled_checks %}已啟用：每週由 `template-update.yml` 呼叫 `.csarc/scripts/check-template-update`，有新 Release 時開立或更新提醒 Issue{% else %}未啟用；以 `csarc update --check --json` 查看新 Release{% endif %}。`governance-drift` {% if 'governance-drift' in scheduled_checks %}已啟用：每日比對 repository 設定，drift 只開立或更新提醒 Issue{% else %}未啟用；需要時執行 `./.csarc/scripts/apply-repository-settings.sh check`{% endif %}。
+- `scheduled_checks` 的 `template-update` {% if 'template-update' in scheduled_checks %}已啟用：每週由 `template-update.yml` 呼叫 `.csarc/scripts/check-template-update`，有新 Release 時開立或更新提醒 Issue{% else %}未啟用；以 `csarc update --check --json` 查看新 Release{% endif %}。`governance-drift` {% if 'governance-drift' in scheduled_checks %}已啟用：每週比對 repository 設定，drift 只開立或更新提醒 Issue{% else %}未啟用；需要時執行 `./.csarc/scripts/apply-repository-settings.sh check`{% endif %}。
 - 沒有真實成品、owner、權限或 live run 時，狀態保持 manual、blocked 或 not applicable，不以歷史成功補足。

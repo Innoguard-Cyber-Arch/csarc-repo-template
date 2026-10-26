@@ -720,8 +720,8 @@
             "en": "Both the local checkout and a generated repository reuse the same script; generated repositories default to the daily schedule, least-privilege permissions, a timeout, and deduplicated Issue notification, while retaining an explicit opt-out."
           },
           "code": {
-            "zh-tw": "./scripts/check-governance-drift\n\n# scheduled_checks: [governance-drift] generates the daily workflow and\n# script together; an empty list generates neither. This template's own source\n# repo keeps the script for local verification but does not schedule it.",
-            "en": "./scripts/check-governance-drift\n\n# scheduled_checks: [governance-drift] generates the daily workflow and\n# script together; an empty list generates neither. This template's own source\n# repo keeps the script for local verification but does not schedule it."
+            "zh-tw": "./scripts/check-governance-drift\n\n# scheduled_checks: [governance-drift] generates the weekly workflow and\n# script together; an empty list generates neither. This template's own source\n# repo keeps the script for local verification but does not schedule it.",
+            "en": "./scripts/check-governance-drift\n\n# scheduled_checks: [governance-drift] generates the weekly workflow and\n# script together; an empty list generates neither. This template's own source\n# repo keeps the script for local verification but does not schedule it."
           },
           "summary": {
             "zh-tw": "`scripts/check-governance-drift` 會呼叫 `apply-repository-settings.sh check`，可在可信任的本機 checkout 執行。生成 repo 預設由薄 Action 每日呼叫同一支程式，只在可修正偏離出現或內容改變時開立或更新唯一追蹤 Issue；本模板 source repo 不排程。",
