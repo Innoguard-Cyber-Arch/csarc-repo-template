@@ -124,9 +124,17 @@ def find_reusable_evidence(
 
 
 def _merged_source(
-    github: GitHub, repo: str, commit: str, branch: str = "main"
+    github: GitHub,
+    repo: str,
+    commit: str,
+    branch: str = "main",
+    reverified: list[bool] | None = None,
 ) -> tuple[dict[str, Any], str]:
-    """Return one merged commit's unique source PR and identical head tree."""
+    """Return one merged commit's unique source PR and identical head tree.
+
+    When `reverified` is given, a differing tree is recorded there instead
+    of failing, for the caller to accept only a Dependabot reverification.
+    """
     pulls = github.pages(repo, f"commits/{commit}/pulls?per_page=100")
     matches: list[dict[str, Any]] = []
     for pull in pulls:
@@ -159,6 +167,13 @@ def _merged_source(
         source_commit.get("tree") if isinstance(source_commit, dict) else None
     )
     if (
+        reverified is not None
+        and isinstance(merge_tree, dict)
+        and isinstance(source_tree, dict)
+        and merge_tree.get("sha") != source_tree.get("sha")
+    ):
+        reverified.append(True)
+    elif (
         not isinstance(merge_tree, dict)
         or not isinstance(source_tree, dict)
         or merge_tree.get("sha") != source_tree.get("sha")
@@ -181,9 +196,17 @@ def resolve_release_source(
     github: GitHub, repo: str, commit: str, branch: str = "main"
 ) -> str:
     """Select a reviewed source whose pre-squash history owns the version."""
-    pull, head_sha = _merged_source(github, repo, commit, branch)
+    differs: list[bool] = []
+    pull, head_sha = _merged_source(github, repo, commit, branch, differs)
     head = pull.get("head")
     head_ref = head.get("ref") if isinstance(head, dict) else None
+    if differs and not (
+        isinstance(head_ref, str) and head_ref.startswith("dependabot/")
+    ):
+        raise RuntimeError(
+            f"Merged {branch} tree does not match: source differs. "
+            "Verify the merge."
+        )
     if isinstance(head_ref, str) and head_ref.startswith("promote/m"):
         return head_sha
 
@@ -197,7 +220,17 @@ def resolve_release_source(
     eligible, _ = dependabot_coordinates_eligible(
         str(author or ""), str(head_ref or ""), str(head_repo_name or ""), repo
     )
+    if differs and (not eligible or author_type != "Bot"):
+        raise RuntimeError(
+            f"Merged {branch} tree does not match: source differs. "
+            "Verify the merge."
+        )
     if not eligible or author_type != "Bot":
+        return ""
+    if differs:
+        # Issue #1264: a Dependabot head reverified on a newer main merges a
+        # different tree, so no source history owns a version; the merged
+        # commit alone decides (an unmaterialized version still fails).
         return ""
 
     identity = (
