@@ -10642,7 +10642,9 @@ def render_old_side(
             sources=dict.fromkeys(saved, update_plan.OLD_SOURCE_SNAPSHOT),
             dropped=(),
         )
-        new_data = update_plan.new_side_data(saved, reconstructed, update_data)
+        new_data = update_plan.new_side_data(
+            saved, reconstructed, update_data, settings_schema.HIDDEN_SETTINGS
+        )
         old = reconstructed.with_context(new_data)
         baseline = workdir / "old-baseline"
         render(baseline, old.copier_answers())
@@ -10651,7 +10653,9 @@ def render_old_side(
     reconstructed = update_plan.reconstruct_old_inputs(
         saved, asked, update_plan.trusted_snapshot(provenance)
     )
-    new_data = update_plan.new_side_data(saved, reconstructed, update_data)
+    new_data = update_plan.new_side_data(
+        saved, reconstructed, update_data, settings_schema.HIDDEN_SETTINGS
+    )
     old = reconstructed.with_context(new_data)
     baseline = workdir / "old-baseline"
     try:
@@ -11551,6 +11555,27 @@ def update_conflict_error(conflicts: Sequence[str], detail: str = "") -> str:
     )
 
 
+def candidate_settings(candidate: Path) -> dict[str, object] | None:
+    """Read the schema 2 settings a planned Copier update wrote (#1298).
+
+    Returns None when the candidate has no regular, readable schema 2
+    settings file, for example while an inline conflict is still open.
+    """
+    path = candidate / CONFIG_FILE
+    if path.is_symlink() or not path.is_file():
+        return None
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except OSError, UnicodeDecodeError, yaml.YAMLError:
+        return None
+    if (
+        not isinstance(payload, dict)
+        or settings_schema.SCHEMA_KEY not in payload
+    ):
+        return None
+    return read_copier_answers(path)
+
+
 def plan_update(
     target: Path,
     workdir: Path,
@@ -11641,6 +11666,7 @@ def plan_update(
                 if name in target_files
             )
         ),
+        written_settings=candidate_settings(run_result.candidate),
     )
 
 
@@ -13404,6 +13430,14 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     target_capabilities = dict(preflight)
     current_capabilities.pop("observed_at", None)
     target_capabilities.pop("observed_at", None)
+    # The apply keeps the persistent intent Copier's update wrote, except
+    # the release owner it rewrites from these answers; report exactly that
+    # (Issue #1298).
+    answers = update_plan.written_settings_view(
+        answers,
+        planning.written_settings,
+        set(settings_schema.INTENT_SETTINGS) - {"release_ownership"},
+    )
     answers_changed = answers != current_answers
     capabilities_changed = target_capabilities != current_capabilities
     update_available = bool(status["update_available"]) or any(

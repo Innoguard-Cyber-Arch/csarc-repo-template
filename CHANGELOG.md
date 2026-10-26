@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.45.2] - 2026-10-26
+
+### Bug Fixes
+
+* fix(update): keep saved hidden settings on update (3341bc0)
+
 ## [0.45.1] - 2026-10-26
 
 ### Bug Fixes

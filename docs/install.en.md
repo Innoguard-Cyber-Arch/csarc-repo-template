@@ -163,6 +163,26 @@ The legacy `reviewers` setting and `.github/REVIEWERS` are retired. The Settings
 
 An agent must not accept on the owner's behalf: pass `accept` only after the owner explicitly confirms in this conversation or in the PR, and `pending` otherwise.
 
+### Settings the template never asks (`single_writer_merger`, `github_project_url`)
+
+`copier.yml` never asks `github_project_url`, `release_ownership`, or `single_writer_merger` (`when: false`), so Copier itself does not reuse their saved values on update. The update carries their saved values in `.csarc/config.yml` into the new release: without `--data`, each value stays the same and its Settings row is `unchanged`. The report's `answers` and `answers_changed` read the settings the apply really writes. When an update would remove or change a saved setting, the report lists it and `answers_changed` is not `false` (#1298).
+
+Before this fix, the CLI dropped two keys on update while the report said `answers_changed: false`: `single_writer_merger` disappeared (since v0.41.0), and `github_project_url` became empty (since v0.35.2). Lifecycle then fell back to manual-only, or `csarc issue` stopped updating Project dates. To check, compare `.csarc/config.yml` before and after the latest update pull request.
+
+```bash
+git log -p -- .csarc/config.yml
+```
+
+If a value is missing, restore it on a new branch with the fixed release, through the usual check, finalize, and apply:
+
+```bash
+csarc update . --to <tag> --expected-sha <full-sha> --check --json --data single_writer_merger=<login> --report-dir ../<repo>-csarc-update-report
+csarc update . --to <tag> --expected-sha <full-sha> --finalize-plan --data single_writer_merger=<login> --decision <path>=keep-current --report-dir ../<repo>-csarc-update-report
+csarc update . --apply-plan ../<repo>-csarc-update-report/csarc-update-final-plan.json --yes
+```
+
+For `github_project_url`, pass `--data github_project_url=<url>` instead; pass both when both are missing. Give `--decision` for the conflicts that report lists as usual, and leave it out when there are none. Restoring `single_writer_merger` is a governance relaxation, so its pull request takes the `governance-switch` route (see the [CI policy](ci-policy.md)).
+
 ### README and LICENSE in an existing repo
 
 An existing repo (`project_mode=existing`) owns its README and LICENSE (handbook 5.1 and appendix B.9). The update adds no `README.md`, `README.en.md`, `README.zh-tw.md`, or `LICENSE`, and never rewrites the ones the repo has.
