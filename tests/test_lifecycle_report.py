@@ -155,7 +155,7 @@ def test_adopt_and_update_share_one_closed_schema(tmp_path: Path) -> None:
     for key in ("plan", "target", "release", "product", "verification"):
         assert set(adopt[key]) == set(update[key])  # type: ignore[arg-type]
     assert adopt["report_format_version"] == update["report_format_version"]
-    assert adopt["report_format_version"] == "2.3.0"
+    assert adopt["report_format_version"] == "2.4.0"
     assert adopt["writing_guide"] is update["writing_guide"] is None
     assert update["setup"] is None
     assert adopt["operation"] == "adopt"
@@ -182,7 +182,7 @@ def test_markdown_round_trips_from_report_json_only(
     assert headings(markdown, "##") == list(lifecycle_report.SECTION_HEADINGS)
     title = "adoption" if operation == "adopt" else "update"
     assert markdown.startswith(f"# CSARC {title} report\n")
-    assert "Report format version: `2.3.0`" in markdown
+    assert "Report format version: `2.4.0`" in markdown
     summary_rows = re.findall(r"^\| `([a-z]+)` \| (\d+) \|$", markdown, re.M)
     assert [name for name, _count in summary_rows] == list(
         lifecycle_report.FILE_ACTIONS
@@ -270,7 +270,7 @@ def test_unredacted_secret_fails_closed(tmp_path: Path) -> None:
         (("settings", 0, "class"), "broadened", "unknown value"),
         (("settings", 0, "source"), "guessed", "unknown value"),
         (("target", "working_tree"), "dirty", "unknown value"),
-        (("report_format_version",), "2.4.0", "unsupported version"),
+        (("report_format_version",), "2.5.0", "unsupported version"),
         (("report_format_version",), "1.1.0", "unsupported version"),
         (("operation",), "init", "unknown value"),
     ],
@@ -413,6 +413,21 @@ def test_setup_record_renders_and_fails_closed(tmp_path: Path) -> None:
     update["setup"] = copy.deepcopy(SETUP)
     with pytest.raises(LifecycleReportError, match="only adopt"):
         lifecycle_report.validate_report(update)
+
+
+def test_2_4_0_adds_only_the_self_hosted_work_mode(tmp_path: Path) -> None:
+    """#1272 AC6: 2.4.0 accepts `solo-self-hosted`; 2.3.0 still rejects it."""
+    report = adopt_report(tmp_path)
+    report["setup"] = {**copy.deepcopy(SETUP), "work_mode": "solo-self-hosted"}
+
+    assert lifecycle_report.validate_report(report) is report
+    assert "`solo-self-hosted`" in lifecycle_report.render_markdown(report)
+    older = copy.deepcopy(report)
+    older["report_format_version"] = "2.3.0"
+    with pytest.raises(LifecycleReportError, match="unknown value"):
+        lifecycle_report.validate_report(older)
+    older["setup"] = {**copy.deepcopy(SETUP), "work_mode": "solo-local"}
+    assert lifecycle_report.validate_report(older) is older
 
 
 @pytest.mark.parametrize(
@@ -798,6 +813,7 @@ def test_spec_documents_the_closed_contract() -> None:
         *lifecycle_report.APPROVAL_ROUTE_STATES,
         *lifecycle_report.APPROVAL_CONFIRMATIONS,
         *lifecycle_report.WORK_MODES,
+        lifecycle_report.SELF_HOSTED_WORK_MODE,
         *lifecycle_report.READABLE_REPORT_FORMAT_VERSIONS,
     ):
         assert f"`{value}`" in spec, value

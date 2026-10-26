@@ -32,7 +32,7 @@ SHARED_NAMES = (
 )
 HOSTED_FIXTURES = ("hosted-csarc-owned-python", "consumer-a", "consumer-b")
 # SPEC-011: a self-hosted render ships the local tool too.
-LOCAL_FIXTURES = ("solo-default", "solo-self-hosted", "solo-python")
+LOCAL_FIXTURES = ("solo-default", "solo-local", "solo-python")
 
 
 @pytest.fixture(scope="module")

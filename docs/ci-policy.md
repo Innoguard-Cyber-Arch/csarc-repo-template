@@ -946,7 +946,7 @@ path 與允許事件；只借用可信 run 的 `details_url` 也無法拼接成�
 
 ### 本機與 hosted 驗證模式（#908）
 
-新專案預設 `verification_mode_private: local`；既有 repository 沒有此欄位時維持 `hosted`，避免更新時靜默降低保護。兩種模式共用同一個 `ci_tier.py` router，以及同一組 focused／fast／full 驗證入口；切換模式不增加第二套 runner、matrix 或測試清單。
+#1272 起，新專案的預設改為 private 用 `verification_mode_private: self-hosted`、public 用 `verification_mode_public: hosted`（見下節）；這部分取代 #908 的「新專案預設 `local`」。#908 的其餘內容保留：`local` 模式的行為，以及既有 repository 沒有此欄位時維持 `hosted`，避免更新時靜默降低保護。三種模式共用同一個 `ci_tier.py` router，以及同一組 focused／fast／full 驗證入口；切換模式不增加第二套 runner、matrix 或測試清單。
 
 `local` 模式不產生 `ci.yml`、`pr-policy.yml`、`pr-policy-writes.yml`、`pr-review.yml`、reviewer assignment、spec sync、work-item lifecycle、Pages、OSV、CodeQL、Docker scan、Dependabot auto-merge、release 或 release-drift workflow，required-checks Ruleset 與 Pages policy 也保持 disabled，因此不會建立永遠等不到的 check、在 `main` 重跑完整驗證或製造無意義告警。Issue／PR／Milestone 操作改用既有本機 wrapper；外部協作者若直接在 GitHub UI 修改 metadata，local mode 不會即時自動修正，只能由人工或可選的低頻 governance drift check 發現。repo-local 發版工具仍保留，需要可信 release provenance 或 Pages deployment 時先切換成 `hosted` 再更新模板。fast／full 成功後只做常數時間的 metadata 寫入：已 commit 且 clean 的候選會把 exact head/tree、base、tier、scopes、command、success 與 24 小時 freshness 綁到 Git metadata；尚未建立 commit 或仍有未提交修改時，測試結果維持成功但不產生可合併的證明。`pr_lifecycle.py` 在 merge 前重新讀取 GitHub metadata、review、lease 與這份證明，執行既有 PR policy checker，再使用受控 admin bypass，合併讀回後留下清楚標為 `self-attested-local` 的 trace（#1073）。
 
@@ -954,7 +954,47 @@ hosted 模式仍保留 required `verify`／`title`／`review`。實作中與一�
 
 這份本機證明能防止誤拿舊結果、錯誤 branch／base、測完又改檔或跑錯 tier，但不能防止有寫入權限的人偽造 JSON，也不能證明 GitHub event／權限、第三方服務、實際部署、遠端 runner 或 release provenance。local mode 不把這些項目標成成功；需要這些信任性質時，把生效的 `verification_mode_private` 或 `verification_mode_public` 改成 `hosted`，更新模板並重新套用 repository settings。切換到 hosted 後，下節 #834／#835 的規則完整生效。
 
-- **公開前的 `retire`（ADR D9、#1287）。**`self-hosted` repository 轉成 public 前必須執行 `csarc self-hosted retire`。repository 已是 public，但仍有 self-hosted 設定或 `csarc-verify.yml` 的 run 時，`csarc self-hosted status`、`csarc update`（含報告）與 lifecycle 的 `check`、`merge` 都印出 `WARNING:` 要求執行 `retire`；不改變合併判斷。
+### 三種驗證模式與可見性設定（#1265、#1272）
+
+[self-hosted verification ADR](adr/self-hosted-verification.md) 新增第三種模式 `self-hosted`，並把模式依可見性拆成兩個設定。契約見 [SPEC-011](specs/SPEC-011-verification-mode-settings.md)。
+
+| 模式 | 驗證在哪裡執行 | 合併證據與 `CSARC-Trust` | 合併規則由誰執行 | 可用的可見性 |
+| --- | --- | --- | --- | --- |
+| `self-hosted` | csarc-devops 登記的 VM；操作者以 `workflow_dispatch` 觸發唯讀的 `csarc-verify.yml` | GitHub 記錄的 run 與 job，`self-hosted-registered` | lifecycle 指令，治理與 `local` 相同 | 只有 private |
+| `local` | 操作者自己的電腦 | Git metadata 中的本機證明，`self-attested-local` | lifecycle 指令 | private、public |
+| `hosted` | GitHub-hosted runner | required `verify` check，`github-hosted` | Ruleset（方案支援時）加上 lifecycle | private、public |
+
+| 設定 | 可用值 | 新專案預設 | 何時使用 |
+| --- | --- | --- | --- |
+| `verification_mode_private` | `self-hosted`、`local`、`hosted` | `self-hosted` | repository 是 private 或 internal |
+| `verification_mode_public` | `hosted`、`local` | `hosted` | repository 是 public；設成 `self-hosted` 時設定驗證失敗 |
+
+- **實際模式**依 repository 當下的可見性決定。render 只產生實際模式需要的檔案；合併時 lifecycle 以操作者的登入重新讀取可見性，與已 render 的模式不一致時 fail closed，要求重新 render。
+- **怎麼選。**private repository 預設 `self-hosted`：驗證不耗用本機資源，也不耗用 GitHub-hosted 額度，結果由 GitHub 記錄，比 `local` 的自我證明可信。尚未登記、VM 長期無法使用，或啟用 `container` 時選 `local`；需要 Ruleset 強制合併、Pages 或可信 release provenance 時選 `hosted`。public repository 預設 `hosted`；`local` 只在不需要遠端證據時使用。
+- **切換一律經 PR。**以 `csarc update --data verification_mode_<private|public>=<模式>` 在 governance-switch PR 修改；任何切換到或離開 `self-hosted` 的變更都視為放寬。既有專案不自動切換：`csarc update` 在 private repository 建議改用 `self-hosted` 並列出登記步驟；新專案尚未登記時，`csarc init` 印出 `W22-self-hosted-unregistered` 與同一份步驟。
+
+限制：
+
+- **GitHub Free 的 private repository 沒有 Ruleset。**rules API 回應方案不支援（#1210），所以 `local` 與 `self-hosted` 的合併規則只由 lifecycle 指令執行，不由 GitHub 強制。有寫入權限的人仍可以在 GitHub UI 直接合併；這種合併沒有 trailer，merge trace 稽核把它列為 `untraced`。
+- **`self-hosted` 在窗外一律 fail closed。**沒有登記、沒有窗口或證據不符時拒絕合併，不改用 `local` 或 `hosted` 的證據。唯一的例外是只改模式設定、方向是離開 `self-hosted` 的 governance-switch PR，它以 `local` 的本機證明合併（SPEC-011 §7）。
+- **登記撤銷不讓已完成的證據失效。**模板不讀取 csarc-devops；撤銷前完成的 VM 證據仍依 24 小時期限有效。
+- **`container: true` 不能搭配 `self-hosted`。**VM 的 job 容器不提供 Docker daemon，設定階段直接拒絕（#1281，SPEC-011 §9）；csarc-devops 確認 job 內隔離的 Docker daemon 可行後，以後續 Issue 解除。
+
+### Self-hosted 導入與登記指南（#1272）
+
+下游 repository 依下列順序導入。模板不替下游修改設定，也不讀取 csarc-devops；登記是否有效由 VM 依允許清單強制（ADR D7）。
+
+1. **確認條件。**repository 是 private，`container` 沒有啟用，而且有一位 repository 管理員負責開窗。public repository 不能使用 `self-hosted`。
+2. **開雙邊 Issue。**在下游 repository 與 csarc-devops 各開一張 Issue，互相引用完整 URL。csarc-devops 的 Issue 列出 repository 全名、VM ID、環境（`dev`、`uat`；不使用 Milestone 的 repository 可以只登記 `uat`）與觸發者允許清單。
+3. **雙方核准。**兩邊各自依自己的規則核准，這是人工流程：下游沿用 Milestone tracker 或 standalone Issue 的核准，csarc-devops 由它的核准者決定。
+4. **觸發者允許清單。**清單列出可以觸發 `csarc-verify.yml` 的 GitHub 帳號，只存在 VM 端，不寫進 repository。VM 的 job-started hook 拒絕 `actor` 或 `triggering_actor` 不在清單上的 job，所以清單外的寫入者即使能推分支，也不能在 VM 上執行程式碼。修改清單要再走一次雙邊 Issue。
+5. **登記 PR。**csarc-devops 更新允許清單後，下游以 governance-switch PR 執行 `csarc update --data verification_mode_private=self-hosted --data 'self_hosted_runner={id: <vm-id>, registration: <csarc-devops Issue URL>}'`。lifecycle 只檢查 `registration` 指向 csarc-devops 的 Issue，不讀取它的內容。新專案已是 `self-hosted`，只需要設定 `self_hosted_runner`。
+6. **縮短 log 保存期限。**管理員把 repository 的 Actions log 保存期限設為 7 天。repository 轉成 public 後，過去的 job log 會一起公開。
+7. **開窗與延長。**`csarc self-hosted open --env dev|uat` 先印出唯讀盤點，加 `--apply` 才以管理員自己的 `gh` 登入取得一小時內有效的註冊 token 交給 VM，開啟 24 小時窗口。`csarc self-hosted status` 顯示剩餘時間；剩不到 2 小時會印出 `WARNING:`，這時以 `csarc self-hosted extend --env <環境> --apply` 把結束時間改為現在＋24 小時，不累加、不註冊第二個 runner。`close` 提前關窗。
+8. **驗證。**`csarc self-hosted verify --pr <N> --apply` 在 PR 的目標分支觸發 `csarc-verify.yml`：進 `dev/m*`、`dev/i*` 的 PR 用 `dev`，進 `main` 的 PR 用 `uat`。外部 fork 的 PR、public repository、沒有窗口或剩不到 30 分鐘時拒絕派工。之後照常以 `pr_lifecycle.py merge` 合併。
+9. **90 天到期。**連續 90 天沒有開窗，VM 從允許清單移除這個 repository 並刪除它的快取與資料；之後 `open` 回應 registration expired，要從第 2 步重新登記。
+10. **公開前必須 `retire`。**repository 要轉成 public 之前，先執行 `csarc self-hosted retire` 檢視盤點，再加 `--apply` 刪除 `csarc-verify.yml` 的 run、artifact、Actions cache 與 runner，並建立把模式改離 `self-hosted` 的 governance-switch draft PR。合併這張 PR 之後才改變可見性。沒有先 `retire` 就公開時，VM 會停止 runner 並刪除資料，合併時 VM 證據失效；repository 已是 public，但 `verification_mode_private` 仍是 `self-hosted` 或仍有 `csarc-verify.yml` 的 run 時，`csarc self-hosted status`、`csarc update`（含報告）與 lifecycle 的 `check`、`merge` 都印出 `WARNING:` 要求執行 `retire`，這個警告不改變合併判斷（ADR D9、#1287）。已公開的 log 無法收回。
+11. **退出。**不再使用 `self-hosted` 時，以 governance-switch PR 改離 `self-hosted`，並在 csarc-devops 的 Issue 通知對方更新允許清單；只需要下游核准。
 
 ### `verify` 的可信 hosted execution evidence（#834）
 

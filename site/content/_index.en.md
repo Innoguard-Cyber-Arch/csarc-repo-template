@@ -31,7 +31,7 @@ fit = "Fit"
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">4 language modules</span>
           <span class="package-badge">Continuously updatable template</span>
-          <span class="package-badge muted">v0.46.0-beta.1</span><!-- x-release-please-version -->
+          <span class="package-badge muted">v0.47.0-beta.1</span><!-- x-release-please-version -->
           <span class="package-badge muted">Site template v[[site_template_version]]</span>
           <span class="package-badge muted">Render engine v[[site_engine_version]]</span>
         </div>
@@ -67,7 +67,7 @@ fit = "Fit"
 {{< basic >}}
 <!-- csarc-readme-preamble-tagline:start -->Cyber-Arch's updatable repository foundation: creating a new project, adopting an existing one, and receiving policy updates all preview and verify before a PR merges them. Use the common workflow alone, or opt into Python, Rust, TypeScript, and Go independently.<!-- csarc-readme-preamble-tagline:end --> Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. Files, scripts, and GitHub Actions stay in Maintenance mode. The <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repository README</a> is a compact entry point. It keeps public facts aligned but can use different wording. This repository and its GitHub Pages repo-site are publicly readable. `noindex`/`robots.txt` do not restrict reading or sharing.
 
-<p class="template-version"><strong>Template release:</strong> v0.46.0-beta.1<!-- x-release-please-version --></p>
+<p class="template-version"><strong>Template release:</strong> v0.47.0-beta.1<!-- x-release-please-version --></p>
 
 | Item | Current state |
 | --- | --- |
@@ -760,7 +760,7 @@ Evidence enables a capability, not a predefined maturity label or calendar date.
 | Layer | `.csarc/config.yml` key | Default / allowed values | Generated or checked at |
 | --- | --- | --- | --- |
 | Governance intent | `governance_mode`, `lifecycle` | `managed`/`observe`; `issues`/`milestones` | repository policy and work-item side effects |
-| Verification trust | `verification_mode_private`/`verification_mode_public` | new projects default to `local`; `hosted` is optional | local self-attestation plus audited bypass with no hosted CI, PR governance, Pages, or release workflow; or trusted GitHub-hosted checks |
+| Verification trust | `verification_mode_private`/`verification_mode_public` | new projects default to `self-hosted` when private and `hosted` when public; `local` is optional | self-hosted verifies on a VM that csarc-devops registers, and nothing merges before registration; local self-attestation plus audited bypass; neither generates hosted CI, PR governance, Pages, or release workflows; or trusted GitHub-hosted checks |
 | Review intent | `admin_bypass`, `copilot_review` | admin bypass defaults to `always` for new projects, with `beta-only`/`off` available; Copilot is `allowed`/`off` | exact-head `review` gate; unavailable Copilot falls back to peer approval or configured admin authorization |
 | Release intent | `release_ownership`, `release_trigger`, `project_maturity` | three ownership modes; trigger is `main`/`manual`; maturity defaults to early | public beta/stable channels, one fixed Conventional Commits algorithm, and candidate triggering |
 | Documentation | `documentation_mode` | `template-and-content`/`content-only`/`off` | separates the presentation template from project-owned content; Pages requires hosted plus the full template and runs only for `docs/**` or manual dispatch |

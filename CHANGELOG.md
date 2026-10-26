@@ -7,6 +7,19 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.47.0-beta.1] - 2026-10-26
+
+### Features
+
+* feat(settings): refuse container with self-hosted verification (ba888dd)
+* feat(settings): default new private projects to self-hosted verification (f316cf7)
+* feat(dependabot): accept reverified squashes in sync and release (b47da5f)
+* feat(self-hosted): warn about retire in update and lifecycle (9f26cca)
+
+### Bug Fixes
+
+* fix(dependabot): reverify behind updates on the latest main (a8d5acd)
+
 ## [0.46.0-beta.1] - 2026-10-25
 
 ### Features

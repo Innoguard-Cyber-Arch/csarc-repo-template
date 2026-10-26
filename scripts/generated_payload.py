@@ -45,7 +45,7 @@ HOSTED: dict[str, object] = {
     "verification_mode_private": "hosted",
     "verification_mode_public": "hosted",
 }
-# `solo-local` as #1058 decision 14 expands it for an empty folder.
+# The `solo-local` preset as #1058 decision 14 expands it for an empty folder.
 SOLO_LOCAL: dict[str, object] = {
     "verification_mode_private": "local",
     "verification_mode_public": "local",
@@ -55,8 +55,9 @@ SOLO_LOCAL: dict[str, object] = {
     "scheduled_checks": [],
     "languages": [],
 }
-# SPEC-011 (ADR self-hosted-verification Q2): a private self-hosted render
-# shares the solo budgets; #1272 makes it the default and renames fixtures.
+# SPEC-011 (ADR self-hosted-verification Q2): `solo-default` measures the
+# `solo-self-hosted` default preset (#1272); `solo-local` keeps the former
+# local default on the same budgets.
 SOLO_SELF_HOSTED: dict[str, object] = {
     **SOLO_LOCAL,
     "verification_mode_private": "self-hosted",
@@ -71,8 +72,8 @@ ADOPTED_HOSTED: dict[str, object] = {
     "languages": ["python"],
 }
 FIXTURES: dict[str, dict[str, object]] = {
-    "solo-default": dict(SOLO_LOCAL),
-    "solo-self-hosted": dict(SOLO_SELF_HOSTED),
+    "solo-default": dict(SOLO_SELF_HOSTED),
+    "solo-local": dict(SOLO_LOCAL),
     "solo-python": {**SOLO_LOCAL, "languages": ["python"]},
     "hosted-csarc-owned-python": {
         **HOSTED,
@@ -96,7 +97,7 @@ FIXTURES: dict[str, dict[str, object]] = {
 CONVERSION_REF = "cd0b69d"
 RAW_TARGETS: dict[str, int] = {
     "solo-default": 1_000_000,
-    "solo-self-hosted": 1_000_000,
+    "solo-local": 1_000_000,
     "solo-python": 1_010_000,
     "hosted-csarc-owned-python": 1_200_000,
     "consumer-a": 1_050_000,
@@ -104,7 +105,7 @@ RAW_TARGETS: dict[str, int] = {
 }
 CONVERSION_OFFSETS: dict[str, int] = {
     "solo-default": 215_456,
-    "solo-self-hosted": 215_456,
+    "solo-local": 215_456,
     "solo-python": 215_476,
     "hosted-csarc-owned-python": 278_881,
     "consumer-a": 229_124,
@@ -121,7 +122,7 @@ TARGETS: dict[str, dict[str, int]] = {
         "pull_request_target_workflows": 0,
         "agent_doc_tokens": 14_000,
     },
-    "solo-self-hosted": {
+    "solo-local": {
         "files": 92,
         "canonical_bytes": 784_000,
         "write_workflows": 0,

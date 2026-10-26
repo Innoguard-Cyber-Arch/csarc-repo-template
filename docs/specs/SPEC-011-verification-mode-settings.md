@@ -15,8 +15,8 @@ tracking: none
 ## Outcome
 
 - 兩個模式設定取代 `verification_mode`：private 時用 `verification_mode_private`，public 時用 `verification_mode_public`。
-- 新專案的 private 預設仍是 `local`，public 預設為 `hosted`；既有專案依原值遷移，行為不變。
-- `self-hosted` 目前只由 reader、schema 與 migration 接受，還不在 Copier 問題與 `csarc init` 的選項中提供；開放與預設切換由 #1272 處理（擁有者 2026-10-25）。
+- 新專案的 private 預設是 `self-hosted`，public 預設為 `hosted`（#1272，擁有者 2026-10-25 決定 8）；既有專案依原值遷移，行為不變，也不自動切換。
+- Copier 問題與 `csarc init` 都提供 `self-hosted`；尚未登記時，`csarc init` 印出登記步驟，`csarc update` 在 private repository 建議改用（#1272）。
 - 「尚未登記」是合法狀態；任何不完整或不合法的設定都 fail closed。
 - render 只產生當下實際模式需要的檔案；實際模式與已 render 的檔案不一致時 fail closed。
 
@@ -24,7 +24,7 @@ tracking: none
 
 | 設定 | kind | 可用值 | 新專案預設 | 規則 |
 | --- | --- | --- | --- | --- |
-| `verification_mode_private` | `choice` | `self-hosted`、`hosted`、`local` | `local` | repository 是 private 或 internal 時使用；`self-hosted` 尚未提供為選項 |
+| `verification_mode_private` | `choice` | `self-hosted`、`hosted`、`local` | `self-hosted` | repository 是 private 或 internal 時使用 |
 | `verification_mode_public` | `choice` | `hosted`、`local` | `hosted` | repository 是 public 時使用；`self-hosted` 被拒絕 |
 | `self_hosted_runner` | `map` | `{}`，或 `id` 與 `registration` 兩個鍵 | `{}` | 只在 `verification_mode_private: self-hosted` 時保存 |
 | `self_hosted_environments` | `multi` | `dev`、`uat` 的非空子集合 | `[dev, uat]` | 只在 `verification_mode_private: self-hosted` 時保存 |
@@ -32,7 +32,7 @@ tracking: none
 - `self_hosted_runner: {}` 表示尚未登記，設定驗證接受。登記後 `id` 是 VM ID（小寫英數字與 `-`，1 到 32 字元，第一個字元不是 `-`），`registration` 是 csarc-devops 登記 Issue 的完整 URL：`https://github.com/<owner>/csarc-devops/issues/<n>`。只有其中一個鍵、多出其他鍵，或格式不符，都 fail closed。
 - private 模式不是 `self-hosted` 時，兩個 `self_hosted_*` 鍵都不保存；出現就 fail closed。private 模式是 `self-hosted` 時，兩個鍵都必須存在。
 - 兩個 `self_hosted_*` 鍵都不提問，以 `--data` 設定。模板不讀取 csarc-devops；`registration` 只檢查格式（ADR Q5）。
-- `copier.yml` 的 `self-hosted` 選項帶 choice validator：只有答案本來就是 `self-hosted`（已保存或以 `--data` 傳入）時才可用，新的互動回答不能選它。
+- `copier.yml` 的 `verification_mode_private` 依序提供 `self-hosted`、`local`、`hosted`，沒有已保存的 `verification_mode` 時預設 `self-hosted`（#1272；之前的 beta 以 choice validator 停用這個選項）。
 - `copier.yml` 的 `verification_mode` 改為 render 時算出的變數（`render-derived`，不保存）：public 時等於 `verification_mode_public`，其他可見性等於 `verification_mode_private`。以 `--data` 傳入不一致的值時，render 失敗。
 
 ## 2. 實際模式
@@ -54,7 +54,7 @@ tracking: none
 - 依 #1069 決定 8，trusted base 的 reader 先支援新 schema，writer 才切換。reader（`csarc_config.py`、`settings_schema.py`）接受單獨出現的舊鍵 `verification_mode`（`local` 或 `hosted`），並讀成兩個可見性的同一個模式；舊鍵與任一新鍵同時出現時 fail closed。
 - `csarc update` 在目標 repository 的 reader 還不認識 `verification_mode_private` 時，仍寫入舊鍵；下一次 update 由新 reader 判斷，才寫入兩個新設定。這次 update 若要改變模式（兩個值不同，或包含 `self-hosted`），指令在寫入前停止，要求先合併這次 update。
 - `--data verification_mode=...` 被拒絕，訊息列出兩個新設定。
-- 既有專案不自動切換到 `self-hosted`。`csarc update` 的改用建議由 #1272 加入。
+- 既有專案不自動切換到 `self-hosted`。`csarc update` 在 private 或 internal repository、`verification_mode_private` 是 `local` 或 `hosted`、沒有以 `--data` 指定它、而且 `container` 沒有啟用時，印出一行 `Recommendation:`：說明新專案的預設、這次 update 保留已存的模式，並列出登記步驟（雙邊 Issue、雙方核准、在 governance-switch PR 設定 `verification_mode_private` 與 `self_hosted_runner`）。
 
 ## 5. 治理
 
@@ -65,8 +65,8 @@ tracking: none
 
 ## 6. CLI
 
-- 工作模式的 preset 改寫兩個模式設定（`solo-local` 兩者都是 `local`；`solo-hosted`、`team` 兩者都是 `hosted`），預設仍是 `solo-local`。`custom` 各問一題，private 只能選 `local` 或 `hosted`。
-- 沒有 preset 或問題提供 `self-hosted`；`csarc init` 的登記指引由 #1272 加入。設定已是 `self-hosted` 而尚未登記時，合併被拒絕的訊息列出登記步驟（§2）。
+- 工作模式的 preset 改寫兩個模式設定：預設的 `solo-self-hosted` 是 `self-hosted`／`hosted`（#1272），`solo-local` 兩者都是 `local`，`solo-hosted`、`team` 兩者都是 `hosted`。`custom` 各問一題，private 可以選 `self-hosted`、`local` 或 `hosted`（建議 `self-hosted`），public 只能選 `hosted` 或 `local`。
+- 實際模式是 `self-hosted` 而 `self_hosted_runner` 是空的時，`csarc init` 與 `csarc adopt` 的 plan 印出設定警告 `W22-self-hosted-unregistered`（SPEC-009），列出登記步驟。設定已是 `self-hosted` 而尚未登記時，合併被拒絕的訊息也列出登記步驟（§2）。
 
 ## 7. VM 驗證與證據（#1269）
 
@@ -156,14 +156,16 @@ tracking: none
 - [x] 登記 PR 的盤點與 `registration` 格式檢查如 §5（#1270）。
 - [x] 窗口指令、交付管道與工具鏈 image 契約如 §8（#1271）。
 - [x] `container` 加上 self-hosted 的限制與解除條件如 §9（#1281）。
+- [x] 新專案預設切換為 `self-hosted`、Copier 與 `csarc init` 提供這個選項、`W22` 登記指引與 `csarc update` 的改用建議如 §1、§4、§6（#1272）。
 
 ## Out of scope
 
-文件與手冊（#1272）。窗口指令（#1271）見 §8；交付管道本身、VM、hook 與 image 的建置由 csarc-devops 負責。
+文件、登記指引與手冊由 `docs/ci-policy.md` 與手冊負責（#1272）。窗口指令（#1271）見 §8；交付管道本身、VM、hook 與 image 的建置由 csarc-devops 負責。
 
 ## Verification
 
 - root 與 template 的回歸測試涵蓋三種模式與兩種可見性、migration 不改變行為、public 設成 `self-hosted` 被拒絕，以及合併時的模式判斷。
-- payload：`solo-default` 維持量測 `local` 預設；另加 `solo-self-hosted` fixture，沿用同一組預算（ADR Q2）。#1272 切換預設時再調整 fixture 名稱。
+- payload：`solo-default` 量測 `solo-self-hosted` 預設（#1272）；`solo-local` fixture 量測原本的 `local` 預設，沿用同一組預算（ADR Q2）。
+- #1272：`tests/test_verification_mode_settings.py` 涵蓋 Copier 與 `csarc init` 的新預設、payload fixture 與 `csarc update` 的改用建議；`tests/test_setup_questions.py` 涵蓋 `W22`。
 - §8：`tests/test_self_hosted_window.py` 以 GitHub 與交付管道的 stub 涵蓋每個指令的盤點與拒絕路徑、沒有 `--apply` 時不改變任何東西、沒有管道時 fail closed、`extend` 不取得 token 也不註冊第二個 runner、預期之外的 runner 被全部移除、token 不出現在命令列、輸出與檔案，以及工具鏈清單與語言 profile 一致。
 - §9：`tests/test_verification_mode_settings.py` 的 container 測試涵蓋 root 與 template：self-hosted 加上 `container` 在 reader、CLI 寫入、lifecycle 與 Copier validator 都被拒絕；`hosted`、`local` 與每個 public 模式加上 `container` 不受影響。

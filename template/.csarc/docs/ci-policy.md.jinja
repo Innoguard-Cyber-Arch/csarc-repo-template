@@ -91,19 +91,39 @@ GitHub UI 合併與 `gh pr merge --admin` 不是合法 route，沒有 trailer；
 
 ## 本機與 hosted 驗證模式
 
+模式依可見性分兩個設定：private 用 `verification_mode_private`（`self-hosted`、`local`、`hosted`），public 用 `verification_mode_public`（`hosted`、`local`）。`self-hosted` 在 csarc-devops 登記的 VM 上驗證，只限 private；`local` 在操作者電腦上自我證明；`hosted` 由 GitHub-hosted runner 驗證。GitHub Free 的 private repository 沒有 Ruleset，`local` 與 `self-hosted` 的合併規則只由 lifecycle 執行，在 GitHub UI 直接合併記為 `untraced`。改模式以 `csarc update --data` 走 governance-switch PR。
+
 {% if hosted -%}
 本專案使用 `hosted`。required `verify` 由 `ci.yml` 以 `pull_request_target` 啟動：先從 trusted base 準備 router 與 verifier，再對 exact candidate 執行一次 fast 或 full，證據綁定 repository、head／tree、base、tier、scopes、command、toolchain、runner 與結果，預設 24 小時內有效。Draft 活動在 runner 前略過；`ready_for_review` 與之後的新 head 都重新判斷。`title` 由 `pr-policy.yml` 驗證 Issue、route、label、Milestone 與 checklist，`review` 由 `pr-review.yml` 發布。reviewer assignment 由 `governance-comment.yml` 處理。
 
 實作中只跑 focused checks；`./.csarc/scripts/verify-fast` 是可選診斷，不因 trusted plan 選到 full 就在本機重跑。`./.csarc/scripts/check-trusted-verification <head-sha> --github-repo <owner/repo>` 讀回 hosted 證據。Workflow YAML 只負責事件、權限與呼叫；所有第三方 Actions 固定在完整 commit SHA。
 {%- elif verification_mode == 'self-hosted' -%}
-本專案使用 `self-hosted`，治理與 `local` 相同：不產生 hosted workflow，required-checks Ruleset 保持停用。合併證據來自登記的 VM：操作者在 PR 的目標分支以 `workflow_dispatch` 觸發唯讀的 `csarc-verify.yml`，`pr_lifecycle.py merge` 讀回 GitHub 記錄的執行，綁定 exact head／tree、runner、環境與 24 小時期限，合併後留下 `self-hosted-registered` trace。本機 `./.csarc/scripts/verify-fast` 只是自我證明，只有離開 self-hosted 的 governance-switch PR 能以它合併。轉成 public 前先執行 `csarc self-hosted retire`；沒執行就公開時，`status`、`csarc update` 與 lifecycle 都會印出 `WARNING:`。
+本專案使用 `self-hosted`，治理與 `local` 相同：不產生 hosted workflow，required-checks Ruleset 保持停用。合併證據來自登記的 VM：操作者在 PR 的目標分支以 `workflow_dispatch` 觸發唯讀的 `csarc-verify.yml`，`pr_lifecycle.py merge` 讀回 GitHub 記錄的執行，綁定 exact head／tree、runner、環境與 24 小時期限，合併後留下 `self-hosted-registered` trace。本機 `./.csarc/scripts/verify-fast` 只是自我證明，只有離開 self-hosted 的 governance-switch PR 能以它合併。
 {%- else -%}
 本專案使用 `local`，因此不產生 `ci.yml`、`pr-policy.yml`、`pr-review.yml`、reviewer assignment 或 Dependabot 自動合併 workflow，required-checks Ruleset 保持停用。候選 commit 乾淨後執行一次 `./.csarc/scripts/verify-fast`；成功時把 head／tree、base、tier、scopes、command 與結果寫進 Git metadata，24 小時內有效。尚未 commit 或仍有未提交修改時，測試照常回報，但不產生可合併的證據。`pr_lifecycle.py merge` 在合併前重讀 GitHub metadata、review、lease 與這份證據，從 trusted base 執行 PR policy，合併讀回後留下 `self-attested-local` trace。
 
 這份證據能防止拿錯舊結果、錯 branch 或測完又改檔，但不能防止有寫入權限的人偽造，也不能證明 GitHub event、權限、遠端 runner 或 release provenance。外部協作者在 GitHub UI 改的 metadata 不會即時修正。需要這些保證時，以 `csarc update --data verification_mode_{{ 'public' if project_visibility == 'public' else 'private' }}=hosted` 切換並重新套用 repository settings。
 {%- endif %}
 
-合併與驗證在兩種模式都只依 trusted base 的政策決定：gate、router、設定 reader 與 PR policy 都取自 base，candidate 只是被驗證的 exact head；candidate 自己的 gate 只做不影響結果的自我測試。
+合併與驗證在每種模式都只依 trusted base 的政策決定：gate、router、設定 reader 與 PR policy 都取自 base，candidate 只是被驗證的 exact head；candidate 自己的 gate 只做不影響結果的自我測試。
+{%- if verification_mode == 'self-hosted' %}
+
+### Self-hosted 登記與使用
+
+登記完成前 PR 都不能合併。登記一次：
+
+1. 在本 repository 與 csarc-devops 各開一張 Issue，互相連結完整 URL，雙方各自核准（人工流程）。csarc-devops 的 Issue 列出 VM、環境（`dev`、`uat`）與觸發者允許清單，也就是可以觸發 `csarc-verify.yml` 的 GitHub 帳號；清單存在 VM 端，清單外的帳號觸發的 job 不會在 VM 上執行。
+2. csarc-devops 更新允許清單後，在 governance-switch PR 執行 `csarc update --data 'self_hosted_runner={id: <vm-id>, registration: <csarc-devops Issue URL>}'`。lifecycle 只檢查 URL 格式，不讀取 csarc-devops。
+3. 管理員把 repository 的 Actions log 保存期限設為 7 天：repository 公開後，過去的 log 也會公開。
+
+每次使用時，所有指令都先印出唯讀盤點，加 `--apply` 才動作：
+
+- `csarc self-hosted open --env dev|uat` 以管理員自己的登入開 24 小時窗口。`dev` 驗證進 `dev/m*`、`dev/i*` 的 PR，`uat` 驗證進 `main` 的 PR。
+- `csarc self-hosted verify --pr <N>` 在 PR 的目標分支觸發 `csarc-verify.yml`；外部 fork 的 PR 一律拒絕。
+- `csarc self-hosted status` 顯示剩餘時間。剩不到 2 小時以 `extend` 延長為現在＋24 小時；剩不到 30 分鐘 `verify` 不再派工。`close` 提前關窗。
+
+限制：連續 90 天沒有開窗，VM 端的登記就到期，要重新登記。轉成 public 之前必須先執行 `csarc self-hosted retire`，確認盤點後加 `--apply`，合併它建立的 PR 後才改可見性；沒執行就公開時，`status`、`csarc update` 與 lifecycle 都會印出 `WARNING:`。`container: true` 不能搭配 `self-hosted`（VM 不提供 Docker daemon），請改用 `local` 或 `hosted`。
+{%- endif %}
 
 ## 驗證分級
 
