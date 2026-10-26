@@ -10,6 +10,7 @@ for the live visibility. Root and generated readers are checked alike.
 from __future__ import annotations
 
 import json
+import re
 import runpy
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -592,3 +593,54 @@ def test_payload_fixtures_keep_the_default_and_add_self_hosted() -> None:
         },
         sort_keys=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Container gate (#1281): the VM gives jobs no Docker daemon yet (ADR D8).
+# ---------------------------------------------------------------------------
+
+GATE = "container needs Docker.*D8.*local or hosted"
+
+
+@pytest.mark.parametrize("name", READERS)
+@pytest.mark.parametrize("runner", ["", RUNNER_TEXT])
+def test_container_with_self_hosted_fails_closed(
+    name: str, runner: str, tmp_path: Path
+) -> None:
+    """#1281 AC2/R2: readers, the CLI writer, and lifecycle all refuse."""
+    text = config(extra=runner, container=True)
+    with pytest.raises(ValueError, match=GATE):
+        load(name, text, tmp_path)
+    with pytest.raises(settings_schema.SettingsSchemaError, match=GATE):
+        settings_schema.config_text(yaml.safe_load(text))
+    function = lifecycle(name, tmp_path / "repo", text, "self-hosted")
+    with pytest.raises(ValueError, match=GATE):
+        function(Visibility(True), "acme/product")
+
+
+@pytest.mark.parametrize("name", READERS)
+@pytest.mark.parametrize(("private", "public"), MODES[2:])
+def test_container_without_self_hosted_is_unaffected(
+    name: str, private: str, public: str, tmp_path: Path
+) -> None:
+    """#1281 AC2/AC3: hosted, local, and every public mode keep container."""
+    text = config(private, public, container=True)
+    assert load(name, text, tmp_path)["container"] is True
+    settings_schema.validate_current(yaml.safe_load(text))
+    for is_private in (True, False):
+        mode = private if is_private else public
+        root = tmp_path / f"{mode}-{is_private}"
+        function = lifecycle(name, root, text, mode)
+        assert function(Visibility(is_private), "acme/product") == mode
+
+
+def test_copier_refuses_container_for_self_hosted() -> None:
+    """#1281 AC2: 'csarc init' and 'csarc update' render through Copier."""
+    gate = ENV.from_string(COPIER["container"]["validator"])
+    for private in ("self-hosted", "hosted", "local"):
+        for container in (True, False):
+            message = gate.render(
+                {"container": container, "verification_mode_private": private}
+            )
+            refused = container and private == "self-hosted"
+            assert bool(re.search(GATE, message)) is refused
