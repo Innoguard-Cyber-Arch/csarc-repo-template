@@ -897,8 +897,11 @@ def rules(
 
 
 @pytest.mark.large
-def test_new_project_defaults_to_local_verification(tmp_path: Path) -> None:
-    """A new project avoids hosted validation and uses the E1 fallback.
+def test_new_project_defaults_to_self_hosted_verification(tmp_path: Path) -> None:
+    """A new private project avoids hosted validation and uses the E1 fallback.
+
+    #1272: the private default is self-hosted, which renders the local
+    governance shape (no hosted workflows).
 
     #1058 decisions 1, 4, and 5: the new-project default is
     `admin_bypass: always`, so a local project renders the E1 shape (zero
@@ -909,7 +912,7 @@ def test_new_project_defaults_to_local_verification(tmp_path: Path) -> None:
     assert "copilot_review: allowed" in config
     assert "admin_bypass: always" in config
     # SPEC-011: the private mode setting replaces verification_mode.
-    assert "verification_mode_private: local" in config
+    assert "verification_mode_private: self-hosted" in config
     generated = rules(project)
     assert generated["copilot_code_review"]["review_on_push"] is True
     assert generated["pull_request"]["required_approving_review_count"] == 0
