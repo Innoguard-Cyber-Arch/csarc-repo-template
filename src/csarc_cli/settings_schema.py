@@ -100,6 +100,16 @@ OPTIONAL_DEFAULTS: dict[str, object] = {
     "github_project_url": "",
     "single_writer_merger": "",
 }
+# Issue #1298: saved intent whose Copier question is `when: false`. Copier
+# drops the last answer of such a question on update and renders its
+# default, so `csarc update` forwards each saved value as update data.
+# The only other `when: false` questions are RENDER_KEYS, recomputed from
+# documentation_languages on every render and never saved.
+HIDDEN_SETTINGS = (
+    "github_project_url",
+    "release_ownership",
+    "single_writer_merger",
+)
 # K2 (#1080): only the full organization or user ProjectV2 URL is saved;
 # project, field, and item IDs are always resolved live.
 PROJECT_URL = re.compile(

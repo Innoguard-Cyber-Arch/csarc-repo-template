@@ -165,6 +165,26 @@ csarc update . --apply-plan ../<repo>-csarc-update-report-2/csarc-update-final-p
 
 agent 不能代為接受：只有擁有者在這次對話或 PR 明確確認後才帶 `accept`，其他情況帶 `pending`。
 
+### 模板不提問的設定（`single_writer_merger`、`github_project_url`）
+
+`github_project_url`、`release_ownership` 與 `single_writer_merger` 在 `copier.yml` 不提問（`when: false`），Copier 更新時不會沿用它們的已存值。update 會把 `.csarc/config.yml` 已存的值帶進新版本：沒有 `--data` 時，更新前後的值相同，報告 Settings 這幾列是 `unchanged`。報告的 `answers` 與 `answers_changed` 讀的是 apply 實際寫入的設定，某個已存設定會被移除或改變時，報告會列出，`answers_changed` 不會是 `false`（#1298）。
+
+這個修正之前的 CLI 更新時會漏掉兩個鍵，報告卻寫 `answers_changed: false`：`single_writer_merger` 整個消失（v0.41.0 起），`github_project_url` 變成空值（v0.35.2 起）。lifecycle 因此改回 manual-only，或 `csarc issue` 不再更新 Project 日期。檢查方式：比對最近一次 update PR 前後的 `.csarc/config.yml`。
+
+```bash
+git log -p --follow -- .csarc/config.yml
+```
+
+少了原本的值時，在新的分支用修正後的版本補回，照一般流程 check、finalize、apply：
+
+```bash
+csarc update . --to <tag> --expected-sha <full-sha> --check --json --data single_writer_merger=<login> --report-dir ../<repo>-csarc-update-report
+csarc update . --to <tag> --expected-sha <full-sha> --finalize-plan --data single_writer_merger=<login> --report-dir ../<repo>-csarc-update-report
+csarc update . --apply-plan ../<repo>-csarc-update-report/csarc-update-final-plan.json --yes
+```
+
+`github_project_url` 換成 `--data github_project_url=<url>`；兩者都漏掉時兩個 `--data` 一起帶。加回 `single_writer_merger` 屬於 governance relaxation，PR 要走 `governance-switch` route（見 [CI 政策](ci-policy.md)）。
+
 ### 既有 repo 的 README 與 LICENSE
 
 既有 repo（`project_mode=existing`）的 README 與 LICENSE 屬於產品（手冊 5.1、附錄 B.9）。update 不新增 `README.md`、`README.en.md`、`README.zh-tw.md` 或 `LICENSE`，也不改寫已有的這些檔案。
