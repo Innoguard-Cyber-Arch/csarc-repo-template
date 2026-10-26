@@ -12,7 +12,7 @@ import pytest
 import settings_support
 import yaml
 
-from csarc_cli import update_plan
+from csarc_cli import settings_schema, update_plan
 from csarc_cli.cli import main as cli_main
 
 
@@ -128,6 +128,13 @@ def test_new_side_keeps_dropped_intent_and_reviewed_data_wins() -> None:
     assert update_plan.new_side_data(
         saved, old, {"verification_mode": "hosted", "lifecycle": []}
     ) == {"lifecycle": [], "verification_mode": "hosted"}
+
+
+def test_self_hosted_settings_are_forwarded_when_copier_hides_them() -> None:
+    """#1304 AC2: a stable-to-beta update keeps the VM registration."""
+    assert {"self_hosted_runner", "self_hosted_environments"} <= set(
+        settings_schema.HIDDEN_SETTINGS
+    )
 
 
 def test_unstable_old_question_set_fails_closed() -> None:
