@@ -773,7 +773,7 @@ Evidence enables a capability, not a predefined maturity label or calendar date.
 | One-time seed (not saved) | `project_description` | required one-sentence purpose; rejects placeholder text | written to the README and managed site data as the repo-site's introduction paragraph |
 | Project choice | `languages` | zero or more of `python`, `rust`, `typescript` | repo-site's stated-languages line |
 | Live fact and derived value (not saved) | `repository_url`, `project_slug` | `repository_url` is read from the GitHub origin/`GH_REPO` every time, and an explicit value binds one plan only; `project_slug` is derived from the repository name | repo-site's clone instructions |
-| Project choice | `scheduled_checks` | `governance-drift` by default; add `template-update` or clear the list | `governance-drift` generates the daily `governance-drift.yml` and drift checker; `template-update` generates the weekly notification |
+| Project choice | `scheduled_checks` | `governance-drift` by default; add `template-update` or clear the list | `governance-drift` generates the weekly `governance-drift.yml` and drift checker; `template-update` generates the weekly notification |
 
 The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier `_src_path` and `_commit` metadata. Plan, billing, Copilot entitlement, token permissions, and Pages availability are live `allowed`/`blocked`/`unknown` observations, not settings. Low-frequency GitHub details stay in native repository settings or `policies/`; they do not expand the CSARC schema.
 
@@ -1140,7 +1140,7 @@ The script reads GitHub repositories, CODEOWNERS presence, and Copier adoption m
           <p>With at least 5 consuming repositories, evaluate central enforcement once either condition is met: the same class of drift appears in <strong>2 or more repositories</strong> within 30 days; over <strong>20%</strong> of update PRs across two consecutive template releases stay open past <strong>5 workdays</strong>; or manual <code>apply</code>/repair work exceeds <strong>2 hours a month</strong>. Allstar suits continuous checking and enforcing security policy; Safe Settings suits pushing repository settings from a hierarchical config. Neither substitutes for a catalog.</p>
         </article>
       </div>
-      <aside class="selection-note"><strong>Current decision</strong><span>The consuming repositories meet neither threshold, and no usable drift-frequency sample exists. Keep Copier, JSON policy, the GitHub API, and daily drift checks. Do not pre-deploy Backstage, Allstar, or Safe Settings.</span></aside>
+      <aside class="selection-note"><strong>Current decision</strong><span>The consuming repositories meet neither threshold, and no usable drift-frequency sample exists. Keep Copier, JSON policy, the GitHub API, and weekly drift checks. Do not pre-deploy Backstage, Allstar, or Safe Settings.</span></aside>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -1150,7 +1150,7 @@ The script reads GitHub repositories, CODEOWNERS presence, and Copier adoption m
 | Central policy enforcement | At least five consuming repositories plus the same drift in 2+ repositories within 30 days; or 20%+ update PRs older than five workdays for two releases; or more than two manual repair hours per month |
 
 {{< disclosure key="fleet-thresholds-yagni" title="Conditions still required after a threshold triggers" >}}
-Open an evaluation Issue that names a platform owner, cost ceiling, trial scope, and exit criteria. Backstage covers catalog, ownership, and system relationships. Allstar or Safe Settings covers continuing policy checks and settings delivery. Neither replaces the other. Until a threshold is met, keep Copier, JSON policy, GitHub API checks, and daily drift detection. Do not prebuild an external service.
+Open an evaluation Issue that names a platform owner, cost ceiling, trial scope, and exit criteria. Backstage covers catalog, ownership, and system relationships. Allstar or Safe Settings covers continuing policy checks and settings delivery. Neither replaces the other. Until a threshold is met, keep Copier, JSON policy, GitHub API checks, and weekly drift detection. Do not prebuild an external service.
 {{< /disclosure >}}
 
 <aside class="config-guidance"><strong>Reevaluation</strong><ul><li>Each quarter and after every new pilot, use the GitHub API to count answers/profiles, CODEOWNERS, open update PRs, and governance-drift runs.</li><li>Drift frequency counts only a consuming repository with a completed scheduled sample. A repository with no run is never counted as zero drift.</li><li>When triggered, open a separate Issue that names a platform owner, cost ceiling, trial scope, and exit criteria. This decision does not authorize building an external service.</li></ul></aside>

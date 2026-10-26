@@ -225,6 +225,52 @@ def test_copier_governance_drift_option_is_complete(
     assert (
         project / ".csarc/scripts/check-governance-drift"
     ).exists() is enabled
+    if enabled:
+        # The rendered schedule is weekly on Monday (#1289).
+        rendered = (
+            project / ".github/workflows/governance-drift.yml"
+        ).read_text(encoding="utf-8")
+        assert 'cron: "13 4 * * 1"' in rendered
+        assert "workflow_dispatch:" in rendered
+
+
+def schedule_crons(text: str) -> list[str]:
+    """Return the cron expressions declared in one workflow file."""
+    return [
+        line.split("cron:", 1)[1].strip().strip('"')
+        for line in text.splitlines()
+        if line.strip().startswith("- cron:")
+    ]
+
+
+def test_governance_drift_runs_weekly_without_colliding() -> None:
+    """Run drift weekly on Monday, apart from the other Monday jobs (#1289)."""
+    workflows = ROOT / "template/.github/workflows"
+    drift = schedule_crons(
+        (workflows / "governance-drift.yml").read_text(encoding="utf-8")
+    )
+    others = schedule_crons(
+        (workflows / "osv.yml").read_text(encoding="utf-8")
+    ) + schedule_crons(
+        (workflows / "template-update.yml.jinja").read_text(encoding="utf-8")
+    )
+
+    assert drift == ["13 4 * * 1"]
+    minute, hour, day, month, weekday = drift[0].split()
+    assert (day, month, weekday) == ("*", "*", "1")
+    assert all((minute, hour) != tuple(other.split()[:2]) for other in others)
+    # release-drift is a different check and stays daily.
+    release = schedule_crons(
+        (workflows / "release-drift.yml").read_text(encoding="utf-8")
+    )
+    assert release and release[0].split()[4] == "*"
+
+    recommendation = cli.governance_drift_update_recommendation(
+        {"scheduled_checks": []}, {}
+    )
+    assert recommendation is not None
+    assert "weekly governance drift check" in recommendation
+    assert "daily" not in recommendation
 
 
 def test_degraded_drift_check_does_not_create_an_issue(tmp_path: Path) -> None:
@@ -401,6 +447,6 @@ def test_docs_reflect_restored_governance_actions() -> None:
         drift_codes
     )
     assert (
-        "scheduled_checks: [governance-drift] generates the daily workflow"
+        "scheduled_checks: [governance-drift] generates the weekly workflow"
         in drift_codes
     )

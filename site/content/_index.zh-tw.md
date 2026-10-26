@@ -765,7 +765,7 @@ Commit 類型把變更分成 Breaking Changes／Features／Bug Fixes；GitHub Re
 | 一次性 seed（不保存） | `project_description` | 必填一句話用途說明，拒絕佔位文字 | 寫入 README 與受管的網站資料，作為 repo-site 的簡介段落 |
 | 專案選擇 | `languages` | 零到多個 `python`、`rust`、`typescript` | repo-site 的「使用語言」欄位 |
 | 即時事實與推導值（不保存） | `repository_url`、`project_slug` | `repository_url` 每次取自 GitHub origin／`GH_REPO`，明確值只綁單次 plan；`project_slug` 由 repository 名稱推導 | repo-site 的複製（clone）指引 |
-| 專案選配 | `scheduled_checks` | 預設 `governance-drift`；可加 `template-update` 或清空 | `governance-drift` 生成每日 `governance-drift.yml` 與 drift checker；`template-update` 生成每週通知 |
+| 專案選配 | `scheduled_checks` | 預設 `governance-drift`；可加 `template-update` 或清空 | `governance-drift` 生成每週 `governance-drift.yml` 與 drift checker；`template-update` 生成每週通知 |
 
 公版 root 與生成 repo 使用同一批公開 keys 與驗證；只有生成 repo 另有 Copier `_src_path`、`_commit`。方案、帳務、Copilot entitlement、token 權限與 Pages 可用性不是設定值，而是 `allowed`／`blocked`／`unknown` 的即時偵測結果。低頻 GitHub 細節留在原生 repository settings 或 `policies/`，不擴張 CSARC schema。
 
@@ -1132,7 +1132,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
           <p>至少 5 個 consuming repo 後，滿足任一條才評估中央 enforcement：30 天內同類漂移出現於 <strong>2 個以上 repo</strong>；連續兩個模板 release 都有超過 <strong>20%</strong> 的 update PR 逾 <strong>5 個工作天</strong>；或每月人工 <code>apply</code>／修正超過 <strong>2 小時</strong>。Allstar 適合持續檢查與執行安全政策；Safe Settings 適合用階層設定檔統一下發 repository settings。兩者不取代 catalog。</p>
         </article>
       </div>
-      <aside class="selection-note"><strong>目前決定</strong><span>consuming repo 不達任一門檻，也沒有可用的漂移頻率樣本。維持 Copier／JSON policy／GitHub API／每日漂移檢查；不預先部署 Backstage、Allstar 或 Safe Settings。</span></aside>
+      <aside class="selection-note"><strong>目前決定</strong><span>consuming repo 不達任一門檻，也沒有可用的漂移頻率樣本。維持 Copier／JSON policy／GitHub API／每週漂移檢查；不預先部署 Backstage、Allstar 或 Safe Settings。</span></aside>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -1142,7 +1142,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 | 中央 policy enforcement | 至少 5 個 consuming repos，且同類 drift 30 天內出現在 2+ repos；或連續兩版有 20%+ update PR 超過 5 個工作天；或每月人工修正超過 2 小時 |
 
 {{< disclosure key="fleet-thresholds-yagni" title="觸發後仍需具備的條件" >}}
-觸發後另開 Issue，指定平台 owner、成本上限、試行範圍與退場條件。Backstage 管 catalog／owner／系統關係；Allstar 或 Safe Settings 才處理持續政策檢查與設定下發，兩者不能互相取代。目前維持 Copier、JSON policy、GitHub API 與 daily drift check，不預建外部服務。
+觸發後另開 Issue，指定平台 owner、成本上限、試行範圍與退場條件。Backstage 管 catalog／owner／系統關係；Allstar 或 Safe Settings 才處理持續政策檢查與設定下發，兩者不能互相取代。目前維持 Copier、JSON policy、GitHub API 與每週 drift check，不預建外部服務。
 {{< /disclosure >}}
 
 <aside class="config-guidance"><strong>重新評估</strong><ul><li>每季與每次新增 pilot 後，以 GitHub API 重點數 answers／profile、CODEOWNERS、未完成 update PR 與 governance-drift runs。</li><li>漂移頻率只計「有完成排程樣本」的 consuming repo；沒有 run 不記為零漂移。</li><li>觸發後另開 Issue，指定平台 owner、成本上限、試行範圍與退場條件；本決策不授權建置外部服務。</li></ul></aside>
