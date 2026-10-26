@@ -4,7 +4,7 @@
 - **日期：**2026-10-25
 - **來源 Issues：**[#1266](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1266)、[#1265](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1265)（Milestone 21 tracker，擁有者 2026-10-24、2026-10-25 決定）；部分取代 [#908](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/908) 的新專案預設
 - **實作 PR：**[#1273](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/1273)
-- **修訂：**[#1281](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1281)（2026-10-26，`container` 模組與 VM 上的 Docker：限制 12、D8 第 7 點、C11）。這次修訂需要擁有者核准，以 #1281 PR 的合併授權作為核准。
+- **修訂：**[#1281](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1281)（2026-10-26，`container` 模組與 VM 上的 Docker：限制 12、D8 第 7 點、C11）。這次修訂需要擁有者核准，以 #1281 PR 的合併授權作為核准。[#1272](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1272)（2026-10-26，D9 事後偵測的條件；擁有者 2026-10-26 核准）。
 
 ## 問題與限制
 
@@ -211,7 +211,7 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 **事後偵測（沒有先 `retire` 就公開）：**
 
 - VM 的定期檢查（L5）停止 runner、刪除資料，並在 csarc-devops 開 Issue 記錄。VM 對下游沒有權限，不在下游開 Issue。
-- 模板端不依賴讀取 csarc-devops：`csarc self-hosted status`、`csarc update` 報告與 lifecycle 只要發現 repo 是 public，且仍有 `csarc-verify.yml` 的 run 或 `CSARC-Trust: self-hosted-registered` 的 merge trace，就印出 `WARNING:` 要求執行 `retire`。
+- 模板端不依賴讀取 csarc-devops：`csarc self-hosted status`、`csarc update` 報告與 lifecycle 只要發現 repo 是 public，且 `verification_mode_private` 仍是 `self-hosted`，或仍有 `csarc-verify.yml` 的 run，就印出 `WARNING:` 要求執行 `retire`。條件不看 `CSARC-Trust: self-hosted-registered` 的 merge trace：trace 永遠留在 Git 歷史中，正確執行 `retire` 之後仍會一直警告（擁有者 2026-10-26 核准這項修訂，#1272）。
 - 合併時 L6 讓 VM 證據失效；已 render 的檔案與 public 模式不一致時，lifecycle 要求重新 render。
 
 ### D10. 失效、撤銷與降級
