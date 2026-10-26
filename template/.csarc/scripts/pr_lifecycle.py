@@ -298,6 +298,17 @@ def parse_time(value: object, label: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
+class CommandError(RuntimeError):
+    """One failed local command that keeps its raw output as `detail`."""
+
+    def __init__(self, command: list[str], detail: str) -> None:
+        """Wrap `detail` for people and keep it unchanged for classifiers."""
+        super().__init__(
+            f"Command failed: {' '.join(command)}: {detail}. Fix it and retry."
+        )
+        self.detail = detail
+
+
 def run(
     command: list[str],
     *,
@@ -315,9 +326,7 @@ def run(
     )
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip()
-        raise RuntimeError(
-            f"Command failed: {' '.join(command)}: {detail}. Fix it and retry."
-        )
+        raise CommandError(command, detail)
     return result.stdout.strip()
 
 
@@ -1962,7 +1971,11 @@ RULES_PLAN_UNSUPPORTED = (
 
 def rules_plan_unsupported(error: RuntimeError) -> bool:
     """Return whether a rules read failed only because the plan lacks it."""
-    return str(error).endswith(f"gh: {RULES_PLAN_UNSUPPORTED}")
+    # Issue #1293: compare the raw `gh` output, never the wrapped text.
+    return (
+        isinstance(error, CommandError)
+        and error.detail == f"gh: {RULES_PLAN_UNSUPPORTED}"
+    )
 
 
 def malformed_check(item: object) -> bool:
