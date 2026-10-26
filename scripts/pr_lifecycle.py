@@ -293,6 +293,21 @@ def parse_time(value: object, label: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
+class CommandError(RuntimeError):
+    """One failed local command that keeps its raw output beside the message.
+
+    Issue #1293: classifiers compare `detail`, the command's own output, so
+    a change to the human-facing message cannot break them.
+    """
+
+    def __init__(self, command: list[str], detail: str) -> None:
+        """Wrap `detail` for people and keep it unchanged for classifiers."""
+        super().__init__(
+            f"Command failed: {' '.join(command)}: {detail}. Fix it and retry."
+        )
+        self.detail = detail
+
+
 def run(
     command: list[str],
     *,
@@ -310,9 +325,7 @@ def run(
     )
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip()
-        raise RuntimeError(
-            f"Command failed: {' '.join(command)}: {detail}. Fix it and retry."
-        )
+        raise CommandError(command, detail)
     return result.stdout.strip()
 
 
@@ -2040,8 +2053,12 @@ def rules_plan_unsupported(error: RuntimeError) -> bool:
 
     Only GitHub's exact plan-unsupported 403 qualifies; every other 403,
     404, 5xx, or unrecognized failure stays unknown and fails closed.
+    Issue #1293: compare the raw `gh` output exactly, never the wrapped text.
     """
-    return str(error).endswith(f"gh: {RULES_PLAN_UNSUPPORTED}")
+    return (
+        isinstance(error, CommandError)
+        and error.detail == f"gh: {RULES_PLAN_UNSUPPORTED}"
+    )
 
 
 def malformed_check(item: object) -> bool:
