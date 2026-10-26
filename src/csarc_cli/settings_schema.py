@@ -101,6 +101,13 @@ INTENT_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
 # SPEC-011: the registration keys exist exactly when the private mode is
 # self-hosted; ``{}`` is the valid "not yet registered" runner.
 SELF_HOSTED_KEYS = ("self_hosted_runner", "self_hosted_environments")
+# Until csarc-devops confirms an isolated Docker daemon inside each job
+# container (ADR D8, C11), container cannot verify in self-hosted mode.
+CONTAINER_SELF_HOSTED = (
+    "container needs Docker, which self-hosted verification lacks (ADR "
+    "self-hosted-verification D8); set verification_mode_private to local "
+    "or hosted, or container to false"
+)
 # SPEC-011 transition (#1069 decision 8): the one legacy mode key stays
 # valid, alone, until the target's trusted base reads both visibility
 # settings; it means the same mode for both visibilities.
@@ -352,6 +359,9 @@ def _validate_self_hosted(raw: Mapping[str, object]) -> None:
             "are required exactly when verification_mode_private is "
             "self-hosted in .csarc/config.yml"
         )
+    if self_hosted and raw.get("container") is True:
+        # The VM gives jobs no Docker daemon yet (ADR D8, #1281).
+        raise settings_error(CONTAINER_SELF_HOSTED)
 
 
 def validate_current(raw: Mapping[str, object]) -> None:

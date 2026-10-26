@@ -522,6 +522,9 @@ container:
   type: bool
   help: Add the Docker starter and its build scan
   default: false
+  # ADR self-hosted-verification D8 and C11 (#1281): the VM gives jobs no
+  # Docker daemon until csarc-devops confirms one isolated per job.
+  validator: "{% if container and verification_mode_private == 'self-hosted' %}container needs Docker, which self-hosted verification lacks (ADR self-hosted-verification D8); set verification_mode_private to local or hosted, or container to false.{% endif %}"
 
 package_name:
   type: str
