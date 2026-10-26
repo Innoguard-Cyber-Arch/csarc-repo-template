@@ -16,7 +16,7 @@ tracking: none
 
 `adopt` 與 `update` 每次規劃都由同一個 report model 在 target 外寫出 machine plan、report JSON 與從 report JSON render 的 Markdown。report JSON 是唯一來源，詞彙封閉，未知值 fail closed；套用成功後同一份報告轉為 `applied` 並綁定被重播的 plan digest。
 
-格式版本：`2.3.0`（`LIFECYCLE_REPORT_FORMAT_VERSION`，`src/csarc_cli/lifecycle_report.py`）。`2.1.0` 由 Issue #1078 依 MINOR 規則提升，只新增 adopt 的 `setup` 紀錄並把 `setting-decision` 開放給 adopt；`2.2.0` 由 Issue #1083 依 MINOR 規則提升，只新增 `overwrite` 的 `compatibility-shim` 理由；`2.3.0` 由 Issue #1224 依 MINOR 規則提升，只新增唯讀的 `writing_guide` 提示；相容規則見 §7。
+格式版本：`2.4.0`（`LIFECYCLE_REPORT_FORMAT_VERSION`，`src/csarc_cli/lifecycle_report.py`）。`2.1.0` 由 Issue #1078 依 MINOR 規則提升，只新增 adopt 的 `setup` 紀錄並把 `setting-decision` 開放給 adopt；`2.2.0` 由 Issue #1083 依 MINOR 規則提升，只新增 `overwrite` 的 `compatibility-shim` 理由；`2.3.0` 由 Issue #1224 依 MINOR 規則提升，只新增唯讀的 `writing_guide` 提示；`2.4.0` 由 Issue #1297 新增離線的 `policy_documentation` 結果與 `documentation-review` required action；相容規則見 §7。
 
 ## Context
 
@@ -47,7 +47,7 @@ tracking: none
 
 每個鍵都一定存在，未知鍵被拒絕。`null` 表示這個 operation 不評估，或負責的 Issue 尚未實作；`[]` 表示評估過但沒有項目。輸出以 `sort_keys`、兩格縮排序列化；相同輸入產生相同位元組。
 
-- `report_format_version`：`2.3.0`。
+- `report_format_version`：`2.4.0`。
 - `operation`：`adopt`｜`update`。
 - `status`、`status_reason`、`applicable`（機器的 apply 閘門）。
 - `generated_at`、`applied_at`：`applied_at` 只在 `status` 為 `applied` 時是字串。
@@ -62,6 +62,7 @@ tracking: none
 - `required_actions`：每列 {`kind`、`subject`、`blocking`、`message`、`command`}。
 - `verification`：{`candidate`、`hook`、`render_parity`}；`render_parity` 只有 `state`。update（不含 reinstall）由 Issue #1063 的共用規劃器填入：以舊 template 實際詢問的答案與可信快照重建的舊側 render，與 target 逐檔相同為 `equal`，否則為 `diverged`；adopt 與 reinstall 為 `null`。
 - `writing_guide`（`2.3.0`，Issue #1224）：寫作指引的唯讀檢查提示，不需要提示時為 `null`。形狀為 {`reason`、`guides`、`files`、`instruction`}：`reason` 是 `first`（target provenance 沒有記錄指引版本）或 `changed`（記錄的版本與這次收到的不同）；`guides` 列出這次 render 的指引路徑（`.csarc/docs/writing-guide.en.md`，文件語言含繁體中文時另有 `.csarc/docs/writing-guide.md`）；`files` 列出 target 的 project-owned 文件：`README.md`、`documentation_languages` 有第二個語言時的 `README.<lang>.md`，以及 `docs/` 下的 Markdown 檔（不跟隨 symlink）；`instruction` 是 agent 可以直接執行的一句指示。指引版本是 render 後指引檔的 SHA-256；操作寫入 `.csarc/provenance.json` 時記為 `writing_guide_sha256`，同一版本之後不再提示。版本放在 provenance 而不是 `.csarc/config.yml`，因為它是 CLI 的狀態，不是擁有者的設定（SPEC-009 只把持久的意圖存進設定檔）。`documentation_mode: off` 一律為 `null`，也不記錄版本。提示只出現在報告與終端機 plan：不改寫任何檔案，也不產生 required action，不影響 `status` 與 `applicable`。dry-run 與 `--check` 不寫 provenance，所以套用前每次規劃都會提示。
+- `policy_documentation`（`2.4.0`，Issue #1297）：對本次新增或變更的 managed policy setting，各列 {`key`、`value`、`status`、`locations`、`reason`}。CLI 只在 project-owned `README` 與 `docs/**/*.md` 逐行比對每個 setting 的中英文 keyword map，不讀 `.csarc/`，不連網、不呼叫 AI，也不改寫文件；`locations` 是排序且不重複的 `file:line`。`status` 是 `aligned`、`drift`、`not-applicable` 或 `inconclusive`；其中 `drift` 與 `inconclusive` 各產生 blocking `documentation-review`，report 不得轉為 `applied`，操作者必須修正或釐清 project-owned 文件後重新規劃。`documentation_mode: off` 時為空陣列。update PR 的文件一致性紀錄必須逐列帶入這些結果，aggregate status 仍由 exact-head PR gate 驗證；CLI 不做通用語意合併。
 - `next_steps`：每列 {`text`、`command`}，由 operation 與 status 算出。update 為 `blocked` 且 blocking 項目全是 `file-conflict` 時，依序列出帶 `--to`／`--expected-sha` 的 `--finalize-plan --decision` 指令與 `--apply-plan <報告目錄>/csarc-update-final-plan.json`（Issue #1147）。
 - `setup`（`2.1.0` 新增，Issue #1078）：adopt 的設定問卷紀錄 {`work_mode`、`questions`、`warnings`、`approval_route`}；update 與沒有紀錄的 adopt（例如 `--finalize`）為 `null`。`work_mode` 是展開的工作模式（只顯示，不寫入設定檔）；`questions` 是 TTY 依序詢問的鍵，non-interactive 為 `[]`；`warnings` 每列 {`code`、`subject`、`message`、`command`}，`code` 是 SPEC-009 的穩定代碼（`W` 加兩位數字與名稱，例如 `W09-governance-observe`）；`approval_route` 只在 `admin_bypass` 為 `off` 或 `beta-only` 時是 {`state`、`reason`、`confirmation`}，其他為 `null`。`--apply-plan` 重播 plan 內的同一份紀錄，不再提問。
 
@@ -94,7 +95,7 @@ tracking: none
 
 無法驗證（`unknown`）的 CODEOWNER 只在 `## Product state` 顯示，不算 required action；`blocked` 才產生 blocking 的 `code-owner`。
 
-required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、`file-conflict`、`mapping-decision`、`mapping-review`、`release-writer`、`render-parity`、`retire-modified`、`runtime-mismatch`、`setting-decision`、`verification`、`version-surface`、`working-tree`。`2.0.0` 的 `setting-decision` 只用於 update；`2.1.0` 也用於 adopt：non-interactive adopt 對沒有唯一來源的意圖採用建議值時（例如 `governance_mode`、偵測到 Dockerfile 時的 `container`），每個鍵各產生一列非 blocking 的 `setting-decision`。
+required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、`documentation-review`、`file-conflict`、`mapping-decision`、`mapping-review`、`release-writer`、`render-parity`、`retire-modified`、`runtime-mismatch`、`setting-decision`、`verification`、`version-surface`、`working-tree`。`2.0.0` 的 `setting-decision` 只用於 update；`2.1.0` 也用於 adopt：non-interactive adopt 對沒有唯一來源的意圖採用建議值時（例如 `governance_mode`、偵測到 Dockerfile 時的 `container`），每個鍵各產生一列非 blocking 的 `setting-decision`。
 
 狀態規則（validator 強制）：
 
@@ -114,11 +115,11 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 
 設定分類（本 Issue 實作的通用規則；個別鍵的遷移分類由後續 Issue 補上）：adopt 的每列都是 `new`，`source` 與 `note` 取自 `setup`：問卷回答或明確 `--data` 為 `explicit`（回答的 `note` 為 `asked`），偵測、工作模式展開與建議值為 `derived`（`note` 寫出偵測來源、`work mode <name>` 或 `suggested default`）；update 前後相同為 `unchanged`、新出現為 `new`、消失為 `retired`、其他改變為 `decision`。來源不是 `explicit` 的 `decision` 產生非 blocking 的 `setting-decision`。
 
-**Fail closed**：writer 與 renderer 先驗證整份 report；缺鍵、未知鍵、未知詞彙、`report_format_version` 不是 `2.3.0`、`2.2.0`、`2.1.0` 或 `2.0.0`、計數不符或狀態規則不成立時拋出錯誤，三個檔案都不寫，CLI 以錯誤結束。
+**Fail closed**：writer 與 renderer 先驗證整份 report；缺鍵、未知鍵、未知詞彙、`report_format_version` 不是 `2.4.0`、`2.3.0`、`2.2.0`、`2.1.0` 或 `2.0.0`、計數不符或狀態規則不成立時拋出錯誤，三個檔案都不寫，CLI 以錯誤結束。
 
 ### 5. Markdown
 
-- H1 為 `# CSARC adoption report` 或 `# CSARC update report`，接著是 `> **Status: <banner>.** <status_reason>` 與 ``Report format version: `2.3.0` ``。
+- H1 為 `# CSARC adoption report` 或 `# CSARC update report`，接著是 `> **Status: <banner>.** <status_reason>` 與 ``Report format version: `2.4.0` ``。
 - banner：adopt 為 `Ready to adopt`、`Review required`、`Blocked`、`Adopted`；update 為 `Current`、`Ready to update`、`Review required`、`Blocked`、`Updated`。
 - 九個 H2 依序一律出現，沒有內容時印 `None.`：
   1. `## Items requiring your decision`：blocking 項目在前；沒有項目時印 "No known file conflicts. This does not guarantee semantic or runtime compatibility."
@@ -130,7 +131,8 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
   7. `## Product state`：`- CODEOWNER verification:` 一列在 `product.code_owner` 不是 `null` 時寫出 `value` 與 `state`；是 `null`（update）時寫 `not run by this operation`，並引用 Settings 的 `code_owner` 值（沒有值時寫 no `code_owner` is configured），不再顯示 `(none)` 而與 Settings 矛盾（Issue #1167，只改 Markdown 措辭，報告形狀與 `2.2.0` 不變）。H3 只在 JSON 值不是 `null` 時出現，順序為 `### Release writers`、`### Version surfaces`、`### Action pins`、`### Reviewer rotation`、`### Behavior changes`、`### Work-item mapping`。
   8. `## Verification`
   9. `## Next steps`
-- 第十個 H2 `## Writing guide` 只在 `writing_guide` 不是 `null` 時出現在最後：說明提示原因與 CSARC 沒有改任何 project-owned 文件，列出指引與最多 20 個檔案（其餘只在 JSON），最後一列是 `Agent instruction:`。
+- `## Policy documentation` 只在 `policy_documentation` 有列時出現，逐列顯示 key、新值、status、`file:line` 與理由，並要求把每列帶進 update PR；`drift`／`inconclusive` 阻擋交付。
+- `## Writing guide` 只在 `writing_guide` 不是 `null` 時出現在最後：說明提示原因與 CSARC 沒有改任何 project-owned 文件，列出指引與最多 20 個檔案（其餘只在 JSON），最後一列是 `Agent instruction:`。
 - heading、標籤與詞彙值固定為英文，不依文件語言設定在地化，作為測試與 agent 搜尋的穩定錨點。值的格式：布林值 `true`／`false`、`null` 為 `(none)`、list 以 `, ` 連接，不出現 Python repr。
 
 ### 6. Redaction
@@ -149,6 +151,7 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - PATCH：只改措辭或跳脫。
 - 與上一個已發布 Release 相比，每個層級最多提升一次。1.1.0 是最後發布的格式；本規格定義 2.0.0。Milestone 18 中只有設定問卷的 Issue（#1078）可在 beta.2 前依 MINOR 提升一次到 2.1.0（並把 `setting-decision` 開放給 adopt）；其他 Issue 只填入已保留的欄位與詞彙。beta.2 之後，Pilot fixes 的 #1083 依擁有者 2026-10-15 決定提升一次到 `2.2.0`，只新增 `compatibility-shim`。
 - `2.3.0` 相容結果（#1224）：reader 以各自規則驗證 `2.0.0`、`2.1.0` 與 `2.2.0` 報告，`writing_guide` 只在 `2.3.0` 存在；writer 只寫 `2.3.0`。Milestone 20（#1217）的 #1224 完成條件要求報告新增這一段，因此依 MINOR 規則提升一次。
+- `2.4.0` 相容結果（#1297）：reader 以各自規則驗證 `2.0.0` 到 `2.3.0` 報告，`policy_documentation` 與 `documentation-review` 只在 `2.4.0` 存在；writer 只寫 `2.4.0`。
 - `2.2.0` 相容結果（#1083）：reader 以各自規則驗證 `2.0.0` 與 `2.1.0` 報告，`compatibility-shim` 從 `2.2.0` 起合法；當時 writer 只寫 `2.2.0`。
 - `2.1.0` 相容結果（#1078 AC6）：`2.1.0` reader 以 `2.0.0` 規則驗證 `2.0.0` 報告（沒有 `setup`、`setting-decision` 只用於 update），例如舊 final plan 內嵌的報告；writer 只寫 `2.1.0`。已發布的 `2.0.0` reader 讀到 `2.1.0` 報告時以 `unsupported version '2.1.0'` fail closed，不寫任何檔案，也不部分解析；改用寫出該報告的 CLI 版本或更新的版本。
 - machine plan 的 `schema_version` 另外計算。
@@ -171,6 +174,7 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - [x] `2.1.0`（Issue #1078）：adopt 的 `setup` 紀錄與 adopt `setting-decision`；`2.0.0` 報告依原規則可讀，其他版本 fail closed。
 - [x] `2.2.0`（Issue #1083）：update 的 `overwrite`／`compatibility-shim` 列；`2.0.0` 與 `2.1.0` 報告依原規則可讀。
 - [x] `2.3.0`（Issue #1224）：create、adopt 與 update 在首次收到或收到新版本的寫作指引時提示檢查 project-owned 文件；同一版本不重複，`documentation_mode: off` 不提示，不改寫任何檔案；`2.0.0`、`2.1.0` 與 `2.2.0` 報告依原規則可讀。
+- [x] `2.4.0`（Issue #1297）：adopt 與 update 離線比對變更後 managed policy 與 project-owned README／docs，逐 key 記錄四態與 `file:line`；`drift`／`inconclusive` 阻擋套用與交付，不改寫產品文件，`2.0.0` 到 `2.3.0` 依原規則可讀。
 
 ## Out of scope
 

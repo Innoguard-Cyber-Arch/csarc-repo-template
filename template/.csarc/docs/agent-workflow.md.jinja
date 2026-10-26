@@ -18,6 +18,7 @@
 {% else -%}
 - Use the linked Issue or `docs/specs/` SDD contract for scope; `docs/README.md` maps durable project memory. Use `docs/adr/` for decisions; also search a project-owned `docs/decisions/` and never move it.
 - Follow [`.csarc/docs/documentation-policy.md`](documentation-policy.md). Before a non-Draft pull request is delivered, compare changed behavior and configuration with project documentation and record `aligned` or a reasoned `not-applicable` against the exact head; `drift` and `inconclusive` block delivery.
+- For an adopt or update pull request, copy every `Policy documentation` report row (key, new value, status, and `file:line`) into the PR's documentation-review reason. Keep the aggregate status `drift` or `inconclusive` until every blocking row is resolved; never let an agent rewrite project-owned text without owner approval.
 {% endif -%}
 - Root `SECURITY.md` is scanner policy; `.github/SECURITY.md` is the human vulnerability-disclosure policy. [`.csarc/docs/security-scanner-readiness.md`](security-scanner-readiness.md) lists AI security scanner commands and limits.
 {% if documentation_mode == 'template-and-content' %}- Edit site content in `docs/site/content/` and `docs/site/theme.css`, then rebuild with `./.csarc/scripts/build-repo-site`; do not hand-edit generated HTML.

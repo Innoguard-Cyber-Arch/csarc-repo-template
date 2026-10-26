@@ -42,6 +42,7 @@ from csarc_cli import (
     governance_migration,
     lifecycle_report,
     merge_trace,
+    policy_documentation,
     project_roadmap,
     release_phase,
     repository_facts,
@@ -3527,6 +3528,62 @@ def update_required_actions(
     return actions
 
 
+def policy_documentation_actions(
+    rows: Sequence[Mapping[str, object]],
+) -> list[dict[str, object]]:
+    """Return blocking actions for known or uncertain documentation drift."""
+    return [
+        {
+            "blocking": True,
+            "command": None,
+            "kind": "documentation-review",
+            "message": (
+                f"Policy documentation is {row['status']} for the new value "
+                f"{row['value']!r} at "
+                + (", ".join(cast(list[str], row["locations"])) or "no path")
+                + ". Update the project-owned documentation or clarify it, "
+                "then create a new plan. CSARC will not rewrite it."
+            ),
+            "subject": str(row["key"]),
+        }
+        for row in rows
+        if row.get("status") in policy_documentation.BLOCKING
+    ]
+
+
+def reject_policy_documentation(report: Mapping[str, object]) -> None:
+    """Stop update apply while project-owned policy docs are unresolved."""
+    rows = cast(
+        list[Mapping[str, object]], report.get("policy_documentation", [])
+    )
+    blocked = [
+        f"{row['key']}={row['status']}"
+        for row in rows
+        if row.get("status") in policy_documentation.BLOCKING
+    ]
+    if blocked:
+        raise CliError(
+            "Policy documentation review blocks this update: "
+            + ", ".join(blocked)
+            + ". Resolve the listed project-owned document lines and run "
+            "'csarc update --check' again; the target was not changed."
+        )
+
+
+def policy_documentation_blocks(
+    target: Path, answers: Mapping[str, object]
+) -> bool:
+    """Return whether an adoption's new policy contradicts product docs."""
+    if answers.get("documentation_mode") == "off":
+        return False
+    rows = report_setting_rows(answers, None, ())
+    return policy_documentation.blocking(
+        policy_documentation.review(
+            target, rows, answers.get("documentation_languages")
+        )
+    )
+
+
 def with_product_calls(
     action: dict[str, object], calls: Sequence[Mapping[str, str]]
 ) -> dict[str, object]:
@@ -3877,6 +3934,15 @@ def lifecycle_report_model(  # noqa: C901
     setup = plan.setup if operation == "adopt" else None
     if setup is not None:
         settings = setup_setting_rows(settings, setup)
+    policy_rows = (
+        []
+        if plan.answers.get("documentation_mode") == "off"
+        else policy_documentation.review(
+            plan.target,
+            settings,
+            plan.answers.get("documentation_languages"),
+        )
+    )
     if operation == "update":
         violations = governance_migration.governance_row_violations(settings)
         if violations:
@@ -3911,6 +3977,7 @@ def lifecycle_report_model(  # noqa: C901
             ),
             reviewer_answer=reviewer_answer,
         )
+    actions.extend(policy_documentation_actions(policy_rows))
     if adoption is not None:
         applicable = adoption.get("applicable") is True
     else:
@@ -4014,6 +4081,7 @@ def lifecycle_report_model(  # noqa: C901
             "version_surfaces": None,
             "work_item_mapping": mapping,
         },
+        "policy_documentation": policy_rows,
         "release": {
             "from": None
             if previous is None
@@ -8181,7 +8249,9 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "work_item_mapping": work_item_mapping,
         }
         adoption["applicable"] = bool(
-            adoption["applicable"] and adoption["mapping_reviewed"]
+            adoption["applicable"]
+            and adoption["mapping_reviewed"]
+            and not policy_documentation_blocks(target, answers)
         )
         plan = ResolvedPlan(
             mode="adopt-finalize",
@@ -8470,7 +8540,9 @@ def build_adoption_plan(
         "work_item_mapping": work_item_mapping,
     }
     adoption["applicable"] = bool(
-        adoption["applicable"] and adoption["mapping_reviewed"]
+        adoption["applicable"]
+        and adoption["mapping_reviewed"]
+        and not policy_documentation_blocks(target, answers)
     )
     validate_target_snapshot(target, adoption)
     return ResolvedPlan(
@@ -12662,6 +12734,7 @@ def write_update_final_plan(
     reject_decided_ignore_rules(target, context.run_inputs.payload, resolutions)
     reject_release_writer_moves(context.update_report)
     reject_retained_uses(context.update_report, retired)
+    reject_policy_documentation(context.update_report)
     reject_retired_uses(
         target,
         planned_update_files(
@@ -13595,6 +13668,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     milestone_plan = milestone_description_plan(target)
     if args.dry_run:
         return 0
+    reject_policy_documentation(update_report)
     if planning.conflicts:
         raise CliError(update_conflict_error(planning.conflicts))
     if not confirm(args):
