@@ -67,6 +67,8 @@ class SquashGitHub(ReverifyGitHub):
         self.merge_parents = [MAIN, HEAD]
         self.merge_tree = TREE
         self.author = "dependabot[bot]"
+        self.head_ref = f"dependabot/uv/main/routine-{NUMBER}"
+        self.head_eligible = True
         self.base_ref = "main"
         self.extra: dict[str, object] = {}
         self.sync_jobs: list[dict[str, Any]] = []
@@ -88,7 +90,7 @@ class SquashGitHub(ReverifyGitHub):
                     "base": {"ref": self.base_ref},
                     "head": {
                         "sha": HEAD,
-                        "ref": f"dependabot/uv/main/routine-{NUMBER}",
+                        "ref": self.head_ref,
                         "repo": {"full_name": REPO},
                     },
                     "user": {"login": self.author, "type": "Bot"},
@@ -135,6 +137,31 @@ def run_main(
     monkeypatch.setattr(sys, "argv", ["check-trusted-verification", *argv])
     module["main"]()
     return json.loads(capsys.readouterr().out)
+
+
+@pytest.fixture(autouse=True)
+def trusted_eligibility(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serve `dependabot-merge-eligible` from the fake's eligibility flag.
+
+    The real selector's provenance rules have their own tests; here only
+    whether the exact head has a trusted passing check matters.
+    """
+    lifecycle = importlib.import_module("pr_lifecycle")
+
+    def selected(
+        github: SquashGitHub,
+        _repo: str,
+        head_sha: str,
+        identities: set[tuple[str, int]],
+        _checks: object,
+    ) -> tuple[dict[tuple[str, int], dict[str, str]], dict]:
+        assert head_sha == HEAD
+        if not github.head_eligible:
+            return {}, {}
+        passed = {"status": "completed", "conclusion": "success"}
+        return {identity: passed for identity in identities}, {}
+
+    monkeypatch.setattr(lifecycle, "trusted_required_check_runs", selected)
 
 
 def freeze(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -217,6 +244,9 @@ def test_release_source_plans_a_reverified_squash_from_its_own_history(
         ({"merge_parents": [MAIN, "8" * 40]}, "was not verified"),
         ({"squash_parents": [MAIN, HEAD]}, "no Dependabot reverification"),
         ({"author": "maintainer"}, "no Dependabot reverification"),
+        # Merged without a trusted eligibility pass (e.g. admin bypass).
+        ({"head_eligible": False}, "lacks trusted exact-head eligibility"),
+        ({"head_ref": "feature/not-dependabot"}, "lacks trusted exact-head"),
         ({"conclusion": "failure"}, "did not pass"),
     ],
 )
@@ -349,6 +379,7 @@ def test_sync_pull_request_evidence_accepts_the_reverification(
     ("change", "source", "message"),
     [
         ({"squash_parents": [NEWER_MAIN]}, 77, "none on main"),
+        ({"head_eligible": False}, 77, "exact-head eligibility"),
         ({"squash_tree": "7" * 40}, 77, "was not verified"),
         ({}, 78, "invalid producer"),
     ],

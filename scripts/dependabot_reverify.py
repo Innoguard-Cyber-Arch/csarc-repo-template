@@ -224,6 +224,48 @@ def tree_and_parents(
     ]
 
 
+def require_eligible(
+    github: GitHub, repo: str, pull: dict[str, Any], head_sha: str
+) -> None:
+    """Require Dependabot coordinates and trusted exact-head eligibility.
+
+    Issue #1284: the same gate the release source applies to an ordinary
+    Dependabot squash, so a reverified squash merged without a passing
+    `dependabot-merge-eligible` (for example by admin bypass) never
+    resolves as a verified source.
+    """
+    head = pull.get("head") or {}
+    user = pull.get("user") or {}
+    auth = module("authenticate_dependabot_head")
+    coordinates, _ = auth.dependabot_coordinates_eligible(
+        str(user.get("login") or ""),
+        str(head.get("ref") or ""),
+        str((head.get("repo") or {}).get("full_name") or ""),
+        repo,
+    )
+    lifecycle = module("pr_lifecycle")
+    identity = (ELIGIBILITY_CONTEXT, GITHUB_ACTIONS_APP_ID)
+    checks = github.collection(
+        repo,
+        f"commits/{head_sha}/check-runs?filter=latest&per_page=100",
+        "check_runs",
+    )
+    selected, _ = lifecycle.trusted_required_check_runs(
+        github, repo, head_sha, {identity}, checks
+    )
+    check = selected.get(identity) or {}
+    if (
+        not coordinates
+        or user.get("type") != "Bot"
+        or check.get("status") != "completed"
+        or check.get("conclusion") != "success"
+    ):
+        raise RuntimeError(
+            "Dependabot source lacks trusted exact-head eligibility: no "
+            "pass. Wait for its 'verify' check."
+        )
+
+
 def merged(
     github: GitHub,
     repo: str,
@@ -256,6 +298,7 @@ def merged(
             "Dependabot reverification binds it. Verify the merge."
         )
     head_sha = str((pulls[0].get("head") or {}).get("sha") or "")
+    require_eligible(github, repo, pulls[0], head_sha)
     evidence = require(
         github,
         repo,
