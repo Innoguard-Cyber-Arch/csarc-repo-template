@@ -170,18 +170,18 @@ An agent must not accept on the owner's behalf: pass `accept` only after the own
 Before this fix, the CLI dropped two keys on update while the report said `answers_changed: false`: `single_writer_merger` disappeared (since v0.41.0), and `github_project_url` became empty (since v0.35.2). Lifecycle then fell back to manual-only, or `csarc issue` stopped updating Project dates. To check, compare `.csarc/config.yml` before and after the latest update pull request.
 
 ```bash
-git log -p --follow -- .csarc/config.yml
+git log -p -- .csarc/config.yml
 ```
 
 If a value is missing, restore it on a new branch with the fixed release, through the usual check, finalize, and apply:
 
 ```bash
 csarc update . --to <tag> --expected-sha <full-sha> --check --json --data single_writer_merger=<login> --report-dir ../<repo>-csarc-update-report
-csarc update . --to <tag> --expected-sha <full-sha> --finalize-plan --data single_writer_merger=<login> --report-dir ../<repo>-csarc-update-report
+csarc update . --to <tag> --expected-sha <full-sha> --finalize-plan --data single_writer_merger=<login> --decision <path>=keep-current --report-dir ../<repo>-csarc-update-report
 csarc update . --apply-plan ../<repo>-csarc-update-report/csarc-update-final-plan.json --yes
 ```
 
-For `github_project_url`, pass `--data github_project_url=<url>` instead; pass both when both are missing. Restoring `single_writer_merger` is a governance relaxation, so its pull request takes the `governance-switch` route (see the [CI policy](ci-policy.md)).
+For `github_project_url`, pass `--data github_project_url=<url>` instead; pass both when both are missing. Give `--decision` for the conflicts that report lists as usual, and leave it out when there are none. Restoring `single_writer_merger` is a governance relaxation, so its pull request takes the `governance-switch` route (see the [CI policy](ci-policy.md)).
 
 ### README and LICENSE in an existing repo
 

@@ -172,18 +172,18 @@ agent 不能代為接受：只有擁有者在這次對話或 PR 明確確認後�
 這個修正之前的 CLI 更新時會漏掉兩個鍵，報告卻寫 `answers_changed: false`：`single_writer_merger` 整個消失（v0.41.0 起），`github_project_url` 變成空值（v0.35.2 起）。lifecycle 因此改回 manual-only，或 `csarc issue` 不再更新 Project 日期。檢查方式：比對最近一次 update PR 前後的 `.csarc/config.yml`。
 
 ```bash
-git log -p --follow -- .csarc/config.yml
+git log -p -- .csarc/config.yml
 ```
 
 少了原本的值時，在新的分支用修正後的版本補回，照一般流程 check、finalize、apply：
 
 ```bash
 csarc update . --to <tag> --expected-sha <full-sha> --check --json --data single_writer_merger=<login> --report-dir ../<repo>-csarc-update-report
-csarc update . --to <tag> --expected-sha <full-sha> --finalize-plan --data single_writer_merger=<login> --report-dir ../<repo>-csarc-update-report
+csarc update . --to <tag> --expected-sha <full-sha> --finalize-plan --data single_writer_merger=<login> --decision <path>=keep-current --report-dir ../<repo>-csarc-update-report
 csarc update . --apply-plan ../<repo>-csarc-update-report/csarc-update-final-plan.json --yes
 ```
 
-`github_project_url` 換成 `--data github_project_url=<url>`；兩者都漏掉時兩個 `--data` 一起帶。加回 `single_writer_merger` 屬於 governance relaxation，PR 要走 `governance-switch` route（見 [CI 政策](ci-policy.md)）。
+`github_project_url` 換成 `--data github_project_url=<url>`；兩者都漏掉時兩個 `--data` 一起帶。`--decision` 依該次報告的衝突照常給，沒有衝突時不帶。加回 `single_writer_merger` 屬於 governance relaxation，PR 要走 `governance-switch` route（見 [CI 政策](ci-policy.md)）。
 
 ### 既有 repo 的 README 與 LICENSE
 
