@@ -778,6 +778,23 @@ def test_retire_apply_deletes_data_and_opens_a_pull_request(
     assert [m for m, e in github.calls if m in {"POST", "PATCH", "PUT"}] == []
 
 
+def test_retire_retry_with_no_data_still_opens_the_pull_request(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Finish a prior partial cleanup by retrying only the missing PR."""
+    github = FakeGitHub()
+    switch = FakeSwitch()
+
+    assert (
+        run(monkeypatch, session(github, switch=switch), "retire", "--apply")
+        == 0
+    )
+
+    assert github.deletes() == []
+    assert switch.calls == [(REPO, "main", "hosted")]
+    assert "deleted 0 items" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("failure", ["delete", "switch"])
 def test_retire_exits_non_zero_when_any_step_fails(
     monkeypatch: pytest.MonkeyPatch,
@@ -1012,6 +1029,7 @@ def test_git_switch_opens_a_draft_governance_switch_pull_request(
             "verification_mode_private=hosted",
             "--data",
             "project_visibility=public",
+            "--retire-public-transition",
             "--to",
             "v1.2.3",
             "--yes",
