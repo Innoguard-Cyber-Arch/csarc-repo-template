@@ -3,7 +3,7 @@
 # read-only workflow on the pull request's target branch; it never triggers
 # itself. The registered VM runs it, and pr_lifecycle.py reads the run back.
 name: CSARC self-hosted verify
-run-name: {% raw %}Self-hosted verify PR #${{ inputs.pull_request }} ${{ inputs.head_sha }}{% endraw %}
+run-name: "{% raw %}Self-hosted verify PR #${{ inputs.pull_request }} ${{ inputs.head_sha }}{% endraw %}"
 
 on:
   workflow_dispatch:
