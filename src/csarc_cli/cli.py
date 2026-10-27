@@ -6491,6 +6491,7 @@ def repository_context(
     explicit_visibility: str | None,
     *,
     saved_visibility: str | None = None,
+    visibility_transition: str | None = None,
 ) -> RepositoryContext:
     """Resolve repository owner and visibility before template rendering.
 
@@ -6561,9 +6562,15 @@ def repository_context(
     ):
         value = cast(Mapping[str, object], identity["value"])
         actual_visibility = str(visibility_fact["value"])
+        planned_transition = (
+            visibility_transition == "private-to-public"
+            and actual_visibility == "private"
+            and explicit_visibility == "public"
+        )
         if (
             explicit_visibility is not None
             and explicit_visibility != actual_visibility
+            and not planned_transition
         ):
             raise CliError(
                 "Explicit project_visibility does not match GitHub: "
@@ -6575,9 +6582,19 @@ def repository_context(
             repository=str(value["repository"]),
             owner=str(value["owner"]),
             owner_type=str(value["owner_type"]),
-            visibility=actual_visibility,
-            source="github",
+            visibility=(
+                str(explicit_visibility)
+                if planned_transition
+                else actual_visibility
+            ),
+            source="retire-transition" if planned_transition else "github",
             verified=True,
+            reason=(
+                "GitHub is private until the reviewed retire pull request "
+                "is merged and the repository visibility changes."
+                if planned_transition
+                else None
+            ),
             facts=facts,
         )
     failure = (
@@ -6878,12 +6895,14 @@ def validate_repository_context(
     explicit_visibility: str | None,
     *,
     saved_visibility: str | None = None,
+    visibility_transition: str | None = None,
 ) -> None:
     """Reject repository context drift after a plan was confirmed."""
     current = repository_context(
         target,
         explicit_visibility,
         saved_visibility=saved_visibility,
+        visibility_transition=visibility_transition,
     )
     if current.as_dict() != expected.as_dict():
         raise CliError(
@@ -13194,9 +13213,61 @@ def update_retire_warning(
     return text
 
 
+def retire_visibility_transition(
+    args: argparse.Namespace,
+    target: Path,
+    saved: Mapping[str, object],
+    explicit: Mapping[str, str],
+) -> str | None:
+    """Allow only the retire branch to plan the future public render."""
+    if not args.retire_public_transition:
+        return None
+    unsupported_mode = any(
+        (
+            args.check,
+            args.dry_run,
+            args.finalize_plan,
+            args.apply_plan is not None,
+            bool(args.decision),
+            args.pin_commit is not None,
+        )
+    )
+    branch = run_git(
+        ["git", "-C", str(target), "branch", "--show-current"],
+        capture=True,
+        check=False,
+    )
+    if (
+        unsupported_mode
+        or branch.returncode != 0
+        or branch.stdout.strip() != self_hosted.RETIRE_BRANCH
+        or saved.get("project_visibility") != "private"
+        or saved.get("verification_mode_private") != "self-hosted"
+        or explicit.get("project_visibility") != "public"
+        or explicit.get("verification_mode_private") not in {"hosted", "local"}
+        or set(explicit)
+        != {
+            "project_visibility",
+            "verification_mode_private",
+        }
+    ):
+        raise CliError(
+            "Retire visibility transition failed: the option is reserved for "
+            "the retire branch's direct private self-hosted to public render. "
+            "Run 'csarc self-hosted retire --apply' instead."
+        )
+    return "private-to-public"
+
+
 def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     """Check, finalize, or apply a Copier smart update."""
     if args.apply_plan is not None:
+        if args.retire_public_transition:
+            raise CliError(
+                "Retire visibility transition failed: a saved plan cannot "
+                "replay the transition. Run 'csarc self-hosted retire "
+                "--apply' instead."
+            )
         return command_update_apply_plan(args)
     if (args.decision or args.pin_commit is not None) and not (
         args.finalize_plan
@@ -13227,6 +13298,9 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     saved_settings = load_saved_settings(target)
     saved_answers = dict(saved_settings.answers)
     explicit_data = parse_settings_data(args.data)
+    visibility_transition = retire_visibility_transition(
+        args, target, saved_answers, explicit_data
+    )
     reviewer_answer = reviewers_answer(explicit_data)
     decisions = {
         **saved_settings.decisions,
@@ -13239,6 +13313,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         saved_visibility=(
             saved_visibility if isinstance(saved_visibility, str) else None
         ),
+        visibility_transition=visibility_transition,
     )
     # A target whose origin names another repository stops before any
     # render or write (Issue #1072 AC5).
@@ -13733,6 +13808,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         saved_visibility=(
             saved_visibility if isinstance(saved_visibility, str) else None
         ),
+        visibility_transition=visibility_transition,
     )
     validate_target_snapshot(target, target_snapshot)
     with tempfile.TemporaryDirectory(prefix="csarc-update-") as temporary:
@@ -13933,6 +14009,11 @@ def parser() -> argparse.ArgumentParser:
         type=Path,
         metavar="PATH",
         help="apply one unchanged final plan from --finalize-plan",
+    )
+    update.add_argument(
+        "--retire-public-transition",
+        action="store_true",
+        help=argparse.SUPPRESS,
     )
     add_write_options(update)
 

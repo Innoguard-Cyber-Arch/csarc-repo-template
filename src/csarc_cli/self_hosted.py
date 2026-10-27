@@ -46,6 +46,7 @@ DISPATCH_CUTOFF = timedelta(minutes=30)
 WORKFLOW_FILE = "csarc-verify.yml"
 WORKFLOW_PATH = f".github/workflows/{WORKFLOW_FILE}"
 CONFIG_PATH = ".csarc/config.yml"
+PROVENANCE_PATH = ".csarc/provenance.json"
 ENVIRONMENTS = ("dev", "uat")
 CHANNEL_ENV = "CSARC_SELF_HOSTED_CHANNEL"
 PROTOCOL = "csarc-self-hosted-channel/1"
@@ -1213,7 +1214,17 @@ class GitSwitch:
                 saved = yaml.safe_load(
                     (tree / CONFIG_PATH).read_text(encoding="utf-8")
                 )
-                release = str((saved or {}).get("_commit") or "")
+                provenance_path = tree / PROVENANCE_PATH
+                provenance = (
+                    json.loads(provenance_path.read_text(encoding="utf-8"))
+                    if provenance_path.is_file()
+                    else {}
+                )
+                release = str(
+                    (provenance or {}).get("release_tag")
+                    or (saved or {}).get("_commit")
+                    or ""
+                )
                 # Keep the recorded release: only the mode and render change.
                 self.update(
                     tree,
@@ -1222,6 +1233,7 @@ class GitSwitch:
                         f"verification_mode_private={private_mode}",
                         "--data",
                         "project_visibility=public",
+                        "--retire-public-transition",
                         *(["--to", release] if release else []),
                         "--yes",
                         "--non-interactive",

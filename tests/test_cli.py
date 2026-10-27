@@ -17,7 +17,7 @@ import settings_support
 import yaml
 
 import csarc_cli.cli as cli
-from csarc_cli import lifecycle_report, settings_schema
+from csarc_cli import lifecycle_report, self_hosted, settings_schema
 from csarc_cli.cli import CliError
 from csarc_cli.cli import main as cli_main
 
@@ -1226,6 +1226,77 @@ def test_repository_context_uses_github_owner_and_visibility(
     assert context.owner_type == "organization"
     assert context.visibility == visibility
     assert context.verified
+
+
+def test_repository_context_limits_retire_visibility_transition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Plan public only for retire while GitHub still reports private."""
+    monkeypatch.setattr(cli, "target_repository", lambda _: "owner/repo")
+    monkeypatch.setattr(
+        cli,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0],
+            0,
+            stdout=json.dumps(
+                {
+                    "full_name": "owner/repo",
+                    "owner": {"login": "owner", "type": "Organization"},
+                    "visibility": "private",
+                }
+            ),
+            stderr="",
+        ),
+    )
+
+    with pytest.raises(CliError, match="does not match GitHub"):
+        cli.repository_context(tmp_path, "public")
+
+    transition = cli.repository_context(
+        tmp_path,
+        "public",
+        visibility_transition="private-to-public",
+    )
+    assert transition.visibility == "public"
+    assert transition.source == "retire-transition"
+    assert transition.verified
+
+    with pytest.raises(CliError, match="does not match GitHub"):
+        cli.repository_context(
+            tmp_path,
+            "internal",
+            visibility_transition="private-to-public",
+        )
+
+
+def test_retire_visibility_transition_is_branch_and_setting_bound(
+    tmp_path: Path,
+) -> None:
+    """Keep the hidden transition capability inside the retire workflow."""
+    target = tmp_path / "target"
+    target.mkdir()
+    git(target, "init", "-b", cli.self_hosted.RETIRE_BRANCH)
+    args = cli.parser().parse_args(
+        ["update", str(target), "--retire-public-transition"]
+    )
+    saved = {
+        "project_visibility": "private",
+        "verification_mode_private": "self-hosted",
+    }
+    explicit = {
+        "project_visibility": "public",
+        "verification_mode_private": "hosted",
+    }
+
+    assert (
+        cli.retire_visibility_transition(args, target, saved, explicit)
+        == "private-to-public"
+    )
+
+    git(target, "branch", "-m", "fix/not-retire")
+    with pytest.raises(CliError, match="reserved for the retire branch"):
+        cli.retire_visibility_transition(args, target, saved, explicit)
 
 
 def test_repository_context_requires_visibility_when_api_fails(
@@ -7199,6 +7270,130 @@ def initialize_verified_project(
     git(project, "config", "user.email", "cli-test@example.invalid")
     commit(project, "test: generated project")
     return source, project
+
+
+@pytest.mark.large
+def test_retire_git_switch_runs_the_real_public_update(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The retire worktree reaches the real updater while GitHub is private."""
+    source, _first_sha = make_template(tmp_path)
+    questions = yaml.safe_load((source / "copier.yml").read_text())
+    questions["_answers_file"] = ".csarc/config.yml"
+    questions.update(
+        {
+            "verification_mode_private": {
+                "type": "str",
+                "default": "self-hosted",
+            },
+            "verification_mode_public": {
+                "type": "str",
+                "default": "hosted",
+            },
+            "verification_mode": {
+                "type": "str",
+                "default": "{{ verification_mode_public if "
+                "project_visibility == 'public' else "
+                "verification_mode_private }}",
+                "when": False,
+            },
+        }
+    )
+    (source / "copier.yml").write_text(
+        yaml.safe_dump(questions, sort_keys=False), encoding="utf-8"
+    )
+    (source / "template" / "mode.txt.jinja").write_text(
+        "{{ project_visibility }} {{ verification_mode }}\n",
+        encoding="utf-8",
+    )
+    verifier = source / "template" / "scripts" / "verify"
+    verifier.write_text(
+        verifier.read_text().replace(
+            ".copier-answers.yml", ".csarc/config.yml"
+        ),
+        encoding="utf-8",
+    )
+    revision = commit(source, "test: add verification modes")
+    git(source, "tag", "v0.1.0", revision)
+    monkeypatch.setattr(cli, "CANONICAL_SOURCE", str(source))
+    monkeypatch.setattr(
+        cli, "GhReleaseClient", lambda: LocalGitReleaseClient(source, "v0.1.0")
+    )
+
+    project = tmp_path / "retiring-project"
+    assert (
+        main(
+            [
+                "init",
+                "--data",
+                "repository_url=https://github.com/example-org/product",
+                str(project),
+                "--to",
+                "v0.1.0",
+                "--yes",
+                "--non-interactive",
+                "--data",
+                "language=ci",
+                "--data",
+                "documentation_mode=off",
+                "--data",
+                "project_visibility=private",
+                "--data",
+                "verification_mode_private=self-hosted",
+                "--data",
+                "verification_mode_public=hosted",
+            ]
+        )
+        == 0
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated private project")
+    bare = tmp_path / "origin.git"
+    git(tmp_path, "init", "--bare", "-b", "main", str(bare))
+    origin = "https://github.com/example-org/product"
+    git(project, "remote", "add", "origin", origin)
+    git(project, "config", f"url.{bare}.insteadOf", origin)
+    git(project, "push", "origin", "main")
+
+    def private_repository(arguments: list[str]) -> tuple[int, str, str]:
+        if arguments == ["repos/example-org/product"]:
+            return (
+                0,
+                json.dumps(
+                    {
+                        "full_name": "example-org/product",
+                        "owner": {
+                            "login": "example-org",
+                            "type": "Organization",
+                        },
+                        "visibility": "private",
+                        "default_branch": "main",
+                    }
+                ),
+                "",
+            )
+        return 1, "", "not available"
+
+    monkeypatch.setattr(cli, "detector_api", private_repository)
+
+    def update(tree: Path, arguments: list[str]) -> None:
+        assert main(["update", str(tree), *arguments]) == 0
+
+    switch = self_hosted.GitSwitch(
+        project,
+        update=update,
+        create=lambda _: "https://github.com/example-org/product/pull/42\n",
+    )
+    assert switch.open_pull_request("example-org/product", "main", "hosted")
+    head = git(
+        project,
+        "ls-remote",
+        "origin",
+        f"refs/heads/{self_hosted.RETIRE_BRANCH}",
+    ).split()[0]
+    assert git(project, "show", f"{head}:mode.txt") == "public hosted"
 
 
 @pytest.mark.large
