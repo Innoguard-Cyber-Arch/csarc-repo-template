@@ -1436,11 +1436,9 @@ def copier_copy(
     if skip_tasks:
         command.append("--skip-tasks")
     data_file = stage.parent / f".{stage.name}-copier-data.yml"
-    render_data = dict(data)
-    if persist_answers:
-        render_data[settings_schema.RENDER_CONTEXT_FLAG] = True
     data_file.write_text(
-        yaml.safe_dump(render_data, sort_keys=True), encoding="utf-8"
+        copier_data_text(data, persist_answers=persist_answers),
+        encoding="utf-8",
     )
     command.extend(["--data-file", str(data_file)])
     command.extend([source, str(stage)])
@@ -1471,6 +1469,58 @@ def copier_copy(
             "Fix the cause, then run the csarc command again."
         ) from error
     return context
+
+
+def copier_data_text(
+    data: Mapping[str, object], *, persist_answers: bool
+) -> str:
+    """Return the Copier data file text one render passes to Copier."""
+    render_data = dict(data)
+    if persist_answers:
+        render_data[settings_schema.RENDER_CONTEXT_FLAG] = True
+    return yaml.safe_dump(render_data, sort_keys=True)
+
+
+def copier_validation_errors(
+    source: str, revision: Revision, data: Mapping[str, object]
+) -> list[tuple[str, str]]:
+    """Run Copier's questionnaire and collect every validator failure.
+
+    The render in `copier_copy` stops at the first rejected answer. This
+    asks the same questions with the same data file contents, in Copier's
+    own order, and records each rejection instead, so one preflight can
+    list every setting to change.
+    """
+    from copier._main import Worker
+    from copier._user_data import Question
+
+    failures: list[tuple[str, str]] = []
+    validate = Question.validate_answer
+
+    def collect(self: Question, answer: object) -> None:
+        try:
+            validate(self, answer)
+        except ValueError as error:
+            prefix = f"Validation error for question '{self.var_name}': "
+            failures.append((self.var_name, str(error).removeprefix(prefix)))
+
+    data_text = copier_data_text(data, persist_answers=True)
+    with tempfile.TemporaryDirectory(prefix="csarc-preflight-") as temporary:
+        Question.validate_answer = collect  # type: ignore[method-assign]
+        try:
+            with Worker(
+                src_path=source,
+                dst_path=Path(temporary),
+                vcs_ref=revision.sha,
+                data=yaml.safe_load(data_text),
+                defaults=True,
+                unsafe=True,
+                quiet=True,
+            ) as worker:
+                worker._ask()
+        finally:
+            Question.validate_answer = validate  # type: ignore[method-assign]
+    return failures
 
 
 def take_render_context(stage: Path) -> dict[str, object]:
@@ -13220,7 +13270,14 @@ def retire_visibility_transition(
     explicit: Mapping[str, str],
 ) -> str | None:
     """Allow only the retire branch to plan the future public render."""
+    preflight = args.retire_preflight is not None
     if not args.retire_public_transition:
+        if preflight:
+            raise CliError(
+                "Retire public preflight failed: it needs "
+                "'--retire-public-transition'. Run 'csarc self-hosted "
+                "retire' instead."
+            )
         return None
     unsupported_mode = any(
         (
@@ -13240,7 +13297,15 @@ def retire_visibility_transition(
     if (
         unsupported_mode
         or branch.returncode != 0
-        or branch.stdout.strip() != self_hosted.RETIRE_BRANCH
+        # The read-only preflight renders a detached tree and writes
+        # nothing; only the retire branch may write the transition.
+        or (
+            branch.stdout.strip() != ""
+            if preflight
+            else not self_hosted.RETIRE_BRANCH_PATTERN.fullmatch(
+                branch.stdout.strip()
+            )
+        )
         or saved.get("project_visibility") != "private"
         or saved.get("verification_mode_private") != "self-hosted"
         or explicit.get("project_visibility") != "public"
@@ -13404,6 +13469,14 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     )
     if pins.blocking and not (args.check or args.dry_run or args.finalize_plan):
         raise CliError(action_pin_preflight.drift_error(pins))
+    if args.retire_preflight is not None:
+        # The retire inventory asks Copier's own validators about the exact
+        # answers this render would use, before anything is deleted (#1315).
+        problems = copier_validation_errors(
+            source, target_revision, candidate_answers
+        )
+        args.retire_preflight.write_text(json.dumps(problems), encoding="utf-8")
+        return 0
     raw_answers = read_raw_answers(answers_path)
     with tempfile.TemporaryDirectory(prefix="csarc-update-plan-") as temporary:
         workdir = Path(temporary).resolve()
@@ -14013,6 +14086,12 @@ def parser() -> argparse.ArgumentParser:
     update.add_argument(
         "--retire-public-transition",
         action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    update.add_argument(
+        "--retire-preflight",
+        type=Path,
+        metavar="PATH",
         help=argparse.SUPPRESS,
     )
     add_write_options(update)

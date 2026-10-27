@@ -711,12 +711,26 @@ def test_verify_fails_closed_without_a_channel(
 
 
 class FakeSwitch:
-    def __init__(self, fail: bool = False) -> None:
+    def __init__(
+        self, fail: bool = False, problems: list[tuple[str, str]] | None = None
+    ) -> None:
         self.calls: list[tuple[str, str, str]] = []
+        self.checks: list[tuple[str, str, str]] = []
+        self.issues: list[int | None] = []
         self.fail = fail
+        self.problems = problems or []
 
-    def open_pull_request(self, repo: str, base: str, private_mode: str) -> str:
+    def public_problems(
+        self, repo: str, base: str, private_mode: str
+    ) -> list[tuple[str, str]]:
+        self.checks.append((repo, base, private_mode))
+        return self.problems
+
+    def open_pull_request(
+        self, repo: str, base: str, private_mode: str, issue: int | None = None
+    ) -> str:
         self.calls.append((repo, base, private_mode))
+        self.issues.append(issue)
         if self.fail:
             raise self_hosted.SelfHostedError(
                 "Update failed: conflicts. Resolve them."
@@ -748,6 +762,37 @@ def test_retire_without_apply_deletes_nothing(
     assert "self-hosted -> hosted" in out
     assert github.deletes() == []
     assert switch.calls == []
+    # The public settings check runs in the read-only inventory (#1315).
+    assert switch.checks == [(REPO, "main", "hosted")]
+    assert "every setting is valid for public mode" in out
+
+
+PROSE_CHANNEL = (
+    "security_reporting_channel",
+    "A public repository needs one maintainer-approved private reporting "
+    "channel outside GitHub.",
+)
+
+
+@pytest.mark.parametrize("apply", [False, True])
+def test_retire_refuses_settings_public_mode_rejects(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    apply: bool,
+) -> None:
+    """A prose reporting channel stops retire before anything changes."""
+    github = retire_github()
+    switch = FakeSwitch(problems=[PROSE_CHANNEL])
+    argv = ["retire", *(["--apply"] if apply else [])]
+    code = run(monkeypatch, session(github, switch=switch), *argv)
+    captured = capsys.readouterr()
+    assert code == 2
+    assert "settings that public mode rejects" in captured.out
+    assert "security_reporting_channel  A public repository" in captured.out
+    assert "governance-switch pull request" in captured.err
+    assert "nothing was deleted" in captured.err
+    assert github.deletes() == []
+    assert switch.calls == []
 
 
 def test_retire_apply_deletes_data_and_opens_a_pull_request(
@@ -772,6 +817,8 @@ def test_retire_apply_deletes_data_and_opens_a_pull_request(
         f"repos/{REPO}/actions/runners/5",
     ]
     assert switch.calls == [(REPO, "main", "local")]
+    assert switch.checks == [(REPO, "main", "local")]
+    assert switch.issues == [None]
     assert "Exit notice for csarc-devops:" in out
     assert "https://github.com/acme/widget/pull/42" in out
     # Q4: retire never changes repository settings itself.
@@ -786,12 +833,20 @@ def test_retire_retry_with_no_data_still_opens_the_pull_request(
     switch = FakeSwitch()
 
     assert (
-        run(monkeypatch, session(github, switch=switch), "retire", "--apply")
+        run(
+            monkeypatch,
+            session(github, switch=switch),
+            "retire",
+            "--apply",
+            "--issue",
+            "7",
+        )
         == 0
     )
 
     assert github.deletes() == []
     assert switch.calls == [(REPO, "main", "hosted")]
+    assert switch.issues == [7]
     assert "deleted 0 items" in capsys.readouterr().out
 
 
@@ -1001,23 +1056,76 @@ def clone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return work
 
 
+def downstream_scripts(
+    clone: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> Path:
+    """Ship the downstream Issue helpers and a gh stub that links branches.
+
+    The stub plays `gh issue develop`: it records its arguments and creates
+    the named branch on origin from the base, as GitHub does.
+    """
+    scripts = clone / ".csarc" / "scripts"
+    scripts.mkdir(parents=True)
+    for name in ("gh-issue-develop", "validate-issue-title"):
+        source = ROOT / "template" / ".csarc" / "scripts" / name
+        (scripts / name).write_text(source.read_text())
+        (scripts / name).chmod(0o755)
+    git(clone, "add", "-A")
+    git(clone, "commit", "-m", "add downstream helpers")
+    git(clone, "push", "origin", "main")
+    record = tmp_path / "develop.log"
+    stub = tmp_path / "gh-stub"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        f'printf "%s\\n" "$*" >> {record}\n'
+        "while (( $# )); do\n"
+        '  case "$1" in\n'
+        '    --name) name="$2"; shift ;;\n'
+        '    --base) base="$2"; shift ;;\n'
+        "  esac\n"
+        "  shift\n"
+        "done\n"
+        'git push -q origin "origin/$base:refs/heads/$name"\n'
+    )
+    stub.chmod(0o755)
+    monkeypatch.setenv("GH_BINARY", str(stub))
+    return record
+
+
+def flip_to_hosted(tree: Path, arguments: list[str]) -> None:
+    del arguments
+    path = tree / ".csarc/config.yml"
+    path.write_text(
+        path.read_text()
+        .replace("self-hosted", "hosted")
+        .split("self_hosted_runner")[0]
+    )
+
+
 def test_git_switch_opens_a_draft_governance_switch_pull_request(
-    clone: Path,
+    clone: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """The PR closes a new Issue from a linked type/<N>-slug branch."""
+    record = downstream_scripts(clone, monkeypatch, tmp_path)
+    (clone / ".github/pull_request_template.md").write_text(
+        "## Purpose\n\nCloses #N\n\n## Requirement evidence\n\nIssue: #N\n"
+    )
+    git(clone, "commit", "-am", "pr template")
+    git(clone, "push", "origin", "main")
     updates: list[list[str]] = []
     created: list[list[str]] = []
 
     def update(tree: Path, arguments: list[str]) -> None:
         updates.append(arguments)
-        path = tree / ".csarc/config.yml"
-        path.write_text(
-            path.read_text()
-            .replace("self-hosted", "hosted")
-            .split("self_hosted_runner")[0]
-        )
+        flip_to_hosted(tree, arguments)
 
     def create(arguments: list[str]) -> str:
         created.append(arguments)
+        if arguments[:2] == ["api", "user"]:
+            return "octo\n"
+        if arguments[:2] == ["issue", "create"]:
+            return f"https://github.com/{REPO}/issues/7\n"
         return f"https://github.com/{REPO}/pull/42\n"
 
     switch = self_hosted.GitSwitch(clone, update=update, create=create)
@@ -1036,19 +1144,95 @@ def test_git_switch_opens_a_draft_governance_switch_pull_request(
             "--non-interactive",
         ]
     ]
-    (arguments,) = created
-    assert arguments[4:7] == ["--draft", "--base", "main"]
-    assert arguments[arguments.index("--label") + 1] == "governance-switch"
-    assert arguments[-1] == "## Summary\n"
-    branch = self_hosted.RETIRE_BRANCH
+    _user, issue, pull = created
+    assert issue[issue.index("--title") + 1] == self_hosted.RETIRE_ISSUE_TITLE
+    assert issue[issue.index("--assignee") + 1] == "@me"
+    assert "| @octo |" in issue[issue.index("--body") + 1]
+    branch = "chore/7-leave-self-hosted"
+    assert self_hosted.RETIRE_BRANCH_PATTERN.fullmatch(branch)
+    # The downstream helper linked the branch in the Issue's Development.
+    assert record.read_text().split() == [
+        "issue",
+        "develop",
+        "7",
+        "--repo",
+        REPO,
+        "--base",
+        "main",
+        "--name",
+        branch,
+    ]
+    assert pull[4:7] == ["--draft", "--base", "main"]
+    assert pull[pull.index("--head") + 1] == branch
+    assert "governance-switch" in pull
+    body = pull[pull.index("--body") + 1]
+    assert re.search(r"^Closes #7$", body, flags=re.M)
+    assert re.search(r"^Issue: #7$", body, flags=re.M)
+    assert "#N" not in body
     pushed = git(clone, "ls-remote", "origin", f"refs/heads/{branch}")
     assert pushed
     changed = git(clone, "show", "--name-only", "--format=", pushed.split()[0])
     assert changed == ".csarc/config.yml"
-    # The operator's own tree and branch never change.
+    assert not git(clone, "ls-remote", "origin", "refs/heads/chore/retire-*")
+    # The operator's own tree and branch never change, and no local retire
+    # branch or worktree stays behind.
     assert git(clone, "status", "--porcelain") == ""
     assert git(clone, "branch", "--show-current") == "main"
+    assert git(clone, "branch", "--list", "chore/*") == ""
     assert "self-hosted" in (clone / ".csarc/config.yml").read_text()
+    assert len(git(clone, "worktree", "list").splitlines()) == 1
+
+
+def test_git_switch_uses_a_given_issue_and_reruns_after_a_failure(
+    clone: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A failed --apply leaves no local residue; the rerun succeeds."""
+    record = downstream_scripts(clone, monkeypatch, tmp_path)
+    created: list[list[str]] = []
+
+    def create(arguments: list[str]) -> str:
+        created.append(arguments)
+        if arguments[:2] == ["pr", "create"] and len(created) == 1:
+            raise subprocess.CalledProcessError(1, ["gh", "pr", "create"])
+        return f"https://github.com/{REPO}/pull/42\n"
+
+    switch = self_hosted.GitSwitch(clone, update=flip_to_hosted, create=create)
+    with pytest.raises(subprocess.CalledProcessError):
+        switch.open_pull_request(REPO, "main", "hosted", issue=9)
+    branch = "chore/9-leave-self-hosted"
+    assert git(clone, "branch", "--list", "chore/*") == ""
+    assert len(git(clone, "worktree", "list").splitlines()) == 1
+    first = git(clone, "ls-remote", "origin", f"refs/heads/{branch}").split()
+
+    url = switch.open_pull_request(REPO, "main", "hosted", issue=9)
+    assert url == f"https://github.com/{REPO}/pull/42"
+    # A given Issue is never re-created, and the branch is linked once.
+    assert [arguments[:2] for arguments in created] == [
+        ["pr", "create"],
+        ["pr", "create"],
+    ]
+    assert len(record.read_text().splitlines()) == 1
+    second = git(clone, "ls-remote", "origin", f"refs/heads/{branch}").split()
+    assert first and second
+    pull = created[-1]
+    assert "Closes #9" in pull[pull.index("--body") + 1]
+    assert git(clone, "branch", "--list", "chore/*") == ""
+    assert len(git(clone, "worktree", "list").splitlines()) == 1
+
+
+def test_git_switch_rejects_a_bad_issue_title(
+    clone: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The downstream title validator runs before any Issue exists."""
+    downstream_scripts(clone, monkeypatch, tmp_path)
+    monkeypatch.setattr(self_hosted, "RETIRE_ISSUE_TITLE", "Too short")
+    created: list[list[str]] = []
+    switch = self_hosted.GitSwitch(
+        clone, update=flip_to_hosted, create=lambda a: created.append(a) or ""
+    )
+    with pytest.raises(subprocess.CalledProcessError):
+        switch.open_pull_request(REPO, "main", "hosted")
+    assert created == []
     assert len(git(clone, "worktree", "list").splitlines()) == 1
 
 
