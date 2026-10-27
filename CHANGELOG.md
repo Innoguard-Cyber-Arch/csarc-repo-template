@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.47.4-beta.1] - 2026-10-27
+
+### Bug Fixes
+
+* fix(workflow): quote self-hosted run name (6d33991)
+
 ## [0.47.3-beta.1] - 2026-10-27
 
 ### Bug Fixes
