@@ -88,6 +88,10 @@ def registered_workflow() -> dict[Any, Any]:
 def test_workflow_is_read_only_and_dispatch_only() -> None:
     """AC1/R1: only workflow_dispatch, read permissions, and no secrets."""
     data = registered_workflow()
+    assert data["run-name"] == (
+        "Self-hosted verify PR #${{ inputs.pull_request }} "
+        "${{ inputs.head_sha }}"
+    )
     triggers = data[True]
     assert list(triggers) == ["workflow_dispatch"]
     assert set(triggers["workflow_dispatch"]["inputs"]) == {
