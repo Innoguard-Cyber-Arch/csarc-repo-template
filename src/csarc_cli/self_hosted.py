@@ -1349,7 +1349,8 @@ class GitSwitch:
                     if issue:
                         raise
                     raise SelfHostedError(
-                        f"{error} Issue #{number} stays open: pass "
+                        f"Retire pull request failed: Issue #{number} stays "
+                        f"open after {str(error).rstrip('.')}. Pass "
                         f"'--issue {number}' when you run retire again."
                     ) from error
             finally:
