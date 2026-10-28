@@ -11,6 +11,7 @@ recorded every binding below. Only self-hosted renders ship this file.
 from __future__ import annotations
 
 import importlib
+import json
 import re
 import subprocess
 import sys
@@ -45,6 +46,12 @@ TIER_RANK = {"fast": 0, "full": 1}
 # and the files that a render in the new mode replaces.
 EXIT_KEYS = {"verification_mode_private", *csarc_config.SELF_HOSTED_KEYS}
 EXIT_PATHS = (".csarc/", ".github/", "AGENTS.md")
+CONFIG = ".csarc/config.yml"
+PROVENANCE = ".csarc/provenance.json"
+# Q12 (#1317): a registration may change only the settings, the
+# provenance record the CLI rewrites, and the verify workflow render.
+REGISTRATION_PATHS = {CONFIG, PROVENANCE, WORKFLOW}
+UNREGISTERED_LABEL = "'csarc-vm-unregistered'"
 RERUN = "Dispatch csarc-verify.yml for the exact head"
 
 
@@ -281,19 +288,11 @@ def require(
     )
 
 
-def settings_change(
-    subject: Path,
-    base_config: Path,
-    lease: dict[str, Any],
-    git: Callable[[list[str]], str] | None = None,
-) -> tuple[dict[str, object], dict[str, object], set[str]] | None:
-    """Return the base and candidate settings and whether only they changed.
-
-    The third value names the settings that differ. None means the pull
-    request also changed a path outside the settings and their render, or
-    the settings could not be read; neither local-evidence route applies.
-    """
-    show = git or (
+def git_reader(
+    subject: Path, git: Callable[[list[str]], str] | None
+) -> Callable[[list[str]], str]:
+    """Return the Git reader that serves one candidate's objects."""
+    return git or (
         lambda args: (
             subprocess.run(  # noqa: S603 - fixed git arguments
                 ["git", "-C", str(subject), *args],  # noqa: S607
@@ -303,27 +302,65 @@ def settings_change(
             ).stdout
         )
     )
-    try:
-        base = csarc_config.load_config(base_config)
-        with tempfile.TemporaryDirectory(prefix="csarc-exit-") as scratch:
-            path = Path(scratch) / "config.yml"
-            path.write_text(
-                show(["show", f"{lease['head_sha']}:.csarc/config.yml"]),
-                encoding="utf-8",
-            )
-            candidate = csarc_config.load_config(path)
-        head, base_sha = lease["head_sha"], lease["base_sha"]
-        changed = show(["diff", "--name-only", f"{base_sha}...{head}"])
-    except (OSError, ValueError, subprocess.CalledProcessError):
-        return None
-    if not all(path.startswith(EXIT_PATHS) for path in changed.splitlines()):
-        return None
-    differing = {
+
+
+def changed_paths(
+    show: Callable[[list[str]], str], lease: dict[str, Any]
+) -> list[str]:
+    """Return every path the pull request touches.
+
+    Rename detection would list only the new side of a move, so a file
+    moved from product code into an allowed directory would look allowed;
+    --no-renames lists both sides (#1317 review).
+    """
+    head, base_sha = lease["head_sha"], lease["base_sha"]
+    return show(
+        ["diff", "--no-renames", "--name-only", f"{base_sha}...{head}"]
+    ).splitlines()
+
+
+def candidate_config(
+    show: Callable[[list[str]], str], head: str
+) -> dict[str, object]:
+    """Read the candidate settings with the trusted base reader."""
+    with tempfile.TemporaryDirectory(prefix="csarc-exit-") as scratch:
+        path = Path(scratch) / "config.yml"
+        path.write_text(show(["show", f"{head}:{CONFIG}"]), encoding="utf-8")
+        return csarc_config.load_config(path)
+
+
+def differing_keys(
+    base: dict[str, object], candidate: dict[str, object]
+) -> set[str]:
+    """Return the settings whose values differ."""
+    return {
         key
         for key in {*base, *candidate}
         if base.get(key) != candidate.get(key)
     }
-    return base, candidate, differing
+
+
+def settings_change(
+    subject: Path,
+    base_config: Path,
+    lease: dict[str, Any],
+    git: Callable[[list[str]], str] | None = None,
+) -> tuple[dict[str, object], dict[str, object], set[str]] | None:
+    """Return the base and candidate settings and the keys that differ.
+
+    None means the pull request also changed a path outside the settings
+    and their render directories, or the settings could not be read.
+    """
+    show = git_reader(subject, git)
+    try:
+        base = csarc_config.load_config(base_config)
+        candidate = candidate_config(show, str(lease["head_sha"]))
+        changed = changed_paths(show, lease)
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        return None
+    if not all(path.startswith(EXIT_PATHS) for path in changed):
+        return None
+    return base, candidate, differing_keys(base, candidate)
 
 
 def exit_reason(
@@ -356,6 +393,73 @@ def exit_reason(
     )
 
 
+def options_block(environments: object) -> str:
+    """Return the rendered environment choices of the verify workflow."""
+    if not isinstance(environments, list) or not environments:
+        raise ValueError("no registered environments")
+    return "        options:\n" + "".join(
+        f"          - {env}\n" for env in environments
+    )
+
+
+def registered_workflow(
+    before: str,
+    runner_id: str,
+    base: dict[str, object],
+    candidate: dict[str, object],
+) -> str:
+    """Return the verify workflow a registration render produces.
+
+    The render differs from the unregistered one only in the runner label
+    and the environment choices (csarc-verify.yml.jinja); every other byte
+    must stay as the trusted base has it.
+    """
+    old_options = options_block(base.get("self_hosted_environments"))
+    if before.count(UNREGISTERED_LABEL) != 1 or before.count(old_options) != 1:
+        raise ValueError("the base workflow is not an unregistered render")
+    return before.replace(
+        UNREGISTERED_LABEL, f"'csarc-vm-{runner_id}'"
+    ).replace(
+        old_options,
+        options_block(candidate.get("self_hosted_environments")),
+    )
+
+
+def same_provenance(before: str, after: str) -> bool:
+    """Return whether provenance changed only as a settings rewrite does.
+
+    The CLI rewrites the time, the previous record, the plan digest, and
+    the settings record; the settings context may differ only in the
+    self-hosted settings. The file is data the CLI reads, never code.
+    """
+    old, new = json.loads(before), json.loads(after)
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        return False
+    volatile = {"applied_at", "previous", "final_plan_sha256", "settings"}
+    if any(old.get(key) != new.get(key) for key in {*old, *new} - volatile):
+        return False
+    old_settings, new_settings = old.get("settings"), new.get("settings")
+    if old_settings is None and new_settings is None:
+        return True
+    if not isinstance(old_settings, dict) or not isinstance(new_settings, dict):
+        return False
+    digests = {"config_sha256", "context_sha256", "record_sha256", "context"}
+    old_context, new_context = (
+        old_settings.get("context"),
+        new_settings.get("context"),
+    )
+    return (
+        isinstance(old_context, dict)
+        and isinstance(new_context, dict)
+        and differing_keys(old_context, new_context)
+        <= set(csarc_config.SELF_HOSTED_KEYS)
+        and all(
+            old_settings.get(key) == new_settings.get(key)
+            for key in {*old_settings, *new_settings} - digests
+        )
+    )
+
+
 def registration_reason(
     subject: Path,
     base_config: Path,
@@ -365,16 +469,23 @@ def registration_reason(
     """Return why a first registration may merge on local evidence.
 
     ADR D2/Q12 (#1317): a new project starts self-hosted with an empty
-    self_hosted_runner, so no VM evidence can exist yet. Only the pull
-    request that keeps self-hosted, fills the empty runner, and changes
-    nothing but the self-hosted settings and the files their render
-    replaces qualifies. Anything else returns '' and stays fail closed.
+    self_hosted_runner, so no VM evidence can exist yet. Only a pull
+    request that keeps self-hosted, fills the empty runner, changes no
+    other setting, and changes no file beyond what that settings change
+    renders qualifies. A pull request that is not a registration returns
+    ''; a registration that carries anything more raises, so it fails
+    closed with the reason.
     """
-    change = settings_change(subject, base_config, lease, git)
-    if change is None:
+    show = git_reader(subject, git)
+    head, base_sha = str(lease["head_sha"]), str(lease["base_sha"])
+    try:
+        base = csarc_config.load_config(base_config)
+        candidate = candidate_config(show, head)
+        changed = changed_paths(show, lease)
+    except (OSError, ValueError, subprocess.CalledProcessError):
         return ""
-    base, candidate, differing = change
     runner = candidate.get("self_hosted_runner")
+    differing = differing_keys(base, candidate)
     if (
         base.get("verification_mode_private") != "self-hosted"
         or candidate.get("verification_mode_private") != "self-hosted"
@@ -385,6 +496,31 @@ def registration_reason(
         or not differing <= set(csarc_config.SELF_HOSTED_KEYS)
     ):
         return ""
+    rejected = [path for path in changed if path not in REGISTRATION_PATHS]
+    for path in sorted(set(changed) & {WORKFLOW, PROVENANCE}):
+        try:
+            before = show(["show", f"{base_sha}:{path}"])
+            after = show(["show", f"{head}:{path}"])
+            same = (
+                after
+                == registered_workflow(
+                    before, str(runner["id"]), base, candidate
+                )
+                if path == WORKFLOW
+                else same_provenance(before, after)
+            )
+        except (ValueError, subprocess.CalledProcessError):
+            same = False
+        if not same:
+            rejected.append(path)
+    if rejected:
+        raise RuntimeError(
+            "Self-hosted registration: "
+            + ", ".join(rejected)
+            + " changes more than registering self_hosted_runner renders "
+            "(ADR Q12). Keep only the settings and their render in this "
+            "pull request; verify the rest on the VM afterwards."
+        )
     return (
         f"the pull request only registers self_hosted_runner {runner['id']} "
         f"({runner['registration']}) on an unregistered self-hosted base "
