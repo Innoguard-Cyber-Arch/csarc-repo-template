@@ -829,9 +829,18 @@ def test_generated_prepare_ignores_a_tampered_candidate_gate(
     scripts.mkdir(parents=True)
     for relative in executor["GENERATED_CONTROL_FILES"]:
         (base / relative).write_text(f"trusted {relative}\n", "utf-8")
+    (base / ".csarc/config.yml").write_text("trusted settings\n", "utf-8")
+    (scripts / "scan-secrets").write_text("trusted check\n", "utf-8")
     staged = tmp_path / "staged"
     files = executor["prepare"](base, staged)
-    assert sorted(files) == sorted(executor["GENERATED_CONTROL_FILES"])
+    # Issue #1325: every check script and the step settings are staged.
+    assert sorted(files) == sorted(
+        {
+            *executor["GENERATED_CONTROL_FILES"],
+            ".csarc/config.yml",
+            ".csarc/scripts/scan-secrets",
+        }
+    )
     (scripts / "verify-fast").write_text("exit 0  # tampered\n", "utf-8")
     executor["verify_manifest"](staged)
     assert (staged / ".csarc/scripts/verify-fast").read_text(

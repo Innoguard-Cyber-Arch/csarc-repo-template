@@ -9,7 +9,11 @@ base instead of the candidate. `prepare` copies exactly that control set out
 of the trusted base checkout before the candidate is checked out; the hosted
 job then runs the staged entry point with `CSARC_VERIFICATION_SUBJECT_ROOT`
 pointing at the exact candidate tree, so the checks themselves (tests, lint,
-scans) still exercise the candidate's code.
+scans) still exercise the candidate's code. Issue #1325: in a generated
+project the control set also holds every `.csarc/scripts` file and the
+base's `.csarc/config.yml`, so the check scripts and the settings that
+select steps come from the base too; the candidate's own tests and lint
+configuration still run, because they are the subject.
 
 `self-test` runs only after the authoritative result exists. It compares the
 candidate's own router and configuration reader with the trusted decision and
@@ -52,7 +56,7 @@ import sys
 import tempfile
 from collections.abc import Generator
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 if __package__ in {None, ""}:
@@ -85,6 +89,11 @@ GENERATED_CONTROL_FILES = (
     ".csarc/scripts/verify",
     ".csarc/scripts/verify-fast",
 )
+# Issue #1325: a generated control set also carries every check script
+# beside the entry points and the settings that select steps, so the
+# hosted and VM runs never execute a candidate copy of a check. The
+# candidate only supplies the files the checks read.
+GENERATED_SETTINGS = ".csarc/config.yml"
 MANIFEST = "trusted-executor.json"
 # Issue #1106: the release control set is the guided candidate entry point
 # plus every Python module in the same directory, so a module it loads
@@ -128,7 +137,15 @@ def control_paths(
             "Use 'verification' or 'release'."
         )
     if scripts_prefix(root) == GENERATED_SCRIPTS:
-        return sorted(GENERATED_CONTROL_FILES)
+        paths = {*GENERATED_CONTROL_FILES, GENERATED_SETTINGS}
+        # Symbolic links are listed too, so prepare rejects them instead of
+        # silently leaving that check to the candidate.
+        paths.update(
+            path.relative_to(root).as_posix()
+            for path in (root / GENERATED_SCRIPTS).iterdir()
+            if path.is_symlink() or path.is_file()
+        )
+        return sorted(paths)
     paths = set(CONTROL_FILES)
     for pattern in CONTROL_GLOBS:
         paths.update(
@@ -143,7 +160,8 @@ def is_control_path(path: str) -> bool:
     """Return whether one repository path belongs to the control set."""
     return (
         path in CONTROL_FILES
-        or path in GENERATED_CONTROL_FILES
+        or path == GENERATED_SETTINGS
+        or PurePosixPath(path).parent.as_posix() == GENERATED_SCRIPTS
         or (path.startswith("scripts/verify-stage-") and "/" not in path[8:])
     )
 

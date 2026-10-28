@@ -1017,6 +1017,21 @@ step 先比對 manifest，再以 `CSARC_VERIFICATION_SUBJECT_ROOT` 指向 exact 
 subject 後立即 unset 這個變數，nested fixture 不會繼承。candidate 改了 control set 時，trusted router 會把變更歸入
 shell／workflow scope 並升到對應 tier，新版 gate 要等合併進 base 後才生效。
 
+#1325 把生成專案的 control set 擴大到檢查腳本與設定：`ci.yml` 與 `csarc-verify.yml` 的 `prepare` 從 trusted base
+複製 `.csarc/scripts/` 的每個檔案與 `.csarc/config.yml`，入口以這份副本執行衝突標記、secret 掃描、訊息格式、
+workflow 與 shell lint、Action pin、相依掃描、規格驗證、站台、metadata、語言設定與 PR 寫入者檢查，缺少腳本時那一步
+失敗，不改用 candidate 的副本。三種執行的來源如下：
+
+| 執行 | 入口與檢查腳本 | 決定要跑哪些步驟的設定 | 測試、lint 設定與相依 |
+| --- | --- | --- | --- |
+| 本機，candidate 檢查自己 | candidate | candidate | candidate |
+| 本機，base 的驗證器檢查 candidate（self-hosted 出口，#1318） | base 的 worktree | base 的 `.csarc/config.yml` | candidate |
+| hosted CI 與 VM | trusted base 搬入的 control set | trusted base 的 `.csarc/config.yml` | candidate |
+
+candidate 自己的測試、lint 設定與相依仍會執行，因為它們就是驗證對象；candidate 放寬自己的 lint 設定或測試，要靠
+審查發現。一般本機執行時 candidate 就是 base，行為不變。這個 template repository 自己的 root `verify-fast` 與
+`verify-template.sh` 仍以 candidate 的 `scripts/` 執行檢查腳本，control set 只有上段列的入口與 stage gate。
+
 這些 trusted step 用 `python3` 執行 base 的 scripts，所以 `verify` 在第一個 trusted step 之前就以固定版本的
 `actions/setup-python` 裝好 Python 3.14，不用 runner 內建的舊版直譯器（#1111）。其他 workflow 不一定先裝
 Python，因此 `scripts/` 與 `template/.csarc/scripts/` 仍須能被 Python 3.12 的語法解析：ruff 對這兩個目錄改用

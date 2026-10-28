@@ -15,9 +15,12 @@ else
 fi
 pnpm_store_dir="$cache_root/pnpm/store"
 cd "$repo_root"
-# Issue #1318: check scripts and the settings that select steps come from
-# check_root; each check still reads the subject's files.
-check_root="$(verification_check_root "$control_root" "$repo_root")"
+# Issues #1318 and #1325: check scripts and the settings that select steps
+# come from the control root, never from the subject: the full base checkout
+# of a self-hosted exit, or the set that hosted CI and the VM stage from the
+# trusted base. A missing check script fails its step instead of falling
+# back to the subject's copy. Each check still reads the subject's files.
+check_root="$control_root"
 checks="$check_root/.csarc/scripts"
 subject=(env "CSARC_VERIFICATION_SUBJECT_ROOT=$repo_root")
 
