@@ -46,6 +46,7 @@ TIER_RANK = {"fast": 0, "full": 1}
 EXIT_KEYS = {"verification_mode_private", *csarc_config.SELF_HOSTED_KEYS}
 EXIT_PATHS = (".csarc/", ".github/", "AGENTS.md")
 RERUN = "Dispatch csarc-verify.yml for the exact head"
+WINDOW_SOURCE = "operator-declared"
 
 
 class Reader(Protocol):
@@ -204,6 +205,10 @@ def validate_run(
         "mode": "self-hosted",
         "environment": env,
         "window": match["window"],
+        # Issue #1320: the operator dispatch declares the window end; the
+        # first step only checks it against the runner clock. It is not VM
+        # attested (ADR D3).
+        "window_source": WINDOW_SOURCE,
         "runner_labels": labels,
         "executor": {
             "kind": evidence_freshness.TRUST_SELF_HOSTED,
@@ -347,7 +352,9 @@ def trace_lines(snapshot: dict[str, object], suffix: str) -> list[str]:
             f"triggering_actor={executor['triggering_actor']} "
             f"runner={executor['runner_name']} "
             f"environment={evidence['environment']} "
-            f"window={evidence['window']} mode=self-hosted "
+            f"window={evidence['window']} "
+            f"window_source={evidence['window_source']} "
+            "mode=self-hosted "
             f"head={evidence['head_sha']} tier={evidence['tier']} {suffix} "
             f"trust={evidence_freshness.TRUST_SELF_HOSTED}"
         ]

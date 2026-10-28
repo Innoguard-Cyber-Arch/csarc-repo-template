@@ -88,7 +88,7 @@ Labels 必須恰好是表中的三個值。VM 註冊 runner 時使用 `--no-defa
 
 - 只由 `workflow_dispatch` 觸發，在 PR 的目標分支上派工。輸入：`pull_request`、`head_sha`、`environment`（只列已登記的環境）、`window_end`（UTC，例如 `2026-10-25T09:00Z`）。run 名稱帶 PR 編號與 head SHA。
 - 權限只有 `actions: read`、`contents: read`、`pull-requests: read`，不引用任何 secret；`runs-on` 是上表的三個 labels；尚未登記時 VM label 是 `csarc-vm-unregistered`，登記的 VM 都不帶這個 label。所有 Action 固定完整 SHA，checkout 一律 `persist-credentials: false`。
-- 第一個 step「Check the dispatch before any candidate code」來自目標分支的定義，在任何 checkout 之前以唯讀 token 確認：事件是 `workflow_dispatch`、`GITHUB_WORKFLOW_REF` 是目標分支上的 `csarc-verify.yml`、repository 是 private、PR 的 head repo 是本 repository、head SHA 等於輸入且 PR 仍開啟、PR 的目標分支是派工分支、輸入的環境等於目標分支推出的環境。任一項不符就以 `ERROR:` 結束。窗口剩不到 2 小時時，在輸出與 job summary 各印一行 `WARNING:`，提示執行 `csarc self-hosted extend --env <環境>`。
+- 第一個 step「Check the dispatch before any candidate code」來自目標分支的定義，在任何 checkout 之前以唯讀 token 確認：事件是 `workflow_dispatch`、`GITHUB_WORKFLOW_REF` 是目標分支上的 `csarc-verify.yml`、repository 是 private、PR 的 head repo 是本 repository、head SHA 等於輸入且 PR 仍開啟、PR 的目標分支是派工分支、輸入的環境等於目標分支推出的環境。任一項不符就以 `ERROR:` 結束。`window_end` 缺少、格式不對、以 runner 時鐘計算超過 24 小時之後，或剩不到 30 分鐘（等於 job 的 `timeout-minutes`）時，也以 `ERROR:` 結束並提示 `csarc self-hosted extend --env <環境>`；直接 `gh workflow run` 派工一樣受這個門檻限制（#1320）。窗口剩不到 2 小時時，在輸出與 job summary 各印一行 `WARNING:`，提示執行 `csarc self-hosted extend --env <環境>`。
 - 之後 checkout 目標分支（`github.sha`）並以 trusted executor（#1086）準備 entry point，再 checkout exact candidate。tier 是 trusted router 的 path tier 與 channel floor 中較強者；scopes 來自同一個 router。
 - execution step 名稱是 `Execute self-hosted verification head=<head> tree=<tree> tier=<tier> scopes=<scopes> mode=self-hosted environment=<環境> window=<window_end>`，由 trusted-base 的 `verify` 或 `verify-fast` 對 candidate tree 執行。
 
@@ -100,7 +100,7 @@ Labels 必須恰好是表中的三個值。VM 註冊 runner 時使用 `--no-defa
 4. job 完成時間在 24 小時內（`evidence_freshness.py`）。
 5. PR 的 head repo 是本 repository；合併當下的實際模式是 `self-hosted`（§2）。
 
-合併證據記錄 run URL、run 的 `actor` 與 `triggering_actor`、runner、環境、窗口與模式，trailer 是 `CSARC-Trust: self-hosted-registered`，summary 多一行 `self-hosted-verification-trace`。窗口結束或登記撤銷不讓已完成的證據失效。
+合併證據記錄 run URL、run 的 `actor` 與 `triggering_actor`、runner、環境、窗口與模式；窗口另記 `window_source: operator-declared`，表示結束時間來自派工輸入、不是 VM 證明，trace 行寫成 `window=<window_end> window_source=operator-declared`（#1320）。trailer 是 `CSARC-Trust: self-hosted-registered`，summary 多一行 `self-hosted-verification-trace`。窗口結束或登記撤銷不讓已完成的證據失效。
 
 **離開 self-hosted 的出口（ADR Q1）。**trusted base 的 `verification_mode_private` 是 `self-hosted`，candidate 改成其他值，而且兩邊設定只有 `verification_mode_private`、`self_hosted_runner`、`self_hosted_environments` 不同、變更的路徑都在 `.csarc/`、`.github/` 或 `AGENTS.md` 下時，這張 governance-switch PR 改用 `local` 的本機證據合併。trailer 是 `CSARC-Trust: self-attested-local`，summary 多一行 `self-hosted-exit-trace` 說明原因。其他 PR 都不適用。
 
