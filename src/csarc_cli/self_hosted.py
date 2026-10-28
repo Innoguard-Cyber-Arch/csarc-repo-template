@@ -1142,10 +1142,12 @@ def retire(
                 or "none",
             ),
             (
-                "Actions caches",
+                # #1318: every cache of every workflow, not only the VM's.
+                "Actions caches (all workflows)",
                 ", ".join(str(item.get("id")) for item in caches) or "none",
             ),
-            ("runners", runner_rows(runners)),
+            # #1318: every runner registered to the repository.
+            ("runners (all in the repository)", runner_rows(runners)),
             (
                 "settings change",
                 f"verification_mode_private self-hosted -> {new_mode}, drop "
@@ -1583,7 +1585,8 @@ def add_parser(
         "verify": f"dispatch {WORKFLOW_FILE} for one pull request",
         "retire": (
             "required before the repository becomes public: delete "
-            "self-hosted runs, artifacts, caches, and runners"
+            f"{WORKFLOW_FILE} runs and artifacts, and every Actions cache "
+            "and repository runner"
         ),
     }
     for name, text in helps.items():

@@ -263,7 +263,7 @@ def test_generated_verification_runs_the_check(entry: str) -> None:
         encoding="utf-8"
     )
     assert 'verification_step "Message pattern check"' in text
-    assert "./.csarc/scripts/check-message-style" in text
+    assert '"$checks/check-message-style"' in text
 
 
 @pytest.mark.parametrize("checker", CHECKERS, ids=["root", "template"])

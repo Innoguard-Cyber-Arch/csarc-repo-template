@@ -178,12 +178,20 @@ def record(
     base: str = "",
     expected_head_sha: str = "",
     expected_base_sha: str = "",
+    control_root: Path | None = None,
 ) -> dict[str, Any] | None:
-    """Write evidence only after a canonical local suite has succeeded."""
+    """Write evidence only after a canonical local suite has succeeded.
+
+    control_root is the checkout whose verifier ran. It is the candidate
+    itself in an ordinary run. When the trusted base's verifier checks a
+    candidate that no longer ships this recorder, such as the public render
+    of a self-hosted exit (ADR self-hosted-verification Q1, #1318), the
+    base's settings decide whether local evidence applies.
+    """
     if os.environ.get("CSARC_SELF_HOSTED_VM") == "true":
         return None
     root = repository_root()
-    if verification_mode(root) != "local":
+    if verification_mode(control_root or root) != "local":
         return None
     if tier not in VALID_TIERS:
         raise RuntimeError(f"Tier is invalid: '{tier}'. Use 'fast' or 'full'.")
@@ -220,8 +228,12 @@ def record(
     tree_sha = git("rev-parse", "HEAD^{tree}")
     base_ref, base_sha = resolve_base(base)
     if expected_base_sha and base_sha != expected_base_sha:
+        # The base moved during the run, or a commit was given as the base
+        # and the configured branch is not at it (#1318).
         raise RuntimeError(
-            "Base changed during verification: stale. Run verify again."
+            f"Base does not match: '{base_ref}' is at {base_sha[:12]}, "
+            f"not the planned {expected_base_sha[:12]}. Update '{base_ref}' "
+            "or run verify again."
         )
     command_root = (
         ".csarc/scripts"
@@ -357,6 +369,7 @@ def main() -> None:
     parser.add_argument("--base", default="")
     parser.add_argument("--head-sha", default="")
     parser.add_argument("--base-sha", default="")
+    parser.add_argument("--control-root", type=Path, default=None)
     args = parser.parse_args()
     try:
         record(
@@ -365,6 +378,7 @@ def main() -> None:
             args.base,
             args.head_sha,
             args.base_sha,
+            args.control_root,
         )
     except (RuntimeError, subprocess.CalledProcessError) as error:
         sys.stderr.write(f"ERROR: {error}\n")

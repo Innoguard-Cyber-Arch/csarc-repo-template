@@ -4,7 +4,7 @@
 - **日期：**2026-10-25
 - **來源 Issues：**[#1266](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1266)、[#1265](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1265)（Milestone 21 tracker，擁有者 2026-10-24、2026-10-25 決定）；部分取代 [#908](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/908) 的新專案預設
 - **實作 PR：**[#1273](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/1273)
-- **修訂：**[#1281](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1281)（2026-10-26，`container` 模組與 VM 上的 Docker：限制 12、D8 第 7 點、C11）。這次修訂需要擁有者核准，以 #1281 PR 的合併授權作為核准。[#1272](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1272)（2026-10-26，D9 事後偵測的條件；擁有者 2026-10-26 核准）。[#1300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1300)（2026-10-27，實機開窗確認 C1 ready 時序與 C2 exact labels）。[#1317](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1317)（2026-10-28，第一次登記的出口與 adopt 的預設：D2、Q12）。擁有者 2026-10-28 同意開立 #1317；新專案預設 `self-hosted` 不變，這次修訂以 #1317 PR 的合併授權作為核准。
+- **修訂：**[#1281](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1281)（2026-10-26，`container` 模組與 VM 上的 Docker：限制 12、D8 第 7 點、C11）。這次修訂需要擁有者核准，以 #1281 PR 的合併授權作為核准。[#1272](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1272)（2026-10-26，D9 事後偵測的條件；擁有者 2026-10-26 核准）。[#1300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1300)（2026-10-27，實機開窗確認 C1 ready 時序與 C2 exact labels）。[#1317](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1317)（2026-10-28，第一次登記的出口與 adopt 的預設：D2、Q12）。擁有者 2026-10-28 同意開立 #1317；新專案預設 `self-hosted` 不變，這次修訂以 #1317 PR 的合併授權作為核准。[#1318](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1318)（2026-10-28，`retire` 的刪除範圍、退出 PR 的證據、沒先 `retire` 就公開的補救：D9、Q1、Q13）。擁有者 2026-10-28 同意開立 #1318；沒有新增合併例外，這次修訂以 #1318 PR 的合併授權作為核准。
 
 ## 問題與限制
 
@@ -207,7 +207,7 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 
 **公開前必須執行 `csarc self-hosted retire`。**這個動作不可回復，只由管理員以自己的憑證執行：
 
-1. 預設只做唯讀盤點：`csarc-verify.yml` 的所有 run、它們的 artifact 與 Actions cache、目前的 runner。
+1. 預設只做唯讀盤點：`csarc-verify.yml` 的所有 run 與它們的 artifact，以及 repo 的**全部** Actions cache 與**全部** repo 層級 runner（#1318）。cache 與 runner 不分 workflow、不只 VM 的：GitHub 的 cache 不記錄是哪個 workflow 建立的，公開後 fork PR 的 workflow 也能讀到 base 分支的 cache；repo 層級的 runner 在公開後可能接到 fork PR 的 job。其他 workflow 的 run 與 artifact 不在範圍內。
 2. `--apply` 依盤點刪除這些 run、artifact 與 cache，移除 runner，並建立一張 governance-switch PR：把 `verification_mode_private` 改離 `self-hosted`，並以 public 模式重新 render（D2）。設定變更一律經 PR，不由指令直接改 trusted 設定。同時產生給 csarc-devops 的退出通知內容。
 3. 輸出刪除結果；任何一項失敗都以非 0 結束，訊息說明哪些 log 仍會在公開後被看到。
 
@@ -216,6 +216,7 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 - VM 的定期檢查（L5）停止 runner、刪除資料，並在 csarc-devops 開 Issue 記錄。VM 對下游沒有權限，不在下游開 Issue。
 - 模板端不依賴讀取 csarc-devops：`csarc self-hosted status`、`csarc update` 報告與 lifecycle 只要發現 repo 是 public，且 `verification_mode_private` 仍是 `self-hosted`，或仍有 `csarc-verify.yml` 的 run，就印出 `WARNING:` 要求執行 `retire`。條件不看 `CSARC-Trust: self-hosted-registered` 的 merge trace：trace 永遠留在 Git 歷史中，正確執行 `retire` 之後仍會一直警告（擁有者 2026-10-26 核准這項修訂，#1272）。
 - 合併時 L6 讓 VM 證據失效；已 render 的檔案與 public 模式不一致時，lifecycle 要求重新 render。
+- **補救（Q13，#1318）：**repo 是 public 而 trusted base 仍是 self-hosted render 時，lifecycle 拒絕所有 PR，包括重新 render 的 PR，訊息指向唯一的 lifecycle 路線：把 repo 轉回 private，執行 `csarc self-hosted retire --apply`，以 Q1 出口合併它的 PR（trace 是 `self-hosted-exit-trace`），再轉成 public。public 期間不開任何合併例外。轉回 private 有代價：依 [GitHub 文件](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/managing-repository-settings/setting-repository-visibility)，star 與 watcher 會被移除，公開期間被 fork 的副本留在外面；已公開的 log 也收不回。不能接受這些代價時，管理員可以不經 lifecycle 合併 `retire` 建立的 PR；這是 `untraced` 合併，`merge_trace.py audit` 會列出，要在 PR 與 Issue 留言記錄原因。
 
 ### D10. 失效、撤銷與降級
 
@@ -237,7 +238,7 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 | 證據的 run、模式、runner、環境、窗口或 head 不符 | 拒絕 | 在正確環境重新 `verify` |
 | 懷疑 VM 被入侵 | csarc-devops 停止該 VM 上所有 runner；以 `merge_trace.py audit` 列出事件期間 `CSARC-Trust: self-hosted-registered` 且 runner 屬於該 VM 的合併，逐一重新驗證 | 依 `docs/security-response.md` 處理；恢復前必須重建 VM |
 
-**離開 self-hosted 的出口（Q1，已決）。**trusted base 決定模式，所以「把 `verification_mode_private` 改離 `self-hosted`」的 PR 本身仍要求 VM 證據；新專案尚未登記或 VM 長期無法使用時會卡住。選項 Y 的治理已經是本機指令，因此只為「只改模式設定、方向是離開 self-hosted」的 governance-switch PR 接受 `local` 的本機證明，merge trace 記為 `self-attested-local` 並註明原因。這個出口只檢查設定與路徑前綴（`.csarc/`、`.github/`、`AGENTS.md`，以 `--no-renames` 列出），不比對檔案內容：離開之後不再派工到 VM，所以不需要 Q12 那樣的逐檔比對。不需要任何 GitHub-hosted 執行。
+**離開 self-hosted 的出口（Q1，已決）。**trusted base 決定模式，所以「把 `verification_mode_private` 改離 `self-hosted`」的 PR 本身仍要求 VM 證據；新專案尚未登記或 VM 長期無法使用時會卡住。選項 Y 的治理已經是本機指令，因此只為「只改模式設定、方向是離開 self-hosted」的 governance-switch PR 接受 `local` 的本機證明，merge trace 記為 `self-attested-local` 並註明原因。這個出口只檢查設定與路徑前綴（`.csarc/`、`.github/`、`AGENTS.md`，以 `--no-renames` 列出），不比對檔案內容：離開之後不再派工到 VM，所以不需要 Q12 那樣的逐檔比對。不需要任何 GitHub-hosted 執行。退出 PR 的本機證明由 trusted base 的驗證器產生：在 base 的 worktree 執行 `CSARC_VERIFICATION_SUBJECT_ROOT=<candidate> <base>/.csarc/scripts/verify-fast`，由 base 檢查 candidate。base 的驗證器以 `verification_check_root` 選出檢查來源：入口、檢查腳本（衝突標記、secret 掃描、訊息格式、workflow 與 shell lint、Action pin、相依掃描、規格驗證、站台、metadata、語言設定、PR 寫入者）、記錄器，以及決定要跑哪些步驟的設定（`documentation_mode`、`languages`、`documentation_languages`）都來自 base；這些腳本檢查的是 candidate 的檔案。candidate 自己的測試、lint 設定與相依版本仍是candidate 的內容，這是本機證明本來的範圍。hosted CI 與 VM 只搬入幾個入口檔（`trusted-executor.json`），檢查腳本仍用 candidate 的，行為不變。base 提供檢查腳本與設定，只能防止 candidate 直接改掉自己的檢查；這不是隔離邊界：candidate 的測試與程式碼在同一台機器、以同一個使用者執行，可能改寫 base 的 worktree，所以證據仍是 `self-attested-local`。原因是 `retire` 預設把 `verification_mode_private` 改成 public 模式（通常 `hosted`），而 public render 不帶 `local_verification.py`，candidate 自己的 `verify-fast` 也不記錄；`--private-mode local` 一樣，因為 public 的 render 由 `verification_mode_public` 決定。lifecycle 在出口缺證據時印出這個指令。只有 base 已更新到含 #1318 的模板時可用；更早的 base 先以 VM 證據合併模板更新。
 
 ### D11. 先盤點、再動作
 
@@ -310,6 +311,7 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 | Q10 | #1264 的範圍 | **改變：**只屬於模板 repository，不下發到 `template/`；lifecycle 規則與模式無關；下游 fixture 不需為它保留空間 |
 | Q11 | 信任邊界 | **改變：縮小。**登記加入觸發者允許清單，存在 VM 端，修改走雙邊 Issue；L4 hook 拒絕 `actor` 或 `triggering_actor` 不在清單上的 job，清單外的寫入者不能在 VM 上執行程式碼。仍保留誠實的限制：Free private 沒有 Ruleset，寫入者可以不經 lifecycle 直接合併，由 merge trace 稽核發現 `untraced` 合併 |
 | Q12 | 新專案預設 `self-hosted` 而尚未登記時，登記 PR 本身取不到 VM 證據；adopt 也預設 `self-hosted`（#1317，2026-10-28） | 新專案預設不變；只為「未登記的 self-hosted base 只填入 `self_hosted_runner`（與環境）及其 render」的 PR 接受 `local` 本機證明，內容逐檔比對（D2），trace 另記 `self-hosted-registration-trace`；adopt 預設維持 `solo-local`（D2）。已知限制：`registration` 只檢查格式（Q5），偽造的連結只會讓這個 repo 自己開不了窗，因為 VM 依允許清單拒絕 |
+| Q13 | 沒先 `retire` 就公開時，修正 render 的 PR 也被擋；`retire` 預設產生的退出 PR 取不到本機證明；`retire` 刪除範圍沒寫清楚（#1318，2026-10-28） | public 期間不開合併例外：public repo 若有出口，內容只能比對路徑前綴，無法逐檔比對整套 public render，達不到 Q12 的標準；補救是轉回 private 後走 `retire` 與 Q1（D9）。退出 PR 的證明改由 trusted base 的驗證器產生（D10 Q1）。`retire` 刪除全部 cache 與全部 repo runner，盤點與 ci-policy 寫明（D9） |
 | — | D8 隔離 | 每個 job 一個新容器、固定版本的工具鏈 image、依（repo, 環境）分開的快取 volume；容器不掛 docker socket、不用 privileged 與 host network、不能存取 metadata endpoint；採用每個 job 丟棄 |
 
 ## 給 csarc-devops 的事項（需另開對方 Issue，雙方連結）

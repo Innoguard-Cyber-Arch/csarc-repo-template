@@ -1526,6 +1526,31 @@ def test_self_hosted_exit_merges_on_local_evidence_with_its_reason(
     ) in lines
 
 
+def test_exit_without_local_evidence_names_the_base_verifier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#1318 AC2: a missing exit record points at the trusted verifier."""
+    bind_remote_lease(monkeypatch)
+    use_self_hosted_mode(monkeypatch, "it only leaves self-hosted (ADR Q1)")
+
+    def missing(**_kwargs: object) -> None:
+        raise RuntimeError(
+            "Local evidence is unavailable: unreadable. Run verify again."
+        )
+
+    monkeypatch.setattr(MODULE["local_verification"], "require", missing)
+    with pytest.raises(RuntimeError) as error:
+        merge_snapshot(SingleWriterGitHub(), lease_fixture(), AUTHORIZATION_URL)
+    assert "CSARC_VERIFICATION_SUBJECT_ROOT" in str(error.value)
+    # An ordinary self-hosted pull request keeps the VM path untouched.
+    use_self_hosted_mode(monkeypatch)
+    monkeypatch.setattr(MODULE["local_verification"], "require", missing)
+    snapshot = merge_snapshot(
+        SingleWriterGitHub(), lease_fixture(), AUTHORIZATION_URL
+    )
+    assert snapshot["required_check_evidence"] == "self-hosted-registered"
+
+
 def use_unregistered_base(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, changed: str
 ) -> dict[str, Any]:
@@ -1609,10 +1634,34 @@ def test_public_repository_never_uses_vm_evidence(
             return {"private": self.private}
 
     assert function(Visibility(True), REPO) == "self-hosted"
-    # Public: the mode is hosted, so the self-hosted render must re-render.
+    # Public before retire (#1318 AC1): no route opens while public; the
+    # message names the only lifecycle recovery.
+    with pytest.raises(RuntimeError) as public:
+        function(Visibility(False), REPO)
+    assert "turned public before 'csarc self-hosted retire'" in str(
+        public.value
+    )
+    assert "Make it private again" in str(public.value)
+    # A public repository whose render is merely stale still re-renders.
+    (tmp_path / ".github/workflows/csarc-verify.yml").unlink()
     with pytest.raises(RuntimeError, match="csarc update"):
         function(Visibility(False), REPO)
+    (tmp_path / ".github/workflows/csarc-verify.yml").write_text("", "utf-8")
     # Self-hosted without its workflow is a render mismatch too.
     (tmp_path / ".github/workflows/csarc-verify.yml").unlink()
     with pytest.raises(RuntimeError, match="csarc update"):
         function(Visibility(True), REPO)
+    # #1318: a public self-hosted mode never loads, so the D9 message is
+    # the only public path; tests/test_verification_mode_settings.py
+    # covers the reader itself.
+    (tmp_path / ".csarc/config.yml").write_text(
+        settings_text(
+            "",
+            verification_mode=None,
+            verification_mode_private="hosted",
+            verification_mode_public="self-hosted",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="verification_mode_public"):
+        function(Visibility(False), REPO)

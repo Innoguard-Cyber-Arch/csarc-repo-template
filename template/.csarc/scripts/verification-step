@@ -19,6 +19,23 @@ verification_subject_root() {
   (cd "$subject" && pwd)
 }
 
+# Issue #1318: return the checkout whose check scripts and settings run.
+# A full trusted checkout that checks another tree, such as the base
+# verifier of a self-hosted exit, uses its own copies. The subject itself,
+# or a staged CI control set that carries only the entry points (marked by
+# trusted-executor.json), keeps using the subject's copies.
+verification_check_root() {
+  local control_root=$1
+  local subject_root=$2
+
+  if [[ "$control_root" != "$subject_root" &&
+    ! -f "$control_root/trusted-executor.json" ]]; then
+    printf '%s\n' "$control_root"
+  else
+    printf '%s\n' "$subject_root"
+  fi
+}
+
 verification_command_string() {
   local argument
   local rendered=""

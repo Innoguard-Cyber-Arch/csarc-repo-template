@@ -22,6 +22,11 @@ else
   export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
 fi
 cd "$repo_root"
+# Issue #1318: check scripts and the settings that select steps come from
+# check_root; each check still reads the subject's files.
+check_root="$(verification_check_root "$control_root" "$repo_root")"
+checks="$check_root/.csarc/scripts"
+subject=(env "CSARC_VERIFICATION_SUBJECT_ROOT=$repo_root")
 
 plan_root="$(mktemp -d)"
 trap 'rm -rf "$plan_root"' EXIT
@@ -60,6 +65,13 @@ fi
 {% if verification_mode != "hosted" -%}
 verification_head_sha="$(git rev-parse HEAD)"
 verification_base_sha="$(git rev-parse "$base_ref^{commit}")"
+# The record names a branch. For a commit given as the base, the recorder
+# uses the configured base branch and requires its tip to equal that
+# commit (#1318).
+verification_base="$base"
+if [[ "$verification_base" =~ ^[0-9a-f]{40}$ ]]; then
+  verification_base=""
+fi
 {% endif -%}
 if ! merge_base="$(git merge-base "$base_ref" HEAD)"; then
   echo "ERROR: No merge base: '$base_ref' and HEAD. Fetch more history." >&2
@@ -139,6 +151,8 @@ case "$suite" in
   fast) ;;
   full)
     CSARC_VERIFICATION_SUBJECT_ROOT="$repo_root" \
+      _CSARC_VERIFICATION_BASE="${verification_base:-}" \
+      _CSARC_VERIFICATION_BASE_SHA="${verification_base_sha:-}" \
       "$control_root/.csarc/scripts/verify"
     exit 0
     ;;
@@ -149,18 +163,20 @@ case "$suite" in
 esac
 
 verification_step "Changed-tree hygiene" git diff --check
-verification_step "Conflict-marker check" ./.csarc/scripts/check-update-conflicts
-verification_step "Secret scan" ./.csarc/scripts/scan-secrets
+verification_step "Conflict-marker check" \
+  "${subject[@]}" "$checks/check-update-conflicts"
+verification_step "Secret scan" "${subject[@]}" "$checks/scan-secrets"
 verification_step "Message pattern check" \
-  ./.csarc/scripts/check-message-style --base "$merge_base"
+  "$checks/check-message-style" --base "$merge_base"
 
 if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ||
   "$scopes" == *,template,* ]]; then
-  verification_step "Workflow and shell lint" ./.csarc/scripts/lint-workflows-shell
+  verification_step "Workflow and shell lint" \
+    "${subject[@]}" "$checks/lint-workflows-shell"
 fi
 if [[ "$scopes" == *,workflow,* || "$scopes" == *,template,* ]]; then
   verification_step "GitHub Actions pin check" \
-    python3 .csarc/scripts/check_action_pins.py --root .
+    python3 "$checks/check_action_pins.py" --root .
 fi
 
 {% if has_python or has_typescript or has_rust or has_go -%}
@@ -209,7 +225,8 @@ fi
 {% endif -%}
 
 if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
-  verification_step "Dependency scan" ./.csarc/scripts/verify-dependencies
+  verification_step "Dependency scan" \
+    "${subject[@]}" "$checks/verify-dependencies"
 fi
 {% if has_python -%}
 if $run_project_checks; then
@@ -236,15 +253,19 @@ fi
 {% if documentation_mode != 'off' -%}
 if [[ "$scopes" == *,docs,* ]]; then
   verification_step "Specification validation" \
-    python3 .csarc/scripts/spec_to_issue.py validate
+    python3 "$checks/spec_to_issue.py" validate
 {% if documentation_mode == 'template-and-content' -%}
-  verification_step "Repository site render" ./.csarc/scripts/build-repo-site --check
+  verification_step "Repository site render" \
+    "${subject[@]}" "$checks/build-repo-site" --check
 {% endif -%}
 fi
 {% endif -%}
 
 {% if verification_mode != "hosted" -%}
-python3 .csarc/scripts/local_verification.py record \
-  --tier fast --scopes "${scope_csv:-unknown}" --base "$base" \
+# The recorder comes from check_root, so the trusted base can record a
+# candidate render that no longer ships it (#1318).
+python3 "$checks"/local_verification.py record \
+  --control-root "$check_root" --tier fast \
+  --scopes "${scope_csv:-unknown}" --base "$verification_base" \
   --head-sha "$verification_head_sha" --base-sha "$verification_base_sha"
 {% endif -%}
