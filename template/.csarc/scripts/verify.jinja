@@ -555,6 +555,7 @@ fi
 # earlier; reaching this point means every selected check and any optional
 # project verification hook passed.
 {% if verification_mode != "hosted" -%}
-python3 .csarc/scripts/local_verification.py record \
-  --tier full --scopes all --head-sha "$verification_head_sha"
+# The recorder comes from the control set (#1318).
+python3 "$control_root"/.csarc/scripts/local_verification.py record \
+  --control-root "$control_root" --tier full --scopes all --head-sha "$verification_head_sha"
 {% endif -%}

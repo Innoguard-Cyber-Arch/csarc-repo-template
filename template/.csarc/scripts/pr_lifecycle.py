@@ -184,6 +184,13 @@ require_trusted_dependabot_head = _hosted_only(
 
 # Shared next steps of raised messages (#1253).
 GH_RETRY = "Run 'gh auth status' and rerun"
+# ADR self-hosted-verification Q1 (#1318): the exit candidate is checked by
+# the trusted base's verifier, whose recorder the candidate may not ship.
+EXIT_EVIDENCE_HINT = (
+    "To record it, run the base verifier on this checkout: 'git worktree "
+    "add --detach <dir> origin/<base>', then 'CSARC_VERIFICATION_SUBJECT_ROOT"
+    '="$PWD" <dir>/.csarc/scripts/verify-fast\'.'
+)
 LS_LEASES = "Run 'git ls-remote origin csarc/leases'"
 LEASE_SCHEMA = 2
 MAX_TTL_SECONDS = 7200
@@ -2521,6 +2528,16 @@ def configured_verification_mode(github: GitHub, repo: str) -> str:
         (flows / "pr-policy.yml").is_file(),
         (flows / "csarc-verify.yml").is_file(),
     ):
+        if not private and (flows / "csarc-verify.yml").is_file():
+            # ADR self-hosted-verification D9 (#1318): a self-hosted render
+            # that turned public before retire has no lifecycle route while
+            # public; no evidence path is opened for a public repository.
+            raise RuntimeError(
+                "Verification mode self-hosted: the repository turned public "
+                "before 'csarc self-hosted retire', so no pull request can "
+                "merge. Make it private again, run 'csarc self-hosted retire "
+                "--apply', merge its pull request, then make it public."
+            )
         raise RuntimeError(
             f"Verification mode {mode}: the rendered files do not match the "
             "current visibility. Run 'csarc update' to render again."
@@ -3299,13 +3316,22 @@ def merge_snapshot(  # noqa: C901
             raise RuntimeError(
                 "Quota fallback: not for local verification. Run it."
             )
-        local_evidence = local_verification.require(
-            head_sha=str(head_sha),
-            tree_sha=str(lease["head_tree"]),
-            base_ref=str(lease["base_ref"]),
-            base_sha=str(lease["base_sha"]),
-            required_tier=required_tier,
-        )
+        try:
+            local_evidence = local_verification.require(
+                head_sha=str(head_sha),
+                tree_sha=str(lease["head_tree"]),
+                base_ref=str(lease["base_ref"]),
+                base_sha=str(lease["base_sha"]),
+                required_tier=required_tier,
+            )
+        except RuntimeError as error:
+            if not exit_reason:
+                raise
+            # #1318: a public or hosted exit render ships no recorder, so
+            # the trusted base's verifier checks the candidate instead.
+            raise RuntimeError(
+                f"{str(error).rstrip('.')}. {EXIT_EVIDENCE_HINT}"
+            ) from error
         check_evidence = "local-self-attested"
         verification_record = evidence_freshness.normalized_record(
             local_evidence, evidence_freshness.TRUST_LOCAL

@@ -158,6 +158,45 @@ def test_hosted_mode_does_not_write_local_evidence(
     assert not local_verification.evidence_path(head_sha).exists()
 
 
+def test_trusted_base_records_a_hosted_exit_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#1318 AC2: the control set's settings decide whether to record.
+
+    A self-hosted exit renders hosted, which ships no recorder; the base's
+    verifier checks it and records, while a hosted control never does.
+    """
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    repo = repository(candidate, "hosted")
+    controls = {}
+    for mode in ("local", "hosted"):
+        control = tmp_path / mode
+        (control / ".csarc").mkdir(parents=True)
+        (control / ".csarc/config.yml").write_text(
+            settings_support.settings_text(verification_mode=mode),
+            encoding="utf-8",
+        )
+        controls[mode] = control
+    monkeypatch.chdir(repo)
+    head_sha = git(repo, "rev-parse", "HEAD")
+
+    assert local_verification.record("fast", ["source"], "main") is None
+    assert (
+        local_verification.record(
+            "fast", ["source"], "main", control_root=controls["hosted"]
+        )
+        is None
+    )
+    assert not local_verification.evidence_path(head_sha).exists()
+    payload = local_verification.record(
+        "fast", ["source"], "main", control_root=controls["local"]
+    )
+    assert payload is not None
+    assert payload["head_sha"] == head_sha
+    assert local_verification.evidence_path(head_sha).is_file()
+
+
 def test_self_hosted_vm_skips_local_evidence_on_detached_head(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

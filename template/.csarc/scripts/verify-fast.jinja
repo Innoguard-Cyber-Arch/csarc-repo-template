@@ -244,7 +244,10 @@ fi
 {% endif -%}
 
 {% if verification_mode != "hosted" -%}
-python3 .csarc/scripts/local_verification.py record \
-  --tier fast --scopes "${scope_csv:-unknown}" --base "$base" \
+# The recorder comes from the control set, so the trusted base can record
+# a candidate render that no longer ships it (#1318).
+python3 "$control_root"/.csarc/scripts/local_verification.py record \
+  --control-root "$control_root" --tier fast \
+  --scopes "${scope_csv:-unknown}" --base "$base" \
   --head-sha "$verification_head_sha" --base-sha "$verification_base_sha"
 {% endif -%}

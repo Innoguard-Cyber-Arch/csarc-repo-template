@@ -543,7 +543,8 @@ def test_local_verification_reuses_the_hosted_path_planner() -> None:
         (
             "template/.csarc/scripts/verify-fast.jinja",
             'python3 "$control_root/.csarc/scripts/ci_tier.py"',
-            "python3 .csarc/scripts/local_verification.py record",
+            'python3 "$control_root"/.csarc/scripts/local_verification.py'
+            " record",
         ),
     ):
         source = (REPO_ROOT / path).read_text(encoding="utf-8")

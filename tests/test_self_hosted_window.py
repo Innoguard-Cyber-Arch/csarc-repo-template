@@ -757,14 +757,45 @@ def test_retire_without_apply_deletes_nothing(
     switch = FakeSwitch()
     assert run(monkeypatch, session(github, switch=switch), "retire") == 0
     out = capsys.readouterr().out
-    assert "csarc-verify.yml runs  11" in out
-    assert "artifacts              21" in out
+    assert re.search(r"csarc-verify\.yml runs +11\n", out)
+    assert re.search(r"artifacts +21\n", out)
     assert "self-hosted -> hosted" in out
     assert github.deletes() == []
     assert switch.calls == []
     # The public settings check runs in the read-only inventory (#1315).
     assert switch.checks == [(REPO, "main", "hosted")]
     assert "every setting is valid for public mode" in out
+
+
+def test_retire_inventory_states_the_full_cache_and_runner_scope(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """#1318 AC3: caches and runners are deleted repository-wide."""
+    github = retire_github()
+    github.caches = [{"id": 31}, {"id": 32, "key": "other-workflow"}]
+    github.runners = [
+        runner("dev", 5),
+        {"id": 6, "name": "team-runner", "status": "online", "labels": []},
+    ]
+    assert (
+        run(
+            monkeypatch,
+            session(github, switch=FakeSwitch()),
+            "retire",
+            "--apply",
+        )
+        == 0
+    )
+    out = capsys.readouterr().out
+    assert re.search(r"Actions caches \(all workflows\) +31, 32\n", out)
+    assert "runners (all in the repository)" in out
+    assert "team-runner" in out
+    deletes = github.deletes()
+    for endpoint in ("caches/31", "caches/32", "runners/5", "runners/6"):
+        assert f"repos/{REPO}/actions/{endpoint}" in deletes
+    # Only csarc-verify.yml runs are deleted; run 12 belongs to another
+    # workflow.
+    assert f"repos/{REPO}/actions/runs/12" not in deletes
 
 
 PROSE_CHANNEL = (
