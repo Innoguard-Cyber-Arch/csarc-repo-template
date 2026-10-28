@@ -51,8 +51,8 @@ verification_head_sha="$(git rev-parse HEAD 2>/dev/null || true)"
 # and records against the configured base (#1318).
 verification_base="${_CSARC_VERIFICATION_BASE:-}"
 verification_base_sha="${_CSARC_VERIFICATION_BASE_SHA:-}"
-unset _CSARC_VERIFICATION_BASE _CSARC_VERIFICATION_BASE_SHA
 {% endif -%}
+unset _CSARC_VERIFICATION_BASE _CSARC_VERIFICATION_BASE_SHA
 
 for workflow in .github/workflows/{pr-policy,ci}.yml; do
   [[ -f "$workflow" ]] || continue

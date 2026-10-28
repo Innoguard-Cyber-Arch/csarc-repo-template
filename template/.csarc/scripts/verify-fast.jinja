@@ -150,10 +150,8 @@ case "$suite" in
   fast) ;;
   full)
     CSARC_VERIFICATION_SUBJECT_ROOT="$repo_root" \
-{% if verification_mode != "hosted" -%}
-      _CSARC_VERIFICATION_BASE="$verification_base" \
-      _CSARC_VERIFICATION_BASE_SHA="$verification_base_sha" \
-{% endif -%}
+      _CSARC_VERIFICATION_BASE="${verification_base:-}" \
+      _CSARC_VERIFICATION_BASE_SHA="${verification_base_sha:-}" \
       "$control_root/.csarc/scripts/verify"
     exit 0
     ;;
