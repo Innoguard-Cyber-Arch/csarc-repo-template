@@ -132,7 +132,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/trusted-verification"
           cp .csarc/scripts/*.py "$RUNNER_TEMP/trusted-verification/"
           # Issue #1086: the entry point and router come from this trusted
-          # base, never from the candidate checked out next.
+          # base, never from the candidate checked out next. Issue #1325:
+          # so do every check script and the settings that select steps.
           python3 .csarc/scripts/trusted_executor.py prepare \
             --source "$GITHUB_WORKSPACE" \
             --destination "$RUNNER_TEMP/trusted-executor"

@@ -2810,9 +2810,16 @@ def base_policy_decision(
     )
     if listing.returncode:
         raise RuntimeError(f"Changed paths: cannot list them. {GH_RETRY}.")
-    base_config = repository_root() / ".csarc/config.yml"
     labels_csv = ",".join(sorted(labels))
     with tempfile.TemporaryDirectory(prefix="csarc-base-policy-") as scratch:
+        # Issue #1325: read the base settings from the lease's base commit,
+        # so the route never compares the candidate with itself, even when
+        # this entry point is not running from the trusted base checkout.
+        base_config = Path(scratch) / "base-config.yml"
+        base_config.write_text(
+            run([*git, "show", f"{base_sha}:.csarc/config.yml"]) + "\n",
+            encoding="utf-8",
+        )
         candidate_config = Path(scratch) / "candidate-config.yml"
         candidate_config.write_text(
             run([*git, "show", f"{head_sha}:.csarc/config.yml"]) + "\n",

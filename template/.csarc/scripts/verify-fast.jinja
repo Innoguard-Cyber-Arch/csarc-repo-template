@@ -12,6 +12,7 @@ set -euo pipefail
 # the exact candidate.
 control_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$control_root/.csarc/scripts/verification-step"
+verification_require_python
 repo_root="$(verification_subject_root "$control_root")"
 # Pass the subject only to control-set children, never to nested fixtures.
 unset CSARC_VERIFICATION_SUBJECT_ROOT
@@ -22,9 +23,12 @@ else
   export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
 fi
 cd "$repo_root"
-# Issue #1318: check scripts and the settings that select steps come from
-# check_root; each check still reads the subject's files.
-check_root="$(verification_check_root "$control_root" "$repo_root")"
+# Issues #1318 and #1325: check scripts and the settings that select steps
+# come from the control root, never from the subject: the full base checkout
+# of a self-hosted exit, or the set that hosted CI and the VM stage from the
+# trusted base. A missing check script fails its step instead of falling
+# back to the subject's copy. Each check still reads the subject's files.
+check_root="$control_root"
 checks="$check_root/.csarc/scripts"
 subject=(env "CSARC_VERIFICATION_SUBJECT_ROOT=$repo_root")
 
@@ -95,10 +99,12 @@ python3 "$control_root/.csarc/scripts/ci_tier.py" \
   --draft "${CSARC_CI_DRAFT:-false}" \
   --extra-scopes "$extra_scopes"
 
-plan_tier="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["tier"])' "$plan_json")"
-scope_csv="$(python3 -c 'import json, sys; print(",".join(json.load(open(sys.argv[1]))["scopes"]))' "$plan_json")"
+# Issue #1325: -I keeps the subject's files (for example a json.py in the
+# current directory) out of the trusted interpreter's import path.
+plan_tier="$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["tier"])' "$plan_json")"
+scope_csv="$(python3 -I -c 'import json, sys; print(",".join(json.load(open(sys.argv[1]))["scopes"]))' "$plan_json")"
 {% if has_python or has_typescript or has_rust or has_go -%}
-run_project="$(python3 -c 'import json, sys; print(str(json.load(open(sys.argv[1]))["run_project"]).lower())' "$plan_json")"
+run_project="$(python3 -I -c 'import json, sys; print(str(json.load(open(sys.argv[1]))["run_project"]).lower())' "$plan_json")"
 {% endif -%}
 scopes=",$scope_csv,"
 

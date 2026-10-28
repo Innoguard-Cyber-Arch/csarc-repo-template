@@ -1622,10 +1622,15 @@ def _inject_readme_markers(markdown_text: str, *, root: Path, lang: str) -> str:
 
 def _load_downstream_config(root: Path) -> dict[str, Any] | None:
     """Load `.csarc/config.yml` for `[[project_name]]`-style tokens."""
-    config_path = root / ".csarc/config.yml"
+    # Issue #1325: the reader and the settings come from this script's own
+    # checkout, which is the trusted base when a staged control set checks
+    # a candidate; only the native facts are read from `root`.
+    config_path = _ROOT / ".csarc/config.yml"
     if not config_path.is_file():
         return None
-    config_module = runpy.run_path(str(root / ".csarc/scripts/csarc_config.py"))
+    config_module = runpy.run_path(
+        str(_ROOT / ".csarc/scripts/csarc_config.py")
+    )
     load_config = config_module["load_config"]
     facts = config_module["project_facts"](root)
     # The template-managed glossary renders the seeds once per csarc update

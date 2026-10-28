@@ -19,20 +19,14 @@ verification_subject_root() {
   (cd "$subject" && pwd)
 }
 
-# Issue #1318: return the checkout whose check scripts and settings run.
-# A full trusted checkout that checks another tree, such as the base
-# verifier of a self-hosted exit, uses its own copies. The subject itself,
-# or a staged CI control set that carries only the entry points (marked by
-# trusted-executor.json), keeps using the subject's copies.
-verification_check_root() {
-  local control_root=$1
-  local subject_root=$2
-
-  if [[ "$control_root" != "$subject_root" &&
-    ! -f "$control_root/trusted-executor.json" ]]; then
-    printf '%s\n' "$control_root"
-  else
-    printf '%s\n' "$subject_root"
+# Issue #1325: trusted helpers run on the system python3 (hosted CI sets up
+# 3.14; the VM image ships at least 3.12). Fail closed on an older one
+# instead of failing later inside a check.
+verification_require_python() {
+  if ! python3 -I -c 'import sys; sys.exit(sys.version_info < (3, 12))' \
+    >/dev/null 2>&1; then
+    echo "ERROR: Python is too old: trusted checks need python3 3.12 or newer. Put such a python3 first on PATH." >&2
+    return 2
   fi
 }
 

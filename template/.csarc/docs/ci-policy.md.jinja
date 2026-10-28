@@ -109,7 +109,7 @@ GitHub UI 合併與 `gh pr merge --admin` 不是合法 route，沒有 trailer；
 這份證據能防止拿錯舊結果、錯 branch 或測完又改檔，但不能防止有寫入權限的人偽造，也不能證明 GitHub event、權限、遠端 runner 或 release provenance。外部協作者在 GitHub UI 改的 metadata 不會即時修正。需要這些保證時，以 `csarc update --data verification_mode_{{ 'public' if project_visibility == 'public' else 'private' }}=hosted` 切換並重新套用 repository settings。
 {%- endif %}
 
-合併與驗證在每種模式都只依 trusted base 的政策決定：gate、router、設定 reader 與 PR policy 都取自 base，candidate 只是被驗證的 exact head；candidate 自己的 gate 只做不影響結果的自我測試。
+合併與驗證在每種模式都只依 trusted base 的政策決定：gate、router、設定 reader 與 PR policy 都取自 base，candidate 只是被驗證的 exact head；candidate 自己的 gate 只做不影響結果的自我測試。{% if hosted or verification_mode == 'self-hosted' %}{{ 'hosted CI' if hosted else 'VM' }} 先從 trusted base 複製 `.csarc/scripts/` 的每個檔案與 `.csarc/config.yml`，所以檢查腳本與決定要跑哪些步驟的設定都來自 base，candidate 只提供被檢查的檔案；candidate 自己的測試、lint 設定、相依與 project verification hook 仍會執行，因為它們就是驗證對象，放寬它們要靠審查發現；改變 `release_ownership` 一律走 governance-switch route。{% endif %}在本機執行 `./.csarc/scripts/verify-fast` 時，candidate 檢查自己（#1325）。
 {%- if verification_mode == 'self-hosted' %}
 
 ### Self-hosted 登記與使用

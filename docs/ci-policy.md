@@ -1017,6 +1017,21 @@ step 先比對 manifest，再以 `CSARC_VERIFICATION_SUBJECT_ROOT` 指向 exact 
 subject 後立即 unset 這個變數，nested fixture 不會繼承。candidate 改了 control set 時，trusted router 會把變更歸入
 shell／workflow scope 並升到對應 tier，新版 gate 要等合併進 base 後才生效。
 
+#1325 把生成專案的 control set 擴大到檢查腳本與設定：`ci.yml` 與 `csarc-verify.yml` 的 `prepare` 從 trusted base
+複製 `.csarc/scripts/` 的每個檔案與 `.csarc/config.yml`，入口以這份副本執行衝突標記、secret 掃描、訊息格式、
+workflow 與 shell lint、Action pin、相依掃描、規格驗證、站台、metadata、語言設定與 PR 寫入者檢查，缺少腳本時那一步
+失敗，不改用 candidate 的副本。三種執行的來源如下：
+
+| 執行 | 入口與檢查腳本 | 決定要跑哪些步驟的設定 | 測試、lint 設定、相依與 verification hook |
+| --- | --- | --- | --- |
+| 本機，candidate 檢查自己 | candidate | candidate | candidate |
+| 本機，base 的驗證器檢查 candidate（self-hosted 出口，#1318） | base 的 worktree | base 的 `.csarc/config.yml` | candidate |
+| hosted CI 與 VM | trusted base 搬入的 control set | trusted base 的 `.csarc/config.yml` | candidate |
+
+仍屬於 candidate、照常執行的是：測試、lint 設定（例如 `pyproject.toml` 的 ruff 設定、`uv.toml` 對專案指令的設定）、相依與 lockfile，以及 project verification hook（`project_verification_hook` 或可執行的 `scripts/verify-product`，路徑檢查之後執行 candidate 的程式）。它們就是驗證對象；candidate 放寬自己的 lint 設定、測試或 hook，要靠審查發現。trusted 的 Python helper 以 `python3 -I` 執行，candidate 目錄裡的 `json.py`、`json/` 之類的同名模組、它的 virtual environment 與 uv 設定都不會被載入；wheel 匯入檢查以 `python -P` 執行並要求模組來自 site-packages，twine 與 wheel 的 `uv run` 帶 `--no-config`；站台建置的設定 reader 與設定也來自檢查腳本所在的 checkout。要跑哪些範圍由 trusted router 依 candidate 的變更路徑決定，這是被檢查的資料。hosted `ci.yml` 的「Read release ownership」先確認 trusted reader 讀得懂 candidate 的設定，再從保存的 base `.csarc/config.yml` 讀 `release_ownership`，決定是否執行 release 檢查。這個 workflow 是 `pull_request_target`，由 main 讀取，所以要等這個變更進入 main 才生效；在那之前與之後，任何 `release_ownership` 變更都走 governance-switch route（#1325）。trusted helper 以 `python3 -I` 執行，入口一開始就要求 Python 3.12 以上，較舊時以 `ERROR: Python is too old` 結束；VM 不安裝 Python，靠 image 的 `python3_minimum`。lifecycle 的 route 判斷從 lease 的 base commit 讀 base 設定，不從執行中的 checkout 讀。
+一般本機執行時 candidate 就是 base，行為不變。這個 template repository 自己的 root `verify-fast` 與
+`verify-template.sh` 仍以 candidate 的 `scripts/` 執行檢查腳本，control set 只有上段列的入口與 stage gate。
+
 這些 trusted step 用 `python3` 執行 base 的 scripts，所以 `verify` 在第一個 trusted step 之前就以固定版本的
 `actions/setup-python` 裝好 Python 3.14，不用 runner 內建的舊版直譯器（#1111）。其他 workflow 不一定先裝
 Python，因此 `scripts/` 與 `template/.csarc/scripts/` 仍須能被 Python 3.12 的語法解析：ruff 對這兩個目錄改用
@@ -1100,7 +1115,7 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
   `CSARC_TRUSTED_BASE_SHA=<base_sha> python3 <path>/scripts/pr_lifecycle.py merge ...` 執行。
 - **Governance-switch route**：改動 `.csarc/scripts/`、放寬治理值（`admin_bypass`、`verification_mode_private`、`verification_mode_public`、
   `governance_mode`、`copilot_review` 往寬鬆方向，關閉 `enable_codeql`，移除 `lifecycle` 或
-  `scheduled_checks` 項目，調低 `coverage_threshold`）、變更設定 schema，或無法
+  `scheduled_checks` 項目，調低 `coverage_threshold`）、改變 `release_ownership`（#1325）、變更設定 schema，或無法
   取得完整變更清單時，PR 必須帶 `governance-switch` label。hosted 由 trusted base 的 `validate-pr-policy`
   經 API 讀取 candidate 設定與檔案清單判定，local 由 lifecycle 對 exact head 判定；兩者共用同一個
   `route` 規則。這條 route 不放寬任何控制：required checks、exact-head 授權與 remote lease 照常要求，

@@ -103,8 +103,11 @@ def retired_token_message(key: str) -> str:
 
 def _load_config(root: Path) -> dict[str, object]:
     """Read the repository's existing CSARC configuration."""
-    config_reader = root / ".csarc/scripts/csarc_config.py"
-    config_path = root / ".csarc/config.yml"
+    # Issue #1325: the reader and the settings come from this script's own
+    # checkout, never from the checked tree; only native facts use `root`.
+    control = Path(__file__).resolve().parents[2]
+    config_reader = control / ".csarc/scripts/csarc_config.py"
+    config_path = control / ".csarc/config.yml"
     try:
         reader = runpy.run_path(str(config_reader))
         config = reader["load_config"](config_path)
