@@ -1651,3 +1651,17 @@ def test_public_repository_never_uses_vm_evidence(
     (tmp_path / ".github/workflows/csarc-verify.yml").unlink()
     with pytest.raises(RuntimeError, match="csarc update"):
         function(Visibility(True), REPO)
+    # #1318: a public self-hosted mode never loads, so the D9 message is
+    # the only public path; tests/test_verification_mode_settings.py
+    # covers the reader itself.
+    (tmp_path / ".csarc/config.yml").write_text(
+        settings_text(
+            "",
+            verification_mode=None,
+            verification_mode_private="hosted",
+            verification_mode_public="self-hosted",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="verification_mode_public"):
+        function(Visibility(False), REPO)

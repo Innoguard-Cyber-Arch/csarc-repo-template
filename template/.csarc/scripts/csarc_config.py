@@ -583,14 +583,20 @@ def project_facts(root: Path) -> dict[str, object]:
 
 def main(argv: list[str] | None = None) -> int:
     """Print one configuration value for shell callers."""
-    arguments = sys.argv[1:] if argv is None else argv
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    # Issue #1318: a trusted check root reads its own settings, not the
+    # settings of the tree it checks.
+    path = CONFIG_FILE
+    if len(arguments) == 3 and arguments[0] == "--config":
+        path = Path(arguments[1])
+        arguments = arguments[2:]
     if len(arguments) != 1:
         # message-pattern: allow X3 usage
-        sys.stderr.write("Usage: csarc_config.py <key>\n")
+        sys.stderr.write("Usage: csarc_config.py [--config PATH] <key>\n")
         return 2
     key = arguments[0]
     try:
-        config = load_config()
+        config = load_config(path)
         if key == "release_ownership":
             value: object = resolve_release_ownership(config)
         elif key not in INTENT_SETTINGS and key not in DECISION_SETTINGS:

@@ -529,7 +529,7 @@ def test_documentation_tier_validates_the_generated_site() -> None:
     ).read_text(encoding="utf-8")
 
     assert "./scripts/build-repo-site --check" in root_fast
-    assert "./.csarc/scripts/build-repo-site --check" in template_fast
+    assert '"$checks/build-repo-site" --check' in template_fast
 
 
 def test_local_verification_reuses_the_hosted_path_planner() -> None:
@@ -543,8 +543,7 @@ def test_local_verification_reuses_the_hosted_path_planner() -> None:
         (
             "template/.csarc/scripts/verify-fast.jinja",
             'python3 "$control_root/.csarc/scripts/ci_tier.py"',
-            'python3 "$control_root"/.csarc/scripts/local_verification.py'
-            " record",
+            'python3 "$checks"/local_verification.py record',
         ),
     ):
         source = (REPO_ROOT / path).read_text(encoding="utf-8")
@@ -571,12 +570,8 @@ def test_workflow_scope_runs_the_actions_security_audit() -> None:
     assert (
         '"$control_root/scripts/verify-stage-github-actions-audit"' in root_fast
     )
-    assert (
-        "python3 .csarc/scripts/check_action_pins.py --root ." in generated_fast
-    )
-    assert (
-        "python3 .csarc/scripts/check_action_pins.py --root ." in generated_full
-    )
+    assert 'python3 "$checks/check_action_pins.py" --root .' in generated_fast
+    assert 'python3 "$checks/check_action_pins.py" --root .' in generated_full
 
 
 def test_full_dispatch_skips_redundant_fast_checks() -> None:
@@ -609,8 +604,8 @@ def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
         ),
         (
             template_fast,
-            "python3 .csarc/scripts/spec_to_issue.py validate",
-            "./.csarc/scripts/build-repo-site --check",
+            'python3 "$checks/spec_to_issue.py" validate',
+            '"$checks/build-repo-site" --check',
         ),
     ):
         gate_start = source.index('if [[ "$scopes" == *,docs,* ]]; then')

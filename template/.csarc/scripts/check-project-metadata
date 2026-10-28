@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Issue #1318: helpers and settings come from this checkout; the checks
+# read the current directory, which is the tree under verification.
+script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 status=0
-documentation_mode="$(python3 .csarc/scripts/csarc_config.py documentation_mode)"
+documentation_mode="$(python3 "$script_root/.csarc/scripts/csarc_config.py" \
+  --config "$script_root/.csarc/config.yml" documentation_mode)"
 required_files=(.github/SECURITY.md)
 if [[ "$documentation_mode" != "off" ]]; then
   required_files+=(README.md)
@@ -71,6 +75,6 @@ if [[ -f package.json ]]; then
   reject_placeholder package.json "repository URL" "<repository-url>"
 fi
 
-python3 .csarc/scripts/check_license_metadata.py
+python3 "$script_root/.csarc/scripts/check_license_metadata.py"
 
 exit "$status"

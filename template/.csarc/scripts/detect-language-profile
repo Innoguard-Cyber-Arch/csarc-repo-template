@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-config_file="$repo_root/.csarc/config.yml"
+script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Issue #1318: tools and settings come from this checkout; a trusted
+# check root names the tree it checks in CSARC_VERIFICATION_SUBJECT_ROOT.
+repo_root="$(cd "${CSARC_VERIFICATION_SUBJECT_ROOT:-$script_root}" && pwd)"
+config_file="$script_root/.csarc/config.yml"
 
 detected_languages=()
 [[ -f "$repo_root/go.mod" ]] && detected_languages+=(go)
@@ -24,7 +27,7 @@ if [[ ! -f "$config_file" ]]; then
   exit 1
 fi
 
-declared="$(python3 "$repo_root/.csarc/scripts/csarc_config.py" languages)"
+declared="$(python3 "$script_root/.csarc/scripts/csarc_config.py" --config "$config_file" languages)"
 if [[ "$declared" != "$detected" ]]; then
   echo "ERROR: Languages differ: saved '$declared', found '$detected'. Run 'csarc update'." >&2
   exit 1

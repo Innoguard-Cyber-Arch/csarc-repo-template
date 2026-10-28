@@ -187,7 +187,8 @@ GH_RETRY = "Run 'gh auth status' and rerun"
 # ADR self-hosted-verification Q1 (#1318): the exit candidate is checked by
 # the trusted base's verifier, whose recorder the candidate may not ship.
 EXIT_EVIDENCE_HINT = (
-    "To record it, run the base verifier on this checkout: 'git worktree "
+    "To record it, run the base verifier, which checks this checkout "
+    "with the base's scripts and settings: 'git worktree "
     "add --detach <dir> origin/<base>', then 'CSARC_VERIFICATION_SUBJECT_ROOT"
     '="$PWD" <dir>/.csarc/scripts/verify-fast\'.'
 )
@@ -2529,9 +2530,9 @@ def configured_verification_mode(github: GitHub, repo: str) -> str:
         (flows / "csarc-verify.yml").is_file(),
     ):
         if not private and (flows / "csarc-verify.yml").is_file():
-            # ADR self-hosted-verification D9 (#1318): a self-hosted render
-            # that turned public before retire has no lifecycle route while
-            # public; no evidence path is opened for a public repository.
+            # ADR self-hosted-verification D9 (#1318): only the message
+            # differs. This still fails closed like any stale render; the
+            # settings reader already rejects a public self-hosted mode.
             raise RuntimeError(
                 "Verification mode self-hosted: the repository turned public "
                 "before 'csarc self-hosted retire', so no pull request can "
