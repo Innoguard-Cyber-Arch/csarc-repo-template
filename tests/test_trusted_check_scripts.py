@@ -11,6 +11,8 @@ fixture repository.
 from __future__ import annotations
 
 import os
+import re
+import runpy
 import shutil
 import subprocess
 import sys
@@ -139,6 +141,59 @@ def fall_back_to_candidate(base: Path) -> None:
             text.replace(trusted, 'check_root="$repo_root"\n'),
             encoding="utf-8",
         )
+
+
+TEMPLATE_SCRIPTS = ROOT / "template/.csarc/scripts"
+CHECK_REFERENCE = re.compile(r'"\$checks"?/([A-Za-z0-9_.-]+)')
+
+
+def test_control_set_carries_every_check_the_entry_points_run(
+    tmp_path: Path,
+) -> None:
+    """AC1: each `$checks/<name>` the entry points run is staged from base.
+
+    The entry points take checks only from their control root, so a local
+    run, where the control root is the subject, is unchanged.
+    """
+    executor = runpy.run_path(str(TEMPLATE_SCRIPTS / "trusted_executor.py"))
+    base = tmp_path / "base"
+    scripts = base / ".csarc/scripts"
+    scripts.mkdir(parents=True)
+    for source in TEMPLATE_SCRIPTS.iterdir():
+        if source.is_file():
+            shutil.copy2(source, scripts / source.name.removesuffix(".jinja"))
+    (base / ".csarc/config.yml").write_text("schema: base\n", "utf-8")
+    staged = tmp_path / "staged"
+    files = executor["prepare"](base, staged)
+
+    referenced: set[str] = set()
+    for name in ("verify-fast.jinja", "verify.jinja"):
+        text = (TEMPLATE_SCRIPTS / name).read_text(encoding="utf-8")
+        assert 'check_root="$control_root"\n' in text, name
+        assert "verification_check_root" not in text, name
+        referenced.update(CHECK_REFERENCE.findall(text))
+    assert {"check-update-conflicts", "scan-secrets"} <= referenced
+    for name in referenced:
+        assert f".csarc/scripts/{name}" in files, name
+        assert (staged / ".csarc/scripts" / name).is_file(), name
+    assert ".csarc/config.yml" in files
+    executor["verify_manifest"](staged)
+
+
+def test_control_set_rejects_a_symlinked_check(tmp_path: Path) -> None:
+    """A base check that is a symbolic link never yields a partial set."""
+    executor = runpy.run_path(str(TEMPLATE_SCRIPTS / "trusted_executor.py"))
+    base = tmp_path / "base"
+    scripts = base / ".csarc/scripts"
+    scripts.mkdir(parents=True)
+    for relative in executor["GENERATED_CONTROL_FILES"]:
+        (base / relative).write_text("trusted\n", "utf-8")
+    (base / ".csarc/config.yml").write_text("schema: base\n", "utf-8")
+    (tmp_path / "elsewhere").write_text("exit 0\n", "utf-8")
+    (scripts / "scan-secrets").symlink_to(tmp_path / "elsewhere")
+    with pytest.raises(RuntimeError, match="scan-secrets"):
+        executor["prepare"](base, tmp_path / "staged")
+    assert not (tmp_path / "staged").exists()
 
 
 @pytest.fixture(scope="module")
