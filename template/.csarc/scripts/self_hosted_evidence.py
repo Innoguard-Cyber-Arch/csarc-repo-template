@@ -396,7 +396,10 @@ def exit_reason(
 def options_block(environments: object) -> str:
     """Return the rendered environment choices of the verify workflow."""
     if not isinstance(environments, list) or not environments:
-        raise ValueError("no registered environments")
+        raise ValueError(
+            "Self-hosted registration: no environments are listed. "
+            "Register dev, uat, or both."
+        )
     return "        options:\n" + "".join(
         f"          - {env}\n" for env in environments
     )
@@ -416,7 +419,10 @@ def registered_workflow(
     """
     old_options = options_block(base.get("self_hosted_environments"))
     if before.count(UNREGISTERED_LABEL) != 1 or before.count(old_options) != 1:
-        raise ValueError("the base workflow is not an unregistered render")
+        raise ValueError(
+            "Self-hosted registration: the base workflow is not an "
+            "unregistered render. Restore csarc-verify.yml first."
+        )
     return before.replace(
         UNREGISTERED_LABEL, f"'csarc-vm-{runner_id}'"
     ).replace(
