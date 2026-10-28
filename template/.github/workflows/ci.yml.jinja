@@ -58,8 +58,7 @@ jobs:
             "$RUNNER_TEMP/trusted-verification/"
           # Issue #1086: the entry point, stage gate, router, and config
           # reader that decide the required result come from this trusted
-          # base, never from the candidate checked out next. Issue #1325:
-          # so do every check script and the settings that select steps.
+          # base, never from the candidate checked out next.
           if [[ -f .csarc/scripts/trusted_executor.py ]]; then
             python3 .csarc/scripts/trusted_executor.py prepare \
               --source "$GITHUB_WORKSPACE" \

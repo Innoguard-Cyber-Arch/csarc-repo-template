@@ -196,6 +196,50 @@ def test_control_set_rejects_a_symlinked_check(tmp_path: Path) -> None:
     assert not (tmp_path / "staged").exists()
 
 
+SOURCE_DOCUMENTS = (
+    "docs/adr/self-hosted-verification.md",
+    "docs/ci-policy.md",
+    "docs/specs/SPEC-011-verification-mode-settings.md",
+    "template/.csarc/docs/ci-policy.md.jinja",
+)
+
+
+@pytest.mark.parametrize("document", SOURCE_DOCUMENTS)
+def test_documents_name_who_supplies_checks_and_tests(document: str) -> None:
+    """AC3: each record states the source of checks, settings and tests."""
+    text = (ROOT / document).read_text(encoding="utf-8")
+    assert "#1325" in text
+    assert ".csarc/config.yml" in text
+    assert "candidate 自己的測試、lint 設定" in text
+    assert "只搬入幾個入口檔" not in text
+
+
+@pytest.mark.parametrize(
+    "document", ["docs/adr/self-hosted-verification.md", "docs/ci-policy.md"]
+)
+def test_source_table_covers_the_three_runs(document: str) -> None:
+    """AC3: the local, base-verifier, hosted and VM runs each have a row."""
+    lines = (ROOT / document).read_text(encoding="utf-8").splitlines()
+    header = "| 執行 | 入口與檢查腳本 | 決定要跑哪些步驟的設定 |"
+    start = next(i for i, line in enumerate(lines) if line.startswith(header))
+    runs: dict[str, list[str]] = {}
+    for line in lines[start + 2 :]:
+        if not line.startswith("|"):
+            break
+        run, *cells = (cell.strip() for cell in line.strip("|").split("|"))
+        runs[run] = cells
+    local = next(cells for run, cells in runs.items() if "檢查自己" in run)
+    assert local == ["candidate"] * 3
+    trusted = [cells for run, cells in runs.items() if "檢查自己" not in run]
+    assert len(trusted) >= 2
+    for cells in trusted:
+        assert "candidate" not in cells[0] and "base" in cells[0]
+        assert "base" in cells[1]
+        assert cells[2] == "candidate"
+    assert any("hosted CI" in run for run in runs)
+    assert any("VM" in run for run in runs)
+
+
 @pytest.fixture(scope="module")
 def renders(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
     """Render the hosted and the self-hosted project once."""
