@@ -228,8 +228,12 @@ def record(
     tree_sha = git("rev-parse", "HEAD^{tree}")
     base_ref, base_sha = resolve_base(base)
     if expected_base_sha and base_sha != expected_base_sha:
+        # The base moved during the run, or a commit was given as the base
+        # and the configured branch is not at it (#1318).
         raise RuntimeError(
-            "Base changed during verification: stale. Run verify again."
+            f"Base does not match: '{base_ref}' is at {base_sha[:12]}, "
+            f"not the planned {expected_base_sha[:12]}. Update '{base_ref}' "
+            "or run verify again."
         )
     command_root = (
         ".csarc/scripts"

@@ -65,8 +65,9 @@ fi
 {% if verification_mode != "hosted" -%}
 verification_head_sha="$(git rev-parse HEAD)"
 verification_base_sha="$(git rev-parse "$base_ref^{commit}")"
-# The record names a branch; a commit given as the base binds only its
-# SHA, and the configured branch names the base (#1318).
+# The record names a branch. For a commit given as the base, the recorder
+# uses the configured base branch and requires its tip to equal that
+# commit (#1318).
 verification_base="$base"
 if [[ "$verification_base" =~ ^[0-9a-f]{40}$ ]]; then
   verification_base=""

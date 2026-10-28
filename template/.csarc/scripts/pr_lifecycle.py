@@ -190,7 +190,9 @@ EXIT_EVIDENCE_HINT = (
     "To record it, run the base verifier, which checks this checkout "
     "with the base's scripts and settings: 'git worktree "
     "add --detach <dir> origin/<base>', then 'CSARC_VERIFICATION_SUBJECT_ROOT"
-    '="$PWD" <dir>/.csarc/scripts/verify-fast\'.'
+    '="$PWD" <dir>/.csarc/scripts/verify-fast\'. This stops a candidate '
+    "from editing its own checks; it is not isolation, so the evidence "
+    "stays self-attested."
 )
 LS_LEASES = "Run 'git ls-remote origin csarc/leases'"
 LEASE_SCHEMA = 2

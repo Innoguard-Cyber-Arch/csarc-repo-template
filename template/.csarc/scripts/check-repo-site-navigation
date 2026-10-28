@@ -4,11 +4,17 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import unicodedata
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+# Issue #1318: a trusted check root names the tree it checks; a direct
+# run checks this checkout.
+ROOT = Path(
+    os.environ.get("CSARC_VERIFICATION_SUBJECT_ROOT")
+    or Path(__file__).resolve().parents[2]
+).resolve()
 DATA = ROOT / "docs/site/data/navigation.json"
 MAX_COLUMNS = 10
 

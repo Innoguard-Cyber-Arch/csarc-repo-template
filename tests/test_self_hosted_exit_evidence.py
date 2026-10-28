@@ -9,6 +9,7 @@ trusted base's verifier checks the candidate as its control set instead.
 
 from __future__ import annotations
 
+import json
 import os
 import runpy
 import shutil
@@ -248,3 +249,67 @@ def test_base_verifier_never_trusts_candidate_checks_or_settings(
     assert trusted.returncode != 0
     assert message in trusted.stdout + trusted.stderr
     assert not evidence_file(repo, head).exists()
+
+
+SITE_CHECKS = ("check-repo-site-navigation", "check-repo-site-versions")
+
+
+def site_tree(root: Path, template_version: str, label: str) -> Path:
+    """Write one checkout with the site data the two checks read."""
+    scripts = root / ".csarc/scripts"
+    scripts.mkdir(parents=True)
+    for name in SITE_CHECKS:
+        shutil.copy2(ROOT / "template/.csarc/scripts" / name, scripts / name)
+    navigation = json.loads(
+        (ROOT / "template/docs/site/data/navigation.json").read_text("utf-8")
+    )
+    navigation["items"][0]["labels"]["en"] = label
+    (root / "docs/site/data").mkdir(parents=True)
+    (root / "docs/site/data/navigation.json").write_text(
+        json.dumps(navigation), encoding="utf-8"
+    )
+    version = json.loads(
+        (ROOT / "template/.csarc/site/version.json").read_text("utf-8")
+    )
+    version["template"] = template_version
+    (root / ".csarc/site").mkdir(parents=True)
+    (root / ".csarc/site/version.json").write_text(
+        json.dumps(version), encoding="utf-8"
+    )
+    return root
+
+
+@pytest.mark.parametrize("name", SITE_CHECKS)
+def test_base_site_checks_read_the_subject_data(
+    tmp_path: Path, name: str
+) -> None:
+    """#1318: the base's site checks judge the candidate's site data.
+
+    The candidate's navigation label is too wide and its template version
+    leaves the engine range; the base copy of each check must see that
+    through CSARC_VERIFICATION_SUBJECT_ROOT instead of its own valid data.
+    """
+    base = site_tree(tmp_path / "base", "1.1.0", "Home")
+    candidate = site_tree(tmp_path / "candidate", "9.0.0", "x" * 40)
+    script = base / ".csarc/scripts" / name
+    clean = {
+        key: value
+        for key, value in os.environ.items()
+        if key != "CSARC_VERIFICATION_SUBJECT_ROOT"
+    }
+
+    def run(subject: Path | None) -> int:
+        env = dict(clean)
+        if subject is not None:
+            env["CSARC_VERIFICATION_SUBJECT_ROOT"] = str(subject)
+        return subprocess.run(  # noqa: S603
+            [sys.executable, str(script)],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        ).returncode
+
+    assert run(None) == 0
+    assert run(base) == 0
+    assert run(candidate) != 0

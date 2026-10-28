@@ -197,6 +197,21 @@ def test_trusted_base_records_a_hosted_exit_candidate(
     assert local_verification.evidence_path(head_sha).is_file()
 
 
+def test_configured_base_must_be_at_the_planned_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#1318: a commit given as the base must be the configured base tip."""
+    repo = repository(tmp_path)
+    monkeypatch.chdir(repo)
+    head_sha = git(repo, "rev-parse", "HEAD")
+
+    with pytest.raises(RuntimeError, match="Base does not match: 'main' is at"):
+        local_verification.record(
+            "fast", ["source"], "", expected_base_sha=head_sha
+        )
+    assert not local_verification.evidence_path(head_sha).exists()
+
+
 def test_self_hosted_vm_skips_local_evidence_on_detached_head(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
