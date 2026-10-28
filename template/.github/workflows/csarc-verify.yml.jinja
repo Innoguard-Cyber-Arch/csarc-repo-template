@@ -93,6 +93,17 @@ jobs:
               fail(f"{base} needs '{env or 'dev or uat'}'. Dispatch on it.")
           end = datetime.fromisoformat(window.replace("Z", "+00:00"))
           left = max(int((end - datetime.now(UTC)).total_seconds()), 0)
+          # Issue #1320: the operator declares window_end; this runner's clock
+          # checks it. A window lasts at most 24 hours (ADR D7), and a job
+          # needs the 30-minute timeout before the window closes.
+          if left > 86400:
+              fail(f"window_end {window} is over 24h ahead. Pass the VM's end.")
+          if left < 1800:
+              fail(
+                  f"the {env} window ends at {window} ({left // 60}m left), "
+                  f"under the 30m job timeout. Run 'csarc self-hosted extend "
+                  f"--env {env}', then dispatch again."
+              )
           if left < 7200:
               line = (
                   f"WARNING: Self-hosted {env} verification: the window ends "

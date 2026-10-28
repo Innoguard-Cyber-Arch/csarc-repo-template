@@ -89,6 +89,7 @@ GitHub 只做排程；派工由操作者的指令發起，不設 GitHub-hosted �
 4. 第一個 step 來自目標分支（trusted base）的定義，在 checkout candidate 之前以唯讀 token 重新確認：PR 的 head repo 等於本 repo、head SHA 等於輸入、目標分支推出的環境等於輸入、repo 是 private。任一項不符即失敗。
 5. 接著沿用 trusted executor（#1086、#1069）：由 base 決定 tier 與 scopes，對 exact candidate tree 執行 `verify`／`verify-fast`；execution step 名稱帶上 candidate head、tree、tier、scopes、`mode=self-hosted`、`environment=`、`window=`。
 6. 窗口剩不到 2 小時時，workflow 在輸出與 job summary 印出 `WARNING:`（D7）。
+7. 30 分鐘的派工門檻也由第一個 step 執行（#1320），不只在 CLI：直接 `gh workflow run csarc-verify.yml` 一樣要通過。`window_end` 缺少、格式不對、超過 24 小時之後，或以 runner 的時鐘計算剩不到 30 分鐘（等於 job 的 `timeout-minutes`）時失敗。這是操作者宣告的結束時間，不是 VM 證明的；操作者寫錯時，VM 仍在真正的到期時間停止 runner，job 依 D10「窗口在 job 執行中到期」失敗，不會產生證據。由 VM 證明結束時間需要 csarc-devops 的 C12。
 
 沒有自動觸發（不使用 `push`、`pull_request`、`pull_request_target`），所以窗外不會有 job 排隊，外部 fork 的 PR 也不會自動觸發任何執行。
 
@@ -114,7 +115,7 @@ GitHub 只做排程；派工由操作者的指令發起，不設 GitHub-hosted �
 3. execution step 宣告的 candidate head 等於 PR 當下的 exact head，tree 等於該 head 的 Git tree；tier 與 scopes 至少是 trusted router 對這張 PR 要求的強度；`mode`、`environment`、`window` 與上面一致。容器 image digest 由 VM 宣告，只記錄、不作為信任依據。
 4. run、job 與 execution step 都是 `success`；完成時間在 24 小時內（[verification-evidence-freshness](verification-evidence-freshness.md) 的同一個判定）。
 5. 證據的模式等於合併當下的實際模式。登記是否被撤銷或到期不由 lifecycle 判斷：VM 是登記的權威，撤銷或到期後 VM 不再接受開窗，也就不會產生新的證據（D7、D10）。
-6. canonical merge evidence 記錄 run URL、run 的 `actor` 與 `triggering_actor`、runner、環境、窗口與模式，`CSARC-Trust: self-hosted-registered`。窗口結束不會讓窗口內完成的證據失效。
+6. canonical merge evidence 記錄 run URL、run 的 `actor` 與 `triggering_actor`、runner、環境、窗口與模式，`CSARC-Trust: self-hosted-registered`。窗口記為 `window_source: operator-declared`：第一個 step 檢查過格式與剩餘時間，但結束時間來自派工輸入，不是 VM（#1320）。窗口結束不會讓窗口內完成的證據失效。
 
 ### D5. 環境對應：DEV 與 UAT，依目標分支決定
 
@@ -176,13 +177,13 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 3. 經 csarc-devops 指定的管道交給 VM（C1）。VM 核對允許清單，以通用命名註冊**一個** runner，記錄開始與結束時間，更新最後開窗時間。
 4. 讀回 runner 清單，確認只有一個符合命名的線上 runner；出現預期之外的 runner 時移除全部並以錯誤結束（防註冊 token 外洩）。
 
-**窗口紀錄放在 VM 端。**選項 Y 沒有需要事先判斷窗口的 GitHub-hosted job，因此不再寫 repository variable：VM 的紀錄是唯一來源，`csarc self-hosted status` 經同一管道讀取，派工時把結束時間當作 workflow 輸入傳入，只用來印提醒，不是信任依據。
+**窗口紀錄放在 VM 端。**選項 Y 沒有需要事先判斷窗口的 GitHub-hosted job，因此不再寫 repository variable：VM 的紀錄是唯一來源，`csarc self-hosted status` 經同一管道讀取，派工時把結束時間當作 workflow 輸入傳入，用來印提醒與執行派工門檻（D3 第 7 點），不是信任依據；證據把它標成 `window_source: operator-declared`。
 
 **剩餘時間、延長與關窗：**
 
 - `csarc self-hosted status [--env]`：唯讀顯示 runner、開始與結束時間、剩餘時間、登記是否到期，以及 D9 的公開警告。
 - **最後 2 小時：**`verify` 指令與 `csarc-verify.yml` 在輸出與 job summary 各印一行，依寫作指引的句型，例如 `WARNING: Self-hosted dev verification: the window ends at 2026-10-25T09:00Z (1h40m left). Run 'csarc self-hosted extend --env dev' before it closes.`。
-- **剩不到 30 分鐘（job timeout）：**`verify` 指令不派工，要求先延長。
+- **剩不到 30 分鐘（job timeout）：**`verify` 指令不派工，要求先延長；直接派工時由 workflow 第一個 step 拒絕（#1320）。
 - **延長：**`csarc self-hosted extend --env`（窗口有效時重跑 `open` 等同延長）。先印盤點，再以管理員憑證確認同一 runner 在線，要求 VM 把停止時間改為「現在＋24 小時」。不取得新 token、不註冊第二個 runner，沒有空窗；不累加。過期後只能重新 `open`。
 - **關窗：**`csarc self-hosted close --env` 以管理員憑證刪除 runner。不執行時，VM 到期停止 runner 並刪除 runner 憑證檔；離線 runner 不會再收到 job，GitHub 也會在 14 天後自動移除。
 
@@ -224,7 +225,7 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 | --- | --- | --- |
 | 尚未登記（新專案預設） | `verify` 指令與 lifecycle 拒絕 | 依 D7 登記；指引見 `csarc self-hosted status` |
 | 登記到期（90 天未開窗） | `open` 回應 registration expired | 依 D7 重新登記 |
-| 沒有開窗、窗口過期或剩不到 30 分鐘 | `verify` 指令不派工 | 請管理員 `open` 或 `extend`，再執行 `verify` |
+| 沒有開窗、窗口過期或剩不到 30 分鐘 | `verify` 指令不派工；直接派工時 workflow 第一個 step 失敗 | 請管理員 `open` 或 `extend`，再執行 `verify` |
 | 窗口剩不到 2 小時 | 照常驗證並印出 `WARNING:` | 執行 `csarc self-hosted extend --env <環境>` |
 | runner 離線（VM 故障、提早停止） | 已派工的 job 停在 queued，24 小時後由 GitHub 判失敗；lifecycle 沒有可用證據 | 執行 `status`；請 csarc-devops 恢復 VM，或關窗後重新開窗 |
 | 窗口在 job 執行中到期 | job 失敗 | 重新開窗後再執行 `verify` |
@@ -326,6 +327,7 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 | C9 | 工具鏈 image：依語言 profile 建置、以 digest 固定、更新節奏與更新時的通知 |
 | C10 | 觸發者允許清單的儲存位置（VM 端、與登記放在一起）與修改流程（雙邊 Issue） |
 | C11 | job 容器內隔離的 Docker daemon（D8 第 7 點，#1281）：評估 sysbox runtime 或 rootless Docker 在 VM 上是否可行，以及 CPU、記憶體、磁碟與 image 快取的資源限制；確認不掛主機 docker socket、不用 privileged 與 host network、daemon 隨 job 丟棄；確認後在雙邊 Issue 記錄，模板再以後續 Issue 解除 `container` 的限制 |
+| C12 | 由 VM 證明窗口結束時間（#1320）：job 開始時，runner 能讀到 VM 寫入的唯讀窗口紀錄（例如掛進容器的檔案，內容是 repo、環境、runner 名稱與 UTC 結束時間），延長時同步更新。有了這份紀錄，`csarc-verify.yml` 第一個 step 改用它判斷 30 分鐘門檻並寫進證據，`window_source` 改為 VM 提供；在這之前證據只標示操作者宣告 |
 
 ## 評估過的替代方案
 

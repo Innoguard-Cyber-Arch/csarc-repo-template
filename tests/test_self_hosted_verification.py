@@ -198,6 +198,7 @@ def run_dispatch(
     head_repo: str | None = REPO,
     head_sha: str = HEAD,
     workflow_ref: str = "",
+    window_text: str | None = None,
 ) -> tuple[int, str, str, str]:
     """Execute the first step; return its exit code, stdout, summary, output."""
     end = window or datetime.now(UTC) + timedelta(hours=20)
@@ -216,7 +217,9 @@ def run_dispatch(
         "PR_NUMBER": "7",
         "HEAD_SHA": HEAD,
         "ENVIRONMENT": environment,
-        "WINDOW_END": end.strftime("%Y-%m-%dT%H:%MZ"),
+        "WINDOW_END": end.strftime("%Y-%m-%dT%H:%MZ")
+        if window_text is None
+        else window_text,
     }
     for key, value in environ.items():
         monkeypatch.setenv(key, value)
@@ -337,6 +340,68 @@ def test_dispatch_check_warns_in_the_last_two_hours(
     assert line in stdout
 
 
+@pytest.mark.parametrize(
+    ("case", "left", "text", "message"),
+    [
+        ("29 minutes left", timedelta(minutes=29), None, "under the 30m"),
+        ("window over", timedelta(minutes=-5), None, "(0m left)"),
+        ("over 24 hours", timedelta(hours=24, minutes=5), None, "over 24h"),
+        ("missing", None, "", "bad inputs"),
+        ("malformed", None, "tomorrow 09:00", "bad inputs"),
+        ("not UTC", None, "2026-10-25T09:00+08:00", "bad inputs"),
+    ],
+)
+def test_direct_dispatch_enforces_the_window_cutoff(
+    case: str,
+    left: timedelta | None,
+    text: str | None,
+    message: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #1320 AC1/AC3/R1: `gh workflow run` cannot skip the cutoff.
+
+    The CLI refuses under 30 minutes, but a direct dispatch reaches only
+    this first step, so it repeats the cutoff before any candidate code.
+    """
+    window = datetime.now(UTC) + left if left is not None else None
+    code, stdout, _summary, output = run_dispatch(
+        tmp_path, monkeypatch, window=window, window_text=text
+    )
+    assert code == 1, case
+    assert stdout.startswith("ERROR: Self-hosted dispatch: "), stdout
+    assert message in stdout
+    if left is not None and left < timedelta(hours=1):
+        assert "Run 'csarc self-hosted extend --env dev'" in stdout
+    assert output == ""
+
+
+def test_direct_dispatch_accepts_31_minutes_left(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #1320 AC3: just over the cutoff still runs, with a warning."""
+    window = datetime.now(UTC) + timedelta(minutes=32)
+    code, stdout, _summary, output = run_dispatch(
+        tmp_path, monkeypatch, window=window
+    )
+    assert code == 0, stdout
+    assert stdout.startswith("WARNING: ")
+    assert "environment=dev\n" in output
+
+
+def test_workflow_cutoff_matches_the_cli_and_the_job_timeout() -> None:
+    """Issue #1320 AC1: one 30-minute cutoff, equal to the job timeout.
+
+    A job dispatched with at least the timeout left finishes or times out
+    before the declared window closes.
+    """
+    cli = runpy.run_path(str(ROOT / "src/csarc_cli/self_hosted.py"))
+    cutoff = int(cli["DISPATCH_CUTOFF"].total_seconds())
+    job = registered_workflow()["jobs"]["verify"]
+    assert job["timeout-minutes"] * 60 == cutoff
+    assert f"if left < {cutoff}:" in dispatch_script()
+
+
 # ---------------------------------------------------------------------------
 # AC3/AC4/R2/R3: the lifecycle reads and binds the VM run.
 # ---------------------------------------------------------------------------
@@ -444,6 +509,9 @@ def test_vm_run_binds_to_the_exact_head_and_registered_runner(
     assert (evidence["head_sha"], evidence["tree_sha"]) == (HEAD, TREE)
     assert evidence["mode"] == "self-hosted"
     assert evidence["environment"] == "dev"
+    # Issue #1320 AC2: the window is the operator's declaration, not the VM's.
+    assert evidence["window"] == "2026-10-26T09:00Z"
+    assert evidence["window_source"] == "operator-declared"
     assert evidence["scopes"] == ["docs", "source"]
     assert evidence["command"] == "./.csarc/scripts/verify-fast"
     assert evidence["runner_labels"] == [
@@ -463,7 +531,8 @@ def test_vm_run_binds_to_the_exact_head_and_registered_runner(
         "self-hosted-verification-trace: "
         f"run=https://github.com/{REPO}/actions/runs/501 actor=maintainer "
         "triggering_actor=operator runner=csarc-vm-01-dev environment=dev "
-        f"window=2026-10-26T09:00Z mode=self-hosted head={HEAD} tier=fast "
+        "window=2026-10-26T09:00Z window_source=operator-declared "
+        f"mode=self-hosted head={HEAD} tier=fast "
         "pr=7 trust=self-hosted-registered"
     ]
     merge_trace = runpy.run_path(str(ROOT / "scripts/merge_trace.py"))
@@ -665,6 +734,65 @@ def test_lookup_takes_the_newest_bound_run(name: str, tmp_path: Path) -> None:
     assert f"head_sha={BASE}" in query
     assert "branch=dev%2Fm21-self-hosted" in query
     assert all("/502/" not in path for path in github.paths)
+
+
+@pytest.mark.parametrize("name", READERS)
+@pytest.mark.parametrize(
+    ("status", "conclusion"),
+    [
+        ("completed", "failure"),
+        ("completed", "cancelled"),
+        ("in_progress", None),
+    ],
+)
+def test_newer_unsuccessful_run_voids_an_older_success(
+    name: str, status: str, conclusion: str | None, tmp_path: Path
+) -> None:
+    """#1319 AC1/AC2: only the newest run for the head and base counts."""
+    github = RunsGitHub(
+        [
+            vm_run(id=501),
+            vm_run(id=503, status=status, conclusion=conclusion),
+        ],
+        {501: [vm_job()], 503: [vm_job()]},
+    )
+    with pytest.raises(RuntimeError) as rejected:
+        reader(name)["require"](
+            github, REPO, lease(), pull(), write_config(tmp_path), "fast"
+        )
+    message = str(rejected.value)
+    assert "newest VM run on the exact head (run 503)" in message
+    assert f"{status}/{conclusion or 'none'}" in message
+    assert "older runs do not count" in message
+    assert "re-verify" in message
+    assert all("/runs/501/" not in path for path in github.paths)
+
+
+@pytest.mark.parametrize("name", READERS)
+def test_newest_invalid_success_does_not_fall_back(
+    name: str, tmp_path: Path
+) -> None:
+    """#1319 AC1: a newer success that fails binding voids older runs."""
+    github = RunsGitHub(
+        [vm_run(id=501), vm_run(id=503)],
+        {501: [vm_job()], 503: [vm_job(runner_name="other")]},
+    )
+    with pytest.raises(RuntimeError, match="runner is not"):
+        reader(name)["require"](
+            github, REPO, lease(), pull(), write_config(tmp_path), "fast"
+        )
+
+
+@pytest.mark.parametrize("name", READERS)
+def test_only_a_success_on_the_head_is_accepted(
+    name: str, tmp_path: Path
+) -> None:
+    """#1319 AC1: a lone successful run still binds."""
+    github = RunsGitHub([vm_run(id=503)], {503: [vm_job()]})
+    evidence = reader(name)["require"](
+        github, REPO, lease(), pull(), write_config(tmp_path), "fast"
+    )
+    assert evidence["executor"]["run_id"] == 503
 
 
 @pytest.mark.parametrize(
