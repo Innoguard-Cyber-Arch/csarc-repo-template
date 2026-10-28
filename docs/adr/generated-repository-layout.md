@@ -186,16 +186,16 @@ typescript/tests/index.test.ts
 - 只由 hosted workflow 呼叫的 `pr_lifecycle.py close-work`（work-item lifecycle workflow 在 Milestone work PR 合併後關閉 Issue）與 `actions_run_url`（只讀 hosted Actions check run）移到 `pr_lifecycle_hosted.py`。生成的 `pr_lifecycle.py` 保留 `close_work_issue` 轉交函式與完整命令列；local render 執行 `close-work` 時以 exit 1 失敗並說明需要 `verification_mode: hosted`。沒有新增或停止 render 的檔案，`copier.yml` 與下方 payload 表不變。
 - 既有 local 專案 update 時，`pr_lifecycle.py` 的縮減列為一般的模板修改，不會新增 `pr_lifecycle_hosted.py`；hosted 專案兩個檔案一起更新，沒有檔案被移除（`tests/test_hosted_lifecycle_split.py`）。
 
-### hosted 不 render 本機證據工具（#1267）
-
-- `local_verification.py` 只有 local 會執行的部分（記錄、讀取與要求本機證據）留在原檔，只在 `verification_mode != 'hosted'` render。兩種模式共用的正規化 record（`normalized_record`、`TRUST_LOCAL`、`TRUST_HOSTED`、`RECORD_KEYS`、`RECORD_TIERS`）移到每個 render 都有的 `evidence_freshness.py`；`local_verification.py` 保留同名別名，`pr_lifecycle.py` 直接從 `evidence_freshness.py` 讀取。行為與文件文字都不變。
-- 這項條件只依 `verification_mode` 判斷，hosted 專案因此少 1 個檔案，canonical 總量與 verification 分項都騰出空間給 Milestone 21 的共用設定（`tests/test_local_verification_render.py`）。
-
 ### `close-work` 回到共用模組（#1294）
 
 - 上一節對 `close-work` 的部分由本節取代：local 模式沒有 work-item lifecycle workflow，Milestone 工作 PR 合併進 `dev/m*` 後只能由操作者自己執行 `close-work`，放在 hosted sibling 會讓這些 Issue 只能人工關閉。`close_work_issue`、`work_closure_message` 與 `WORK_CLOSURE_MARKER` 因此移回生成的 `pr_lifecycle.py`，與 root 定義一致；`actions_run_url` 仍留在 `pr_lifecycle_hosted.py`。
 - 關單條件與 hosted 相同，判斷不讀 `verification_mode`，所以任何非 hosted 模式都能使用；條件不符時 fail closed。local 專案的生成 `ci-policy.md` 說明合併後的指令。
 - 沒有新增或停止 render 的檔案，`copier.yml` 不變；local fixture 的 canonical bytes 增加，hosted fixture 不增加（PR 記錄 `scripts/generated_payload.py` 的 exact head 量測）。
+
+### hosted 不 render 本機證據工具（#1267）
+
+- `local_verification.py` 只有 local 會執行的部分（記錄、讀取與要求本機證據）留在原檔，只在 `verification_mode != 'hosted'` render。兩種模式共用的正規化 record（`normalized_record`、`TRUST_LOCAL`、`TRUST_HOSTED`、`RECORD_KEYS`、`RECORD_TIERS`）移到每個 render 都有的 `evidence_freshness.py`；`local_verification.py` 保留同名別名，`pr_lifecycle.py` 直接從 `evidence_freshness.py` 讀取。行為與文件文字都不變。
+- 這項條件只依 `verification_mode` 判斷，hosted 專案因此少 1 個檔案，canonical 總量與 verification 分項都騰出空間給 Milestone 21 的共用設定（`tests/test_local_verification_render.py`）。
 
 ### 生成副本只保留 docstring 摘要行（#1227）
 

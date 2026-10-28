@@ -83,7 +83,7 @@ release-worthy 的 PR 在仍是 Draft 時執行 `python3 .csarc/scripts/release_
 {% endif %}
 ## 公版更新
 
-1. `csarc update --check --json` 驗證 provenance、列出候選 Release 與完整 SHA，並在 repository 外寫出 stage-1 plan（`csarc-update-plan.json`）。
+1. `csarc update --check --json` 驗證 provenance、列出候選 Release 與完整 SHA，並在 repository 外寫出 stage-1 plan（`csarc-update-plan.json`）。報告的 `Policy documentation` 會離線列出變更後 managed policy 與 project-owned README／`docs/` 的四態結果及 `file:line`；`drift`／`inconclusive` 必須先由擁有者修正或釐清，工具不會改寫產品文件。
 2. 有衝突時逐檔決定：`csarc update --finalize-plan --decision <path>=keep-current|take-new|custom:<file>`；有 Action pin 漂移時先提交產品修正並加上 `--pin-commit <full SHA>`。結果是不可變的 `csarc-update-final-plan.json`。
 3. `csarc update --apply-plan <final plan>` 只套用 plan 記錄的內容；repository、權限、工具版本或 target 狀態與 plan 不同時停止，不改任何檔案。
 

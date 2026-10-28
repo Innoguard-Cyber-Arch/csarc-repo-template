@@ -27,7 +27,7 @@ Coverage: sha256:replace-with-the-value-from-the-ready-check
 
 ## 文件一致性
 
-<!-- 由本機 AI 比對程式、設定、測試與文件；每次 push 後都要重填 exact head。 -->
+<!-- 由本機 AI 比對程式、設定、測試與文件；每次 push 後都要重填 exact head。adopt/update PR 另把 lifecycle report 的每筆 Policy documentation（key、新值、status、file:line）逐列寫進 Reason；drift/inconclusive 維持 blocking。 -->
 
 - Status: `inconclusive`
 - Reviewed head: `<40-character commit SHA>`

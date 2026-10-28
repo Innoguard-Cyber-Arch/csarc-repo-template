@@ -265,6 +265,7 @@ def test_earlier_report_versions_have_no_prompt(tmp_path: Path) -> None:
     report = report_with(tmp_path, None)
     earlier = dict(report)
     earlier.pop("writing_guide")
+    earlier.pop("policy_documentation")
     earlier["report_format_version"] = (
         lifecycle_report.REPORT_FORMAT_VERSION_2_2
     )
