@@ -315,9 +315,13 @@ def test_lifecycle_warns_without_changing_the_mode(
 def test_lifecycle_keeps_failing_closed_on_a_stale_render(
     name: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """AC2: a self-hosted render on a public repository still must re-render."""
+    """AC2: a self-hosted render on a public repository still fails closed.
+
+    #1318: the message names the only lifecycle recovery instead of a
+    re-render pull request that could not merge either.
+    """
     function = lifecycle(name, tmp_path, "self-hosted", "csarc-verify.yml")
-    with pytest.raises(RuntimeError, match="csarc update"):
+    with pytest.raises(RuntimeError, match="Make it private again"):
         function(Repository(False), REPO)
     assert PUBLIC in capsys.readouterr().err
 
