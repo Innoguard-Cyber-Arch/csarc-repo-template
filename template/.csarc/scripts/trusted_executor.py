@@ -408,6 +408,9 @@ GOVERNANCE_ORDER: dict[str, tuple[str, ...]] = {
 }
 # Any change to the self-hosted registration is a governance switch.
 GOVERNANCE_EXACT = csarc_config.SELF_HOSTED_KEYS
+# Issue #1325: hosted CI reads release_ownership from the candidate to pick
+# the release checks, so any change to it takes the reviewed route.
+GOVERNANCE_CHANGES = ("release_ownership",)
 GOVERNANCE_FLAGS = ("enable_codeql",)
 GOVERNANCE_LISTS = ("lifecycle", "scheduled_checks")
 GOVERNANCE_MINIMUMS = ("coverage_threshold",)
@@ -593,6 +596,9 @@ def governance_relaxations(  # noqa: C901
             # An unordered change (added, removed, or unknown) counts as a
             # relaxation so it can only land through the reviewed route.
             relaxed.append(f"{key}: {before} -> {after}")
+    for key in GOVERNANCE_CHANGES:
+        if base.get(key) != candidate.get(key):
+            relaxed.append(f"{key}: {base.get(key)} -> {candidate.get(key)}")
     for key in GOVERNANCE_FLAGS:
         if base.get(key) is True and candidate.get(key) is not True:
             relaxed.append(f"{key}: true -> {candidate.get(key)}")

@@ -210,7 +210,9 @@ def test_documents_name_who_supplies_checks_and_tests(document: str) -> None:
     text = (ROOT / document).read_text(encoding="utf-8")
     assert "#1325" in text
     assert ".csarc/config.yml" in text
-    assert "candidate 自己的測試、lint 設定" in text
+    assert "測試、lint 設定" in text
+    assert "verification hook" in text
+    assert "release_ownership" in text
     assert "只搬入幾個入口檔" not in text
 
 
@@ -258,8 +260,13 @@ def verify_route(
     render: Path,
     route: str,
     change_base: Callable[[Path], None] | None = None,
+    change_candidate: Callable[[Path], None] | None = None,
+    tier: str = "full",
 ) -> subprocess.CompletedProcess[str]:
-    """Stage the base like the workflow, then verify the silenced candidate."""
+    """Stage the base like the workflow, then verify the changed candidate.
+
+    The candidate silences its checks unless another change is given.
+    """
     _data, workflow, execute, execute_env = ROUTES[route]
     repo = tmp_path / "repo"
     shutil.copytree(render, repo)
@@ -273,9 +280,9 @@ def verify_route(
     base = tmp_path / "base"
     git(repo, "worktree", "add", "-q", "--detach", str(base), "main")
     git(repo, "switch", "-qc", BRANCH)
-    silence_checks(repo)
+    (change_candidate or silence_checks)(repo)
     git(repo, "add", "-A")
-    git(repo, "commit", "-qm", "fix: quiet the update checks")
+    git(repo, "commit", "-qm", "fix: change the candidate tree")
 
     runner_temp = tmp_path / "runner"
     runner_temp.mkdir()
@@ -291,7 +298,13 @@ def verify_route(
     return run_step(
         step(workflow_path, execute),
         repo,
-        {**common, "GITHUB_WORKSPACE": str(repo), **execute_env},
+        {
+            **common,
+            "GITHUB_WORKSPACE": str(repo),
+            **execute_env,
+            "CSARC_CI_TIER": tier,
+            "CSARC_VERIFICATION_SUITE": tier,
+        },
     )
 
 
@@ -324,3 +337,87 @@ def test_negative_control_fallback_lets_the_candidate_pass(
     log = result.stdout + result.stderr
     assert result.returncode == 0, log
     assert CONFLICT not in log
+
+
+SHADOW = "ERROR: shadowed standard library"
+SHADOWED = ("json", "runpy", "tomllib")
+
+
+def shadow_modules(as_package: bool) -> Callable[[Path], None]:
+    """Return a change that plants stdlib look-alikes in the candidate."""
+
+    def change(repo: Path) -> None:
+        for name in SHADOWED:
+            target = (
+                repo / name / "__init__.py"
+                if as_package
+                else repo / f"{name}.py"
+            )
+            target.parent.mkdir(exist_ok=True)
+            target.write_text(f"raise SystemExit({SHADOW!r})\n", "utf-8")
+
+    return change
+
+
+def trust_the_current_directory(base: Path) -> None:
+    """Drop the isolation flags from the base entry points (pre-#1325).
+
+    The fixture renders declare no language, so the plan reads two keys.
+    """
+    replacements = {
+        "verify-fast": ("python3 -I -c", "python3 -c", 2),
+        "verify": (
+            "platform_python=(python3 -I)",
+            "platform_python=(python3)",
+            1,
+        ),
+    }
+    for name, (old, new, count) in replacements.items():
+        script = base / ".csarc/scripts" / name
+        text = script.read_text(encoding="utf-8")
+        assert text.count(old) == count, name
+        script.write_text(text.replace(old, new), encoding="utf-8")
+
+
+@pytest.mark.large
+@pytest.mark.parametrize("as_package", [False, True], ids=["module", "package"])
+@pytest.mark.parametrize("route", sorted(ROUTES))
+def test_candidate_cannot_shadow_the_trusted_interpreter(
+    tmp_path: Path, renders: dict[str, Path], route: str, as_package: bool
+) -> None:
+    """AC1: a candidate json.py or json/ never reaches trusted Python.
+
+    The fast entry point reads the router plan and the full entry point
+    checks JSON and settings with Python in the candidate's directory.
+    """
+    result = verify_route(
+        tmp_path,
+        renders[route],
+        route,
+        change_candidate=shadow_modules(as_package),
+        tier="fast",
+    )
+    log = result.stdout + result.stderr
+    assert result.returncode == 0, log
+    assert "suite=full" in log
+    assert "JSON syntax: .csarc/policies/repository.json" in log
+    assert SHADOW not in log
+
+
+@pytest.mark.large
+@pytest.mark.parametrize("route", sorted(ROUTES))
+def test_negative_control_shadowing_without_isolation(
+    tmp_path: Path, renders: dict[str, Path], route: str
+) -> None:
+    """The shadowing test fails when trusted Python trusts the cwd."""
+    result = verify_route(
+        tmp_path,
+        renders[route],
+        route,
+        change_base=trust_the_current_directory,
+        change_candidate=shadow_modules(as_package=False),
+        tier="fast",
+    )
+    log = result.stdout + result.stderr
+    assert result.returncode != 0, log
+    assert SHADOW in log

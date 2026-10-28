@@ -163,6 +163,14 @@ verify_container() {
 }
 {% endif -%}
 
+# Issue #1325: the import check must load the installed wheel, not a
+# same-named source tree in the current directory.
+wheel_import_check='import pathlib, sys
+import {{ package_name }} as package
+origin = pathlib.Path(package.__file__).resolve()
+if "site-packages" not in origin.parts:
+    sys.exit(f"ERROR: Package import is not from the wheel: {origin}. Install the built wheel.")'
+
 verify_python_module() {
   python_version="${CSARC_PYTHON_VERSION:-3.14}"
   export UV_PYTHON="$python_version"
@@ -171,7 +179,9 @@ verify_python_module() {
   verification_step "Python formatting" uv run ruff format --check .
   verification_step "Python lint" uv run ruff check .
   verification_step "Python type check" uv run ty check
-  verification_step "Python version contract" uv run python - <<'PY'
+  # -P: the package must come from the environment, not the current
+  # directory (#1325).
+  verification_step "Python version contract" uv run python -P - <<'PY'
 from importlib import import_module
 from importlib.metadata import version
 
@@ -207,10 +217,10 @@ PY
     exit 1
   fi
   verification_step "Python package import" \
-    uv run --isolated --no-project --with ./dist/*.whl \
-    python -c "import {{ package_name }}"
+    uv run --isolated --no-project --no-config --with ./dist/*.whl \
+    python -P -c "$wheel_import_check"
   verification_step "Python package metadata" \
-    uv run --isolated --no-project --with twine twine check dist/*
+    uv run --isolated --no-project --no-config --with twine twine check dist/*
 }
 
 if [[ "$mode" == "python" ]]; then
@@ -235,10 +245,10 @@ if [[ "$mode" == "python-compatibility" ]]; then
     uv run pytest -m "runtime and not large"
   verification_step "Python compatibility package build" uv build --clear
   verification_step "Python compatibility package import" \
-    uv run --isolated --no-project --with ./dist/*.whl \
-    python -c "import {{ package_name }}"
+    uv run --isolated --no-project --no-config --with ./dist/*.whl \
+    python -P -c "$wheel_import_check"
   verification_step "Python compatibility package metadata" \
-    uv run --isolated --no-project --with twine twine check dist/*
+    uv run --isolated --no-project --no-config --with twine twine check dist/*
   exit 0
 fi
 
@@ -302,11 +312,10 @@ fi
 verify_container
 {% endif %}
 
-if $verify_python; then
-  platform_python=(uv run python)
-else
-  platform_python=(uv run --no-project python)
-fi
+# Issue #1325: trusted helpers run in an isolated interpreter (-I), so
+# neither the subject's files in the current directory nor its virtual
+# environment or uv settings can replace a standard-library module.
+platform_python=(python3 -I)
 {% if documentation_mode != 'off' -%}
 verification_step "Specification validation" \
   "${platform_python[@]}" "$checks/spec_to_issue.py" validate

@@ -1022,14 +1022,14 @@ shell／workflow scope 並升到對應 tier，新版 gate 要等合併進 base �
 workflow 與 shell lint、Action pin、相依掃描、規格驗證、站台、metadata、語言設定與 PR 寫入者檢查，缺少腳本時那一步
 失敗，不改用 candidate 的副本。三種執行的來源如下：
 
-| 執行 | 入口與檢查腳本 | 決定要跑哪些步驟的設定 | 測試、lint 設定與相依 |
+| 執行 | 入口與檢查腳本 | 決定要跑哪些步驟的設定 | 測試、lint 設定、相依與 verification hook |
 | --- | --- | --- | --- |
 | 本機，candidate 檢查自己 | candidate | candidate | candidate |
 | 本機，base 的驗證器檢查 candidate（self-hosted 出口，#1318） | base 的 worktree | base 的 `.csarc/config.yml` | candidate |
 | hosted CI 與 VM | trusted base 搬入的 control set | trusted base 的 `.csarc/config.yml` | candidate |
 
-candidate 自己的測試、lint 設定與相依仍會執行，因為它們就是驗證對象；candidate 放寬自己的 lint 設定或測試，要靠
-審查發現。一般本機執行時 candidate 就是 base，行為不變。這個 template repository 自己的 root `verify-fast` 與
+仍屬於 candidate、照常執行的是：測試、lint 設定（例如 `pyproject.toml` 的 ruff 設定、`uv.toml` 對專案指令的設定）、相依與 lockfile，以及 project verification hook（`project_verification_hook` 或可執行的 `scripts/verify-product`，路徑檢查之後執行 candidate 的程式）。它們就是驗證對象；candidate 放寬自己的 lint 設定、測試或 hook，要靠審查發現。trusted 的 Python helper 以 `python3 -I` 執行，candidate 目錄裡的 `json.py`、`json/` 之類的同名模組、它的 virtual environment 與 uv 設定都不會被載入；wheel 匯入檢查以 `python -P` 執行並要求模組來自 site-packages，twine 與 wheel 的 `uv run` 帶 `--no-config`；站台建置的設定 reader 與設定也來自檢查腳本所在的 checkout。要跑哪些範圍由 trusted router 依 candidate 的變更路徑決定，這是被檢查的資料。例外：hosted `ci.yml` 的「Read release ownership」以 trusted reader 讀 candidate 的 `release_ownership`，決定是否執行 release 檢查；這個 workflow 由 main 讀取，所以改用 base 的值要先改 main，#1325 改成讓任何 `release_ownership` 變更都走 governance-switch route。
+一般本機執行時 candidate 就是 base，行為不變。這個 template repository 自己的 root `verify-fast` 與
 `verify-template.sh` 仍以 candidate 的 `scripts/` 執行檢查腳本，control set 只有上段列的入口與 stage gate。
 
 這些 trusted step 用 `python3` 執行 base 的 scripts，所以 `verify` 在第一個 trusted step 之前就以固定版本的
@@ -1115,7 +1115,7 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
   `CSARC_TRUSTED_BASE_SHA=<base_sha> python3 <path>/scripts/pr_lifecycle.py merge ...` 執行。
 - **Governance-switch route**：改動 `.csarc/scripts/`、放寬治理值（`admin_bypass`、`verification_mode_private`、`verification_mode_public`、
   `governance_mode`、`copilot_review` 往寬鬆方向，關閉 `enable_codeql`，移除 `lifecycle` 或
-  `scheduled_checks` 項目，調低 `coverage_threshold`）、變更設定 schema，或無法
+  `scheduled_checks` 項目，調低 `coverage_threshold`）、改變 `release_ownership`（#1325）、變更設定 schema，或無法
   取得完整變更清單時，PR 必須帶 `governance-switch` label。hosted 由 trusted base 的 `validate-pr-policy`
   經 API 讀取 candidate 設定與檔案清單判定，local 由 lifecycle 對 exact head 判定；兩者共用同一個
   `route` 規則。這條 route 不放寬任何控制：required checks、exact-head 授權與 remote lease 照常要求，

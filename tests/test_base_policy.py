@@ -350,6 +350,11 @@ def test_root_schema_two_settings_pass_the_trusted_base_reader(
         ({"enable_codeql": False}, "enable_codeql: true -> False"),
         ({"lifecycle": ["issues"]}, "lifecycle: removes milestones"),
         ({"coverage_threshold": 60}, "coverage_threshold: 80 -> 60"),
+        # Issue #1325: hosted CI selects release checks from this value.
+        (
+            {"release_ownership": "verification-only"},
+            "release_ownership: csarc-owned -> verification-only",
+        ),
     ],
 )
 def test_relaxed_governance_value_needs_the_switch(
