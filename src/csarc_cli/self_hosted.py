@@ -61,7 +61,10 @@ CREDENTIAL_ENV = (
 TIME_FORMAT = "%Y-%m-%dT%H:%MZ"
 READBACK_ATTEMPTS = 12
 READBACK_INTERVAL = 5.0
-RETIRE_BRANCH = "chore/retire-self-hosted-verification"
+# The retire branch follows the downstream work-branch rule (#1315 AC5).
+RETIRE_SLUG = "leave-self-hosted"
+RETIRE_BRANCH_PATTERN = re.compile(rf"chore/[1-9][0-9]*-{RETIRE_SLUG}")
+RETIRE_ISSUE_TITLE = "Leave self-hosted verification before going public"
 RETIRE_TITLE = "chore(settings): leave self-hosted verification before public"
 REGISTER = (
     "Register with csarc-devops (one Issue in each repository, linked both "
@@ -71,6 +74,11 @@ REGISTER = (
 
 class SelfHostedError(RuntimeError):
     """A self-hosted window command stopped; the message says what next."""
+
+
+def retire_branch(issue: int) -> str:
+    """Return the retire work branch of one Issue."""
+    return f"chore/{issue}-{RETIRE_SLUG}"
 
 
 class GitHub(Protocol):
@@ -104,7 +112,15 @@ class Channel(Protocol):
 class Switch(Protocol):
     """Prepare the governance-switch pull request that `retire` opens."""
 
-    def open_pull_request(self, repo: str, base: str, private_mode: str) -> str:
+    def public_problems(
+        self, repo: str, base: str, private_mode: str
+    ) -> list[tuple[str, str]]:
+        """Return each setting the public render rejects, with its reason."""
+        ...
+
+    def open_pull_request(
+        self, repo: str, base: str, private_mode: str, issue: int | None = None
+    ) -> str:
         """Return the URL of the draft pull request it opened."""
         ...
 
@@ -1046,8 +1062,44 @@ def verify(session: Session, repo: str, number: int, apply: bool) -> int:
     return 0
 
 
+def public_preflight(session: Session, context: Context, new_mode: str) -> None:
+    """Refuse retire while the public render rejects a saved setting."""
+    if session.switch is None:
+        raise SelfHostedError(
+            "Public settings check: no checkout was given. Run 'retire' "
+            "inside a clone of the repository."
+        )
+    try:
+        problems = session.switch.public_problems(
+            context.repo, context.default_branch, new_mode
+        )
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise SelfHostedError(
+            f"Public settings check failed: {error}. Fix the cause shown "
+            "above, then run 'csarc self-hosted retire' again."
+        ) from error
+    if not problems:
+        ok("Public settings check: every setting is valid for public mode.")
+        return
+    report(
+        "settings that public mode rejects",
+        [(key, reason) for key, reason in problems],
+    )
+    raise SelfHostedError(
+        "'retire' refused: public mode rejects "
+        f"{', '.join(key for key, _ in problems)}, so nothing was deleted. "
+        "Change each one in a governance-switch pull request with 'csarc "
+        "update --data KEY=VALUE', merge it, then run 'csarc self-hosted "
+        "retire' again."
+    )
+
+
 def retire(
-    session: Session, repo: str, private_mode: str | None, apply: bool
+    session: Session,
+    repo: str,
+    private_mode: str | None,
+    apply: bool,
+    issue: int | None = None,
 ) -> int:
     """`csarc self-hosted retire`: clear VM data before going public."""
     context = load_context(session.github, repo)
@@ -1098,12 +1150,16 @@ def retire(
                 "settings change",
                 f"verification_mode_private self-hosted -> {new_mode}, drop "
                 "self_hosted_runner and self_hosted_environments, re-render "
-                "in public mode (draft governance-switch pull request)"
+                "in public mode (draft governance-switch pull request on "
+                f"{retire_branch(issue or 0).replace('/0-', '/<N>-')} that "
+                f"closes {f'#{issue}' if issue else 'a new Issue #N'})"
                 if leaving
                 else "none",
             ),
         ],
     )
+    if leaving:
+        public_preflight(session, context, new_mode)
     if not apply:
         return inventory_only("csarc self-hosted retire")
     failed: list[str] = []
@@ -1136,7 +1192,7 @@ def retire(
                     "Run 'retire --apply' inside a clone of the repository."
                 )
             url = session.switch.open_pull_request(
-                repo, context.default_branch, new_mode
+                repo, context.default_branch, new_mode, issue
             )
         except (SelfHostedError, OSError, subprocess.SubprocessError) as error:
             failed.append("governance-switch pull request")
@@ -1173,11 +1229,13 @@ class GitSwitch:
         checkout: Path,
         update: Callable[[Path, list[str]], None] | None = None,
         create: Callable[[list[str]], str] | None = None,
+        develop: Callable[[Path, list[str]], None] | None = None,
     ) -> None:
         """Keep the operator's clone; its working tree is never changed."""
         self.checkout = checkout
         self.update = update or run_update
         self.create = create or gh
+        self.develop = develop or run_develop
 
     def git(self, *arguments: str, cwd: Path | None = None) -> str:
         """Run one git command."""
@@ -1189,8 +1247,18 @@ class GitSwitch:
             text=True,
         ).stdout.strip()
 
-    def open_pull_request(self, repo: str, base: str, private_mode: str) -> str:
-        """Render the new mode on a branch and open a draft pull request."""
+    def tidy(self, *arguments: str) -> None:
+        """Run one cleanup git command whose failure leaves nothing behind."""
+        subprocess.run(  # noqa: S603
+            ["git", *arguments],  # noqa: S607
+            cwd=self.checkout,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    def prepare(self, repo: str, base: str) -> None:
+        """Check the clone and fetch the base the render starts from."""
         origin = self.git("config", "--get", "remote.origin.url")
         if not re.search(
             rf"github\.com[:/]{re.escape(repo)}(?:\.git)?$", origin
@@ -1200,79 +1268,253 @@ class GitSwitch:
                 f"clone of '{repo}'. Run the command in a clone of it."
             )
         self.git("fetch", "origin", base)
-        with tempfile.TemporaryDirectory(prefix="csarc-retire-") as temp:
+        # A worktree an earlier failed run lost would still hold the branch.
+        self.tidy("worktree", "prune")
+
+    def public_arguments(self, tree: Path, private_mode: str) -> list[str]:
+        """Return the `csarc update` arguments of the public render."""
+        saved = yaml.safe_load((tree / CONFIG_PATH).read_text(encoding="utf-8"))
+        provenance_path = tree / PROVENANCE_PATH
+        provenance = (
+            json.loads(provenance_path.read_text(encoding="utf-8"))
+            if provenance_path.is_file()
+            else {}
+        )
+        release = str(
+            (provenance or {}).get("release_tag")
+            or (saved or {}).get("_commit")
+            or ""
+        )
+        # Keep the recorded release: only the mode and render change.
+        return [
+            "--data",
+            f"verification_mode_private={private_mode}",
+            "--data",
+            "project_visibility=public",
+            "--retire-public-transition",
+            *(["--to", release] if release else []),
+            "--yes",
+            "--non-interactive",
+        ]
+
+    def public_problems(
+        self, repo: str, base: str, private_mode: str
+    ) -> list[tuple[str, str]]:
+        """Validate the public render on a detached tree; create no branch."""
+        self.prepare(repo, base)
+        with tempfile.TemporaryDirectory(prefix="csarc-retire-check-") as temp:
             tree = Path(temp) / "tree"
-            self.git(
-                "worktree",
-                "add",
-                "-B",
-                RETIRE_BRANCH,
-                str(tree),
-                f"origin/{base}",
-            )
+            report_path = Path(temp) / "problems.json"
             try:
-                saved = yaml.safe_load(
-                    (tree / CONFIG_PATH).read_text(encoding="utf-8")
+                self.git(
+                    "worktree", "add", "--detach", str(tree), f"origin/{base}"
                 )
-                provenance_path = tree / PROVENANCE_PATH
-                provenance = (
-                    json.loads(provenance_path.read_text(encoding="utf-8"))
-                    if provenance_path.is_file()
-                    else {}
-                )
-                release = str(
-                    (provenance or {}).get("release_tag")
-                    or (saved or {}).get("_commit")
-                    or ""
-                )
-                # Keep the recorded release: only the mode and render change.
                 self.update(
                     tree,
                     [
-                        "--data",
-                        f"verification_mode_private={private_mode}",
-                        "--data",
-                        "project_visibility=public",
-                        "--retire-public-transition",
-                        *(["--to", release] if release else []),
-                        "--yes",
-                        "--non-interactive",
+                        *self.public_arguments(tree, private_mode),
+                        "--retire-preflight",
+                        str(report_path),
                     ],
                 )
-                self.git("add", "-A", cwd=tree)
-                self.git(
-                    "commit",
-                    "-m",
-                    f"{RETIRE_TITLE}\n\nADR self-hosted-verification D9: "
-                    "re-render in public mode after 'csarc self-hosted "
-                    "retire'.",
-                    cwd=tree,
-                )
-                self.git("push", "-u", "origin", RETIRE_BRANCH, cwd=tree)
-                template = tree / ".github" / "pull_request_template.md"
-                body = template.read_text() if template.is_file() else ""
-                output = self.create(
-                    [
-                        "pr",
-                        "create",
-                        "--repo",
-                        repo,
-                        "--draft",
-                        "--base",
-                        base,
-                        "--head",
-                        RETIRE_BRANCH,
-                        "--label",
-                        "governance-switch",
-                        "--title",
-                        RETIRE_TITLE,
-                        "--body",
-                        body,
-                    ]
-                )
-                return output.strip().splitlines()[-1]
+                problems = json.loads(report_path.read_text(encoding="utf-8"))
             finally:
-                self.git("worktree", "remove", "--force", str(tree))
+                self.tidy("worktree", "remove", "--force", str(tree))
+                self.tidy("worktree", "prune")
+        return [(str(key), str(reason)) for key, reason in problems]
+
+    def open_pull_request(
+        self, repo: str, base: str, private_mode: str, issue: int | None = None
+    ) -> str:
+        """Render the new mode on an Issue branch and open a draft PR."""
+        self.prepare(repo, base)
+        with tempfile.TemporaryDirectory(prefix="csarc-retire-") as temp:
+            tree = Path(temp) / "tree"
+            branch = ""
+            try:
+                self.git(
+                    "worktree", "add", "--detach", str(tree), f"origin/{base}"
+                )
+                number = issue or self.open_issue(repo, tree)
+                branch = retire_branch(number)
+                try:
+                    return self.render_branch(
+                        repo, base, private_mode, tree, number, branch
+                    )
+                except (
+                    SelfHostedError,
+                    OSError,
+                    subprocess.SubprocessError,
+                ) as error:
+                    if issue:
+                        raise
+                    raise SelfHostedError(
+                        f"Retire pull request failed: Issue #{number} stays "
+                        f"open after {str(error).rstrip('.')}. Pass "
+                        f"'--issue {number}' when you run retire again."
+                    ) from error
+            finally:
+                # The pushed branch lives on origin; the local copy and the
+                # worktree never outlive the run, even when it fails.
+                self.tidy("worktree", "remove", "--force", str(tree))
+                self.tidy("worktree", "prune")
+                if branch:
+                    self.tidy("branch", "-D", branch)
+
+    def open_issue(self, repo: str, tree: Path) -> int:
+        """Open the Issue the retire pull request closes."""
+        self.validate_title(tree, RETIRE_ISSUE_TITLE)
+        login = self.create(["api", "user", "--jq", ".login"]).strip()
+        output = self.create(
+            [
+                "issue",
+                "create",
+                "--repo",
+                repo,
+                "--title",
+                RETIRE_ISSUE_TITLE,
+                "--label",
+                "enhancement",
+                "--assignee",
+                "@me",
+                "--body",
+                retire_issue_body(login),
+            ]
+        )
+        found = re.search(r"/issues/([1-9][0-9]*)\s*$", output.strip())
+        if found is None:
+            raise SelfHostedError(
+                "Retire Issue: 'gh issue create' printed no Issue URL. Open "
+                "it by hand and pass '--issue N'."
+            )
+        return int(found.group(1))
+
+    def render_branch(
+        self,
+        repo: str,
+        base: str,
+        private_mode: str,
+        tree: Path,
+        issue: int,
+        branch: str,
+    ) -> str:
+        """Commit the public render on the Issue branch and open the PR."""
+        remote = self.git("ls-remote", "origin", f"refs/heads/{branch}")
+        if not remote:
+            # Link the branch in the Issue's Development the way the
+            # repository's own helper does.
+            self.develop(
+                tree,
+                [
+                    str(issue),
+                    "--repo",
+                    repo,
+                    "--base",
+                    base,
+                    "--name",
+                    branch,
+                ],
+            )
+            remote = self.git("ls-remote", "origin", f"refs/heads/{branch}")
+        self.git("switch", "-C", branch, cwd=tree)
+        self.update(tree, self.public_arguments(tree, private_mode))
+        self.git("add", "-A", cwd=tree)
+        self.git(
+            "commit",
+            "-m",
+            f"{RETIRE_TITLE}\n\nADR self-hosted-verification D9: "
+            "re-render in public mode after 'csarc self-hosted retire'.\n\n"
+            f"Refs #{issue}",
+            cwd=tree,
+        )
+        # Only this run's branch: an earlier failed run's commit is
+        # replaced, and anything else that moved it is kept.
+        lease = remote.split()[0] if remote else ""
+        self.git(
+            "push",
+            f"--force-with-lease={branch}:{lease}",
+            "-u",
+            "origin",
+            branch,
+            cwd=tree,
+        )
+        template = tree / ".github" / "pull_request_template.md"
+        body = template.read_text() if template.is_file() else ""
+        output = self.create(
+            [
+                "pr",
+                "create",
+                "--repo",
+                repo,
+                "--draft",
+                "--base",
+                base,
+                "--head",
+                branch,
+                "--label",
+                "governance-switch",
+                "--label",
+                "enhancement",
+                "--assignee",
+                "@me",
+                "--title",
+                RETIRE_TITLE,
+                "--body",
+                linked_body(body, issue),
+            ]
+        )
+        return output.strip().splitlines()[-1]
+
+    def validate_title(self, tree: Path, title: str) -> None:
+        """Check the Issue title with the repository's own validator."""
+        script = tree / ".csarc" / "scripts" / "validate-issue-title"
+        if script.is_file():
+            subprocess.run(  # noqa: S603
+                [str(script), title], cwd=tree, check=True
+            )
+
+
+def run_develop(tree: Path, arguments: list[str]) -> None:
+    """Create and link the Issue branch with the repository's helper."""
+    script = tree / ".csarc" / "scripts" / "gh-issue-develop"
+    command = [str(script)] if script.is_file() else ["gh", "issue", "develop"]
+    subprocess.run(  # noqa: S603
+        [*command, *arguments], cwd=tree, check=True
+    )
+
+
+def retire_issue_body(owner: str) -> str:
+    """Return the retire Issue body in the downstream Task form layout."""
+    return (
+        "### 問題\n\n"
+        "`csarc self-hosted retire --apply` deleted the self-hosted "
+        "verification data. Before the repository becomes public, it leaves "
+        "self-hosted verification and is re-rendered in public mode.\n\n"
+        "### Release level / 發布層級\n\nstable\n\n"
+        "### 完成條件\n\n"
+        "- [ ] AC1: The draft pull request that closes this Issue changes "
+        "only the verification settings and their public-mode render; the "
+        "visibility changes after it merges.\n\n"
+        "### 補充\n\n"
+        "Opened by `csarc self-hosted retire --apply` (ADR "
+        "self-hosted-verification D9).\n\n"
+        "#### 風險與控制\n\n"
+        "| ID | 類別 | 等級 | 風險 | 控制 | 預計證據 | Owner |\n"
+        "| --- | --- | --- | --- | --- | --- | --- |\n"
+        "| R1 | confidentiality | high | Self-hosted run logs become public "
+        "with the repository | retire deletes the runs, artifacts, caches, "
+        f"and runners first | retire readback | @{owner} |\n"
+    )
+
+
+def linked_body(template: str, issue: int) -> str:
+    """Fill the PR template's Issue placeholders with the retire Issue."""
+    body = re.sub(
+        r"^(Closes|Issue:) #N$", rf"\g<1> #{issue}", template, flags=re.M
+    )
+    if not re.search(rf"^Closes #{issue}$", body, flags=re.M):
+        body = f"Closes #{issue}\n\n{body}"
+    return body
 
 
 def run_update(tree: Path, arguments: list[str]) -> None:
@@ -1321,7 +1563,7 @@ def command(args: argparse.Namespace, session: Session | None = None) -> int:
         return status(session, repo, args.env)
     if action == "verify":
         return verify(session, repo, args.pr, args.apply)
-    return retire(session, repo, args.private_mode, args.apply)
+    return retire(session, repo, args.private_mode, args.apply, args.issue)
 
 
 def add_parser(
@@ -1358,6 +1600,12 @@ def add_parser(
                 "--private-mode",
                 choices=("hosted", "local"),
                 help="new verification_mode_private (default: the public mode)",
+            )
+            sub.add_argument(
+                "--issue",
+                type=int,
+                metavar="N",
+                help="Issue the pull request closes (default: open one)",
             )
             sub.add_argument(
                 "--path",

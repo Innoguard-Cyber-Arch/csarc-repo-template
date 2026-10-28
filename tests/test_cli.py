@@ -1276,7 +1276,7 @@ def test_retire_visibility_transition_is_branch_and_setting_bound(
     """Keep the hidden transition capability inside the retire workflow."""
     target = tmp_path / "target"
     target.mkdir()
-    git(target, "init", "-b", cli.self_hosted.RETIRE_BRANCH)
+    git(target, "init", "-b", cli.self_hosted.retire_branch(5))
     args = cli.parser().parse_args(
         ["update", str(target), "--retire-public-transition"]
     )
@@ -1297,6 +1297,41 @@ def test_retire_visibility_transition_is_branch_and_setting_bound(
     git(target, "branch", "-m", "fix/not-retire")
     with pytest.raises(CliError, match="reserved for the retire branch"):
         cli.retire_visibility_transition(args, target, saved, explicit)
+
+    # The read-only preflight is bound to a detached tree, never a branch.
+    preflight = cli.parser().parse_args(
+        [
+            "update",
+            str(target),
+            "--retire-public-transition",
+            "--retire-preflight",
+            str(tmp_path / "problems.json"),
+        ]
+    )
+    with pytest.raises(CliError, match="reserved for the retire branch"):
+        cli.retire_visibility_transition(preflight, target, saved, explicit)
+    (target / "file").write_text("x\n")
+    git(target, "add", "file")
+    git(
+        target,
+        "-c",
+        "user.name=T",
+        "-c",
+        "user.email=t@example.invalid",
+        "commit",
+        "-m",
+        "init",
+    )
+    git(target, "switch", "--detach")
+    assert (
+        cli.retire_visibility_transition(preflight, target, saved, explicit)
+        == "private-to-public"
+    )
+    lone = cli.parser().parse_args(
+        ["update", str(target), "--retire-preflight", "report.json"]
+    )
+    with pytest.raises(CliError, match="needs '--retire-public-transition'"):
+        cli.retire_visibility_transition(lone, target, saved, explicit)
 
 
 def test_repository_context_requires_visibility_when_api_fails(
@@ -7272,11 +7307,12 @@ def initialize_verified_project(
     return source, project
 
 
-@pytest.mark.large
-def test_retire_git_switch_runs_the_real_public_update(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The retire worktree reaches the real updater while GitHub is private."""
+def retiring_project(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    channel: str = "security@example.com",
+) -> Path:
+    """Create a private self-hosted project whose origin is a local bare."""
     source, _first_sha = make_template(tmp_path)
     questions = yaml.safe_load((source / "copier.yml").read_text())
     questions["_answers_file"] = ".csarc/config.yml"
@@ -7296,6 +7332,14 @@ def test_retire_git_switch_runs_the_real_public_update(
                 "project_visibility == 'public' else "
                 "verification_mode_private }}",
                 "when": False,
+            },
+            # A visibility-bound validator like the product's (#1315).
+            "security_reporting_channel": {
+                "type": "str",
+                "default": "security@example.com",
+                "validator": "{% if project_visibility == 'public' and "
+                "' ' in security_reporting_channel %}Use one email "
+                "address.{% endif %}",
             },
         }
     )
@@ -7342,6 +7386,8 @@ def test_retire_git_switch_runs_the_real_public_update(
                 "verification_mode_private=self-hosted",
                 "--data",
                 "verification_mode_public=hosted",
+                "--data",
+                f"security_reporting_channel={channel}",
             ]
         )
         == 0
@@ -7377,23 +7423,83 @@ def test_retire_git_switch_runs_the_real_public_update(
         return 1, "", "not available"
 
     monkeypatch.setattr(cli, "detector_api", private_repository)
+    return project
 
-    def update(tree: Path, arguments: list[str]) -> None:
-        assert main(["update", str(tree), *arguments]) == 0
 
+def in_process_update(tree: Path, arguments: list[str]) -> None:
+    """Run the real `csarc update` the retire switch would start."""
+    assert main(["update", str(tree), *arguments]) == 0
+
+
+def link_branch(tree: Path, arguments: list[str]) -> None:
+    """Play `gh issue develop`: create the named branch from the base."""
+    name = arguments[arguments.index("--name") + 1]
+    base = arguments[arguments.index("--base") + 1]
+    git(tree, "push", "-q", "origin", f"origin/{base}:refs/heads/{name}")
+
+
+def retire_residue(project: Path) -> tuple[str, int]:
+    """Return local retire branches and the extra worktree count."""
+    branch = git(project, "branch", "--list", "chore/*")
+    worktrees = git(project, "worktree", "list", "--porcelain")
+    return branch, worktrees.count("worktree ") - 1
+
+
+@pytest.mark.large
+def test_retire_git_switch_runs_the_real_public_update(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The retire worktree reaches the real updater while GitHub is private."""
+    project = retiring_project(tmp_path, monkeypatch)
     switch = self_hosted.GitSwitch(
         project,
-        update=update,
+        update=in_process_update,
         create=lambda _: "https://github.com/example-org/product/pull/42\n",
+        develop=link_branch,
     )
-    assert switch.open_pull_request("example-org/product", "main", "hosted")
-    head = git(
+    # Valid settings pass the read-only preflight without a branch (#1315).
+    assert switch.public_problems("example-org/product", "main", "hosted") == []
+    assert retire_residue(project) == ("", 0)
+
+    def failing_update(tree: Path, arguments: list[str]) -> None:
+        raise subprocess.CalledProcessError(2, ["csarc", "update", str(tree)])
+
+    broken = self_hosted.GitSwitch(
         project,
-        "ls-remote",
-        "origin",
-        f"refs/heads/{self_hosted.RETIRE_BRANCH}",
+        update=failing_update,
+        create=switch.create,
+        develop=link_branch,
+    )
+    with pytest.raises(subprocess.CalledProcessError):
+        broken.open_pull_request("example-org/product", "main", "hosted", 5)
+    # A failed run leaves no branch or worktree, so the rerun succeeds.
+    assert retire_residue(project) == ("", 0)
+
+    assert switch.open_pull_request("example-org/product", "main", "hosted", 5)
+    assert retire_residue(project) == ("", 0)
+    head = git(
+        project, "ls-remote", "origin", "refs/heads/chore/5-leave-self-hosted"
     ).split()[0]
     assert git(project, "show", f"{head}:mode.txt") == "public hosted"
+
+
+@pytest.mark.large
+def test_retire_preflight_reports_a_prose_reporting_channel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Copier's public validators run in the inventory, not at --apply."""
+    project = retiring_project(
+        tmp_path,
+        monkeypatch,
+        channel="Email the maintainers at security@example.com",
+    )
+    switch = self_hosted.GitSwitch(project, update=in_process_update)
+
+    assert switch.public_problems("example-org/product", "main", "hosted") == [
+        ("security_reporting_channel", "Use one email address.")
+    ]
+    assert retire_residue(project) == ("", 0)
+    assert not git(project, "ls-remote", "origin", "refs/heads/chore/*")
 
 
 @pytest.mark.large
