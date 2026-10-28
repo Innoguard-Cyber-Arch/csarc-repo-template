@@ -735,6 +735,65 @@ def test_lookup_takes_the_newest_bound_run(name: str, tmp_path: Path) -> None:
     assert all("/502/" not in path for path in github.paths)
 
 
+@pytest.mark.parametrize("name", READERS)
+@pytest.mark.parametrize(
+    ("status", "conclusion"),
+    [
+        ("completed", "failure"),
+        ("completed", "cancelled"),
+        ("in_progress", None),
+    ],
+)
+def test_newer_unsuccessful_run_voids_an_older_success(
+    name: str, status: str, conclusion: str | None, tmp_path: Path
+) -> None:
+    """#1319 AC1/AC2: only the newest run for the head and base counts."""
+    github = RunsGitHub(
+        [
+            vm_run(id=501),
+            vm_run(id=503, status=status, conclusion=conclusion),
+        ],
+        {501: [vm_job()], 503: [vm_job()]},
+    )
+    with pytest.raises(RuntimeError) as rejected:
+        reader(name)["require"](
+            github, REPO, lease(), pull(), write_config(tmp_path), "fast"
+        )
+    message = str(rejected.value)
+    assert "newest VM run on the exact head (run 503)" in message
+    assert f"{status}/{conclusion or 'none'}" in message
+    assert "older runs do not count" in message
+    assert "re-verify" in message
+    assert all("/runs/501/" not in path for path in github.paths)
+
+
+@pytest.mark.parametrize("name", READERS)
+def test_newest_invalid_success_does_not_fall_back(
+    name: str, tmp_path: Path
+) -> None:
+    """#1319 AC1: a newer success that fails binding voids older runs."""
+    github = RunsGitHub(
+        [vm_run(id=501), vm_run(id=503)],
+        {501: [vm_job()], 503: [vm_job(runner_name="other")]},
+    )
+    with pytest.raises(RuntimeError, match="runner is not"):
+        reader(name)["require"](
+            github, REPO, lease(), pull(), write_config(tmp_path), "fast"
+        )
+
+
+@pytest.mark.parametrize("name", READERS)
+def test_only_a_success_on_the_head_is_accepted(
+    name: str, tmp_path: Path
+) -> None:
+    """#1319 AC1: a lone successful run still binds."""
+    github = RunsGitHub([vm_run(id=503)], {503: [vm_job()]})
+    evidence = reader(name)["require"](
+        github, REPO, lease(), pull(), write_config(tmp_path), "fast"
+    )
+    assert evidence["executor"]["run_id"] == 503
+
+
 @pytest.mark.parametrize(
     ("github", "pull_request", "config", "message"),
     [

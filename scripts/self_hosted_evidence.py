@@ -237,7 +237,7 @@ def require(
     required_tier: str,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Return the newest VM run that binds to the leased exact head."""
+    """Return evidence from the newest VM run on the leased exact head."""
     config = csarc_config.load_config(config_path)
     if not config.get("self_hosted_runner"):
         raise unregistered()
@@ -260,29 +260,38 @@ def require(
         f"actions/workflows/csarc-verify.yml/runs?{query}",
         "workflow_runs",
     )
-    error: RuntimeError | None = None
-    for run in sorted(runs, key=lambda item: int(item.get("id") or 0))[::-1]:
-        if str(lease["head_sha"]) not in str(run.get("display_title") or ""):
-            continue
-        jobs = github.collection(
-            repo,
-            f"actions/runs/{int(run['id'])}/jobs?filter=latest&per_page=100",
-            "jobs",
+    # Issue #1319: only the newest run for this head and base counts. A
+    # newer failed, cancelled, or unfinished run voids any older success.
+    bound = [
+        run
+        for run in runs
+        if str(lease["head_sha"]) in str(run.get("display_title") or "")
+    ]
+    if not bound:
+        raise RuntimeError(
+            f"Self-hosted verification: no VM run on the exact head. {RERUN}."
         )
-        try:
-            return validate_run(
-                run,
-                jobs,
-                repo=repo,
-                lease=lease,
-                config=config,
-                required_tier=required_tier,
-                now=now,
-            )
-        except RuntimeError as rejected:
-            error = error or rejected
-    raise error or RuntimeError(
-        f"Self-hosted verification: no VM run on the exact head. {RERUN}."
+    run = max(bound, key=lambda item: int(item.get("id") or 0))
+    status, conclusion = run.get("status"), run.get("conclusion")
+    if status != "completed" or conclusion != "success":
+        raise RuntimeError(
+            f"Self-hosted verification: the newest VM run on the exact head "
+            f"(run {run.get('id')}) is {status}/{conclusion or 'none'}, so "
+            f"older runs do not count. {RERUN} to re-verify."
+        )
+    jobs = github.collection(
+        repo,
+        f"actions/runs/{int(run['id'])}/jobs?filter=latest&per_page=100",
+        "jobs",
+    )
+    return validate_run(
+        run,
+        jobs,
+        repo=repo,
+        lease=lease,
+        config=config,
+        required_tier=required_tier,
+        now=now,
     )
 
 
