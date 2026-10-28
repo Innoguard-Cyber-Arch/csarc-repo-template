@@ -54,6 +54,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/trusted-verification"
           cp scripts/*.py scripts/check-trusted-verification \
             "$RUNNER_TEMP/trusted-verification/"
+          # Issue #1325: release ownership decides which release checks
+          # run, so it is read from this trusted base, not the candidate.
+          cp .csarc/config.yml "$RUNNER_TEMP/trusted-verification/base-config.yml"
           # Issue #1086: the entry point, stage gate, router, and config
           # reader that decide the required result come from this trusted
           # base, never from the candidate checked out next.
@@ -84,9 +87,12 @@ jobs:
         id: release
         # The trusted reader must accept the candidate configuration; a value
         # or schema it does not understand fails this step instead of
-        # silently skipping the release checks below.
+        # silently skipping the release checks below. The value itself
+        # comes from the trusted base (Issue #1325).
         run: |
-          ownership="$(python3 "$RUNNER_TEMP/trusted-verification/csarc_config.py" release_ownership)"
+          python3 "$RUNNER_TEMP/trusted-verification/csarc_config.py" release_ownership >/dev/null
+          ownership="$(python3 "$RUNNER_TEMP/trusted-verification/csarc_config.py" \
+            --config "$RUNNER_TEMP/trusted-verification/base-config.yml" release_ownership)"
           echo "ownership=$ownership" >> "$GITHUB_OUTPUT"
       - name: Validate synchronization structure before verification
         id: sync

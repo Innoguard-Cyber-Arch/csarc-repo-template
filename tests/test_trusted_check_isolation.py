@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -140,3 +141,147 @@ def test_trusted_tools_ignore_the_candidate_uv_settings() -> None:
     assert all("--no-config" in line for line in isolated)
     assert text.count('python -P -c "$wheel_import_check"') == 2
     assert "platform_python=(python3 -I)" in text
+
+
+def workflow_step(workflow: Path, name: str) -> str:
+    """Return the `run` script of the step named exactly so."""
+    document = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+    scripts = [
+        item["run"]
+        for job in document["jobs"].values()
+        for item in job.get("steps", [])
+        if item.get("name") == name
+    ]
+    assert len(scripts) == 1, (workflow, name)
+    return scripts[0]
+
+
+def run_bash(
+    script: str, cwd: Path, env: dict[str, str]
+) -> subprocess.CompletedProcess:
+    """Run one workflow step the way GitHub Actions runs `bash`."""
+    return subprocess.run(  # noqa: S603
+        ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", script],  # noqa: S607
+        cwd=cwd,
+        env={**os.environ, **env},
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_hosted_release_ownership_comes_from_the_trusted_base(
+    tmp_path: Path, render: Path
+) -> None:
+    """A candidate cannot skip the release checks by changing ownership."""
+    base = tmp_path / "base"
+    shutil.copytree(render, base)
+    candidate = tmp_path / "candidate"
+    shutil.copytree(render, candidate)
+    config = candidate / ".csarc/config.yml"
+    text = config.read_text(encoding="utf-8")
+    owned = re.search(r"^release_ownership: (\S+)$", text, re.M)
+    assert owned is not None
+    other = (
+        "verification-only"
+        if owned[1] != "verification-only"
+        else "csarc-owned"
+    )
+    config.write_text(
+        text.replace(owned[0], f"release_ownership: {other}"), "utf-8"
+    )
+    runner = tmp_path / "runner"
+    runner.mkdir()
+    output = tmp_path / "output"
+    common = {"RUNNER_TEMP": str(runner), "GITHUB_OUTPUT": str(output)}
+    workflow = base / ".github/workflows/ci.yml"
+    preserved = run_bash(
+        workflow_step(workflow, "Preserve the trusted verification policy"),
+        base,
+        {**common, "GITHUB_WORKSPACE": str(base), "GUIDED_RELEASE": "false"},
+    )
+    assert preserved.returncode == 0, preserved.stderr
+    output.write_text("", encoding="utf-8")
+    read = run_bash(
+        workflow_step(workflow, "Read release ownership"),
+        candidate,
+        {**common, "GITHUB_WORKSPACE": str(candidate)},
+    )
+    assert read.returncode == 0, read.stderr
+    assert output.read_text(encoding="utf-8") == f"ownership={owned[1]}\n"
+
+
+def test_root_ci_reads_release_ownership_from_the_base() -> None:
+    """The root workflow stages and reads the same base settings."""
+    workflow = ROOT / ".github/workflows/ci.yml"
+    preserve = workflow_step(
+        workflow, "Preserve the trusted verification policy"
+    )
+    read = workflow_step(workflow, "Read release ownership")
+    staged = "$RUNNER_TEMP/trusted-verification/base-config.yml"
+    assert f'cp .csarc/config.yml "{staged}"' in preserve
+    assert f'--config "{staged}" release_ownership' in read
+
+
+def test_lower_bound_tests_ignore_a_candidate_pytest(tmp_path: Path) -> None:
+    """A candidate pytest.py never replaces the runner under -P."""
+    (tmp_path / "pytest.py").write_text(
+        "raise SystemExit('ERROR: candidate pytest ran')\n", encoding="utf-8"
+    )
+    plain = subprocess.run(
+        [sys.executable, "-m", "pytest", "--version"],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert "candidate pytest ran" in plain.stderr
+    isolated = subprocess.run(
+        [sys.executable, "-P", "-m", "pytest", "--version"],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert isolated.returncode == 0, isolated.stderr
+    text = (TEMPLATE_SCRIPTS / "verify.jinja").read_text(encoding="utf-8")
+    assert text.count('/.venv/bin/python" -P -m pytest') == 2
+    assert '/.venv/bin/python" -m pytest' not in text
+
+
+@pytest.mark.parametrize(("version_ok", "status"), [(True, 0), (False, 2)])
+def test_entry_points_require_a_recent_python(
+    tmp_path: Path, version_ok: bool, status: int
+) -> None:
+    """An old python3 stops verification with a clear error."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake = bin_dir / "python3"
+    fake.write_text(f"#!/bin/sh\nexit {0 if version_ok else 1}\n", "utf-8")
+    fake.chmod(0o755)
+    step_file = TEMPLATE_SCRIPTS / "verification-step"
+    result = subprocess.run(  # noqa: S603
+        ["bash", "-c", f'source "{step_file}"; verification_require_python'],  # noqa: S607
+        env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"},
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == status
+    assert ("ERROR: Python is too old" in result.stderr) is (not version_ok)
+    for name in ("verify-fast.jinja", "verify.jinja"):
+        entry = (TEMPLATE_SCRIPTS / name).read_text(encoding="utf-8")
+        assert "\nverification_require_python\n" in entry, name
+
+
+@pytest.mark.parametrize(
+    "script",
+    ["scripts/pr_lifecycle.py", "template/.csarc/scripts/pr_lifecycle.py"],
+)
+def test_lifecycle_route_reads_base_settings_from_the_base_commit(
+    script: str,
+) -> None:
+    """The route never compares the candidate's settings with themselves."""
+    text = (ROOT / script).read_text(encoding="utf-8")
+    assert 'f"{base_sha}:.csarc/config.yml"' in text
+    assert 'base_config = repository_root() / ".csarc/config.yml"' not in text

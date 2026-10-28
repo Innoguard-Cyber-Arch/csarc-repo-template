@@ -5,6 +5,7 @@ set -euo pipefail
 # repo_root is the tree under verification (see verify-fast).
 control_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$control_root/.csarc/scripts/verification-step"
+verification_require_python
 repo_root="$(verification_subject_root "$control_root")"
 unset CSARC_VERIFICATION_SUBJECT_ROOT
 cache_root="$("$control_root/.csarc/scripts/resolve-cache-root")"
@@ -493,7 +494,7 @@ if $verify_python; then
   rm -f .coverage .coverage.* coverage.xml
 {% if coverage_mode == "global" %}
   if ! verification_step "Test Python dependency lower bounds" \
-    "$lower_bounds_root/.venv/bin/python" -m pytest \
+    "$lower_bounds_root/.venv/bin/python" -P -m pytest \
     --cov \
     --cov-report=term-missing \
     --cov-fail-under={{ coverage_threshold }}; then
@@ -502,7 +503,7 @@ if $verify_python; then
   fi
 {% else %}
   if ! verification_step "Test Python dependency lower bounds" \
-    "$lower_bounds_root/.venv/bin/python" -m pytest \
+    "$lower_bounds_root/.venv/bin/python" -P -m pytest \
     --cov \
     --cov-report=term-missing \
     --cov-report=xml; then

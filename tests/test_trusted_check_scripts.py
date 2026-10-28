@@ -340,7 +340,7 @@ def test_negative_control_fallback_lets_the_candidate_pass(
 
 
 SHADOW = "ERROR: shadowed standard library"
-SHADOWED = ("json", "runpy", "tomllib")
+SHADOWED = ("json", "pytest", "runpy", "tomllib")
 
 
 def shadow_modules(as_package: bool) -> Callable[[Path], None]:

@@ -12,6 +12,7 @@ set -euo pipefail
 # the exact candidate.
 control_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$control_root/.csarc/scripts/verification-step"
+verification_require_python
 repo_root="$(verification_subject_root "$control_root")"
 # Pass the subject only to control-set children, never to nested fixtures.
 unset CSARC_VERIFICATION_SUBJECT_ROOT
