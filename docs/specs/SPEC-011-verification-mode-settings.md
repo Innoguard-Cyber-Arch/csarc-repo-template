@@ -92,7 +92,7 @@ Labels 必須恰好是表中的三個值。VM 註冊 runner 時使用 `--no-defa
 - 之後 checkout 目標分支（`github.sha`）並以 trusted executor（#1086）準備 entry point，再 checkout exact candidate。tier 是 trusted router 的 path tier 與 channel floor 中較強者；scopes 來自同一個 router。
 - execution step 名稱是 `Execute self-hosted verification head=<head> tree=<tree> tier=<tier> scopes=<scopes> mode=self-hosted environment=<環境> window=<window_end>`，由 trusted-base 的 `verify` 或 `verify-fast` 對 candidate tree 執行。
 
-**合併時的證據綁定。**`pr_lifecycle.py merge` 以操作者的登入，在 `csarc-verify.yml` 的 runs 中依 `event=workflow_dispatch`、目標分支與 lease 的 base SHA 查詢，取 run 名稱含 exact head 的最新一筆，並要求全部成立：
+**合併時的證據綁定。**`pr_lifecycle.py merge` 以操作者的登入，在 `csarc-verify.yml` 的 runs 中依 `event=workflow_dispatch`、目標分支與 lease 的 base SHA 查詢，取 run 名稱含 exact head 的最新一筆。只有這一筆算數：它失敗、被取消或尚未完成時，較舊的成功 run 也不採用，合併被拒絕並要求重新派工驗證（#1319）。這一筆必須全部成立：
 
 1. run：`event` 是 `workflow_dispatch`、`path` 是 `.github/workflows/csarc-verify.yml`、`head_branch` 是目標分支、`head_sha` 等於 lease 的 trusted base SHA、`repository` 與 `head_repository` 都是本 repository、結論是 `success`。
 2. job：只有一個 job，結論是 `success`；labels、`runner_name` 與 runner group 等於上表；第一個 step 與 execution step 都成功，而且第一個 step 在前。
