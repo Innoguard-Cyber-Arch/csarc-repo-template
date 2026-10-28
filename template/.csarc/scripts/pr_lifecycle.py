@@ -3272,7 +3272,21 @@ def merge_snapshot(  # noqa: C901
         if self_hosted
         else ""
     )
-    if self_hosted and not exit_reason and not quota_run_urls:
+    # Q12 (#1317): the first registration of an unregistered self-hosted
+    # base cannot have VM evidence yet; it merges on local evidence.
+    registration_reason = (
+        self_hosted_evidence.registration_reason(
+            subject_repository_root(), config_path, lease
+        )
+        if self_hosted and not exit_reason
+        else ""
+    )
+    if (
+        self_hosted
+        and not exit_reason
+        and not registration_reason
+        and not quota_run_urls
+    ):
         vm_evidence = self_hosted_evidence.require(
             github, repo, lease, pull, config_path, required_tier
         )
@@ -3347,6 +3361,7 @@ def merge_snapshot(  # noqa: C901
         "hosted_verification": hosted_evidence or None,
         "self_hosted_verification": vm_evidence,
         "self_hosted_exit": exit_reason,
+        "self_hosted_registration": registration_reason,
         "trailer_route": trailer_route(
             str(lease["base_ref"]),
             head_ref,
@@ -4001,8 +4016,13 @@ def trace_lines(
             f"scopes={','.join(local_evidence['scopes'])} {suffix} "
             "trust=self-attested-local; this is not trusted hosted evidence"
         )
-    if snapshot.get("self_hosted_verification") or snapshot.get(
-        "self_hosted_exit"
+    if any(
+        snapshot.get(key)
+        for key in (
+            "self_hosted_verification",
+            "self_hosted_exit",
+            "self_hosted_registration",
+        )
     ):
         lines += self_hosted_evidence.trace_lines(snapshot, suffix)
     return lines

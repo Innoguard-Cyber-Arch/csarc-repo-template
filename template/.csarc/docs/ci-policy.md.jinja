@@ -102,7 +102,7 @@ GitHub UI 合併與 `gh pr merge --admin` 不是合法 route，沒有 trailer；
 
 實作中只跑 focused checks；`./.csarc/scripts/verify-fast` 是可選診斷，不因 trusted plan 選到 full 就在本機重跑。`./.csarc/scripts/check-trusted-verification <head-sha> --github-repo <owner/repo>` 讀回 hosted 證據。Workflow YAML 只負責事件、權限與呼叫；所有第三方 Actions 固定在完整 commit SHA。
 {%- elif verification_mode == 'self-hosted' -%}
-本專案使用 `self-hosted`，治理與 `local` 相同：不產生 hosted workflow，required-checks Ruleset 保持停用。合併證據來自登記的 VM：操作者在 PR 的目標分支以 `workflow_dispatch` 觸發唯讀的 `csarc-verify.yml`，`pr_lifecycle.py merge` 讀回 GitHub 記錄的執行，綁定 exact head／tree、runner、環境與 24 小時期限，合併後留下 `self-hosted-registered` trace。本機 `./.csarc/scripts/verify-fast` 只是自我證明，只有離開 self-hosted 的 governance-switch PR 能以它合併。
+本專案使用 `self-hosted`，治理與 `local` 相同：不產生 hosted workflow，required-checks Ruleset 保持停用。合併證據來自登記的 VM：操作者在 PR 的目標分支以 `workflow_dispatch` 觸發唯讀的 `csarc-verify.yml`，`pr_lifecycle.py merge` 讀回 GitHub 記錄的執行，綁定 exact head／tree、runner、環境與 24 小時期限，合併後留下 `self-hosted-registered` trace。本機 `./.csarc/scripts/verify-fast` 只是自我證明，只有離開 self-hosted 與第一次登記的 governance-switch PR 能以它合併。
 {%- else -%}
 本專案使用 `local`，因此不產生 `ci.yml`、`pr-policy.yml`、`pr-review.yml`、reviewer assignment 或 Dependabot 自動合併 workflow，required-checks Ruleset 保持停用。候選 commit 乾淨後執行一次 `./.csarc/scripts/verify-fast`；成功時把 head／tree、base、tier、scopes、command 與結果寫進 Git metadata，24 小時內有效。尚未 commit 或仍有未提交修改時，測試照常回報，但不產生可合併的證據。`pr_lifecycle.py merge` 在合併前重讀 GitHub metadata、review、lease 與這份證據，從 trusted base 執行 PR policy，合併讀回後留下 `self-attested-local` trace。
 
@@ -114,10 +114,10 @@ GitHub UI 合併與 `gh pr merge --admin` 不是合法 route，沒有 trailer；
 
 ### Self-hosted 登記與使用
 
-登記完成前 PR 都不能合併。登記一次：
+登記完成前，只有登記 PR 能合併。登記一次：
 
 1. 在本 repository 與 csarc-devops 各開一張 Issue，互相連結完整 URL，雙方各自核准（人工流程）。csarc-devops 的 Issue 列出 VM、環境（`dev`、`uat`）與觸發者允許清單，也就是可以觸發 `csarc-verify.yml` 的 GitHub 帳號；清單存在 VM 端，清單外的帳號觸發的 job 不會在 VM 上執行。
-2. csarc-devops 更新允許清單後，在 governance-switch PR 執行 `csarc update --data 'self_hosted_runner={id: <vm-id>, registration: <csarc-devops Issue URL>}'`。lifecycle 只檢查 URL 格式，不讀取 csarc-devops。
+2. csarc-devops 更新允許清單後，在 governance-switch PR 執行 `csarc update --data 'self_hosted_runner={id: <vm-id>, registration: <csarc-devops Issue URL>}'`。lifecycle 只檢查 URL 格式，不讀取 csarc-devops。這張 PR 還拿不到 VM 證據：只改 `self_hosted_runner`（與 `self_hosted_environments`）、`.csarc/provenance.json` 與逐字符合 render 結果的 `csarc-verify.yml` 時，以本機 `./.csarc/scripts/verify-fast` 的證據經 `pr_lifecycle.py merge` 合併，trace 記為 `self-hosted-registration-trace`；同時改了其他檔案或升級模板就會被擋，請在登記後另開 PR。
 3. 管理員把 repository 的 Actions log 保存期限設為 7 天：repository 公開後，過去的 log 也會公開。
 
 每次使用時，所有指令都先印出唯讀盤點，加 `--apply` 才動作：

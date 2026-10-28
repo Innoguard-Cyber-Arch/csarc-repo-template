@@ -13986,7 +13986,12 @@ def parser() -> argparse.ArgumentParser:
             choices=setup_plan.WORK_MODES,
             help=(
                 "work mode to expand into saved settings (default "
-                f"{setup_plan.DEFAULT_WORK_MODE}); explicit --data wins"
+                + (
+                    setup_plan.DEFAULT_ADOPT_WORK_MODE
+                    if name == "adopt"
+                    else setup_plan.DEFAULT_WORK_MODE
+                )
+                + "); explicit --data wins"
             ),
         )
         subparser.add_argument(

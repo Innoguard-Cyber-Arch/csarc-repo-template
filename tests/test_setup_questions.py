@@ -264,6 +264,40 @@ def test_adopt_asks_three_questions_when_detection_is_certain() -> None:
     }
 
 
+@pytest.mark.parametrize("interactive", [True, False])
+def test_adopt_never_defaults_an_existing_repository_to_self_hosted(
+    interactive: bool,
+) -> None:
+    """#1317 AC4: adopt keeps the pre-#1272 solo-local default (ADR Q12)."""
+    session = tty("", "", "") if interactive else script()
+    result = setup_plan.plan_adopt(
+        session,
+        {},
+        None,
+        adopt_detections(),
+        release_ownership="product-owned",
+        dockerfile=False,
+    )
+
+    assert result.work_mode == "solo-local"
+    assert result.values["verification_mode_private"] == "local"
+    assert result.values["verification_mode_public"] == "local"
+    if interactive:
+        assert session.transcript[-2].endswith("custom) [solo-local]: "), (
+            session.transcript[-2]
+        )
+    # An explicit choice still selects self-hosted.
+    chosen = setup_plan.plan_adopt(
+        script(),
+        {},
+        "solo-self-hosted",
+        adopt_detections(),
+        release_ownership="product-owned",
+        dockerfile=False,
+    )
+    assert chosen.values["verification_mode_private"] == "self-hosted"
+
+
 def test_adopt_uncertain_detection_dockerfile_and_policy_add_questions() -> (
     None
 ):
