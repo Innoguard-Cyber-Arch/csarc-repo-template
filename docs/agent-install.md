@@ -65,10 +65,12 @@ attestation verification.
    user answer the CLI directly. As an agent, ask the user only for the
    inputs a `--non-interactive` dry-run reports as missing (its one-line
    `csarc:` error names every `--data KEY=`), plus the work mode: offer
-   `solo-self-hosted` (default), `solo-local`, `solo-hosted`, `team`, or
+   `solo-self-hosted` (default for `init`), `solo-local` (default for
+   `adopt`), `solo-hosted`, `team`, or
    `custom` and pass it as `--preset`; it only expands into overridable saved
-   settings. With `solo-self-hosted`, tell the user that pull requests cannot
-   merge until csarc-devops registers the repository, and relay the
+   settings. With `solo-self-hosted`, tell the user that only the
+   registration pull request can merge until csarc-devops registers the
+   repository, and relay the
    `W22-self-hosted-unregistered` steps. Pass every
    confirmed override through the repeatable `--data KEY=VALUE` option; do
    not read `copier.yml` as a question schema or create another

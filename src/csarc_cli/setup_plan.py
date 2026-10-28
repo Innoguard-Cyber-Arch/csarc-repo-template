@@ -21,6 +21,10 @@ from dataclasses import dataclass, field
 
 WORK_MODES = ("solo-self-hosted", "solo-local", "solo-hosted", "team", "custom")
 DEFAULT_WORK_MODE = "solo-self-hosted"
+# ADR self-hosted-verification D2/Q12 (#1317): adopt brings an existing
+# repository under CSARC, and existing projects never switch to self-hosted
+# automatically, so adopt keeps the pre-#1272 default.
+DEFAULT_ADOPT_WORK_MODE = "solo-local"
 MODE_KEYS = ("verification_mode_private", "verification_mode_public")
 GOVERNANCE_KEYS = (*MODE_KEYS, "admin_bypass", "copilot_review")
 SOLO_AUTOMATION: dict[str, object] = {"lifecycle": [], "scheduled_checks": []}
@@ -395,6 +399,7 @@ def plan_work_mode(
     result: SetupResult,
     explicit: Mapping[str, str],
     requested: str | None,
+    default: str = DEFAULT_WORK_MODE,
 ) -> None:
     """Expand one work-mode preset; explicit --data always overrides it."""
     check_work_mode(requested)
@@ -403,7 +408,7 @@ def plan_work_mode(
             key="work_mode",
             prompt="Work mode",
             choices=WORK_MODES,
-            default=DEFAULT_WORK_MODE,
+            default=default,
             kind="choice",
         )
         answered = len(session.asked)
@@ -572,7 +577,7 @@ def plan_adopt(  # noqa: C901
 ) -> SetupResult:
     """Confirm detections, then ask governance, work mode, and gaps."""
     check_work_mode(requested_mode)
-    result = SetupResult(mode="adopt", work_mode=DEFAULT_WORK_MODE)
+    result = SetupResult(mode="adopt", work_mode=DEFAULT_ADOPT_WORK_MODE)
     shown = [
         item
         for item in detections
@@ -645,7 +650,13 @@ def plan_adopt(  # noqa: C901
             "managed",
         ),
     )
-    plan_work_mode(session, result, explicit, requested_mode)
+    plan_work_mode(
+        session,
+        result,
+        explicit,
+        requested_mode,
+        default=DEFAULT_ADOPT_WORK_MODE,
+    )
     if dockerfile:
         _resolve(
             session,

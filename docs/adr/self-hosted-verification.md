@@ -4,7 +4,7 @@
 - **日期：**2026-10-25
 - **來源 Issues：**[#1266](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1266)、[#1265](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1265)（Milestone 21 tracker，擁有者 2026-10-24、2026-10-25 決定）；部分取代 [#908](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/908) 的新專案預設
 - **實作 PR：**[#1273](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/1273)
-- **修訂：**[#1281](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1281)（2026-10-26，`container` 模組與 VM 上的 Docker：限制 12、D8 第 7 點、C11）。這次修訂需要擁有者核准，以 #1281 PR 的合併授權作為核准。[#1272](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1272)（2026-10-26，D9 事後偵測的條件；擁有者 2026-10-26 核准）。[#1300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1300)（2026-10-27，實機開窗確認 C1 ready 時序與 C2 exact labels）。
+- **修訂：**[#1281](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1281)（2026-10-26，`container` 模組與 VM 上的 Docker：限制 12、D8 第 7 點、C11）。這次修訂需要擁有者核准，以 #1281 PR 的合併授權作為核准。[#1272](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1272)（2026-10-26，D9 事後偵測的條件；擁有者 2026-10-26 核准）。[#1300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1300)（2026-10-27，實機開窗確認 C1 ready 時序與 C2 exact labels）。[#1317](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1317)（2026-10-28，第一次登記的出口與 adopt 的預設：D2、Q12）。擁有者 2026-10-28 同意開立 #1317；新專案預設 `self-hosted` 不變，這次修訂以 #1317 PR 的合併授權作為核准。
 
 ## 問題與限制
 
@@ -75,7 +75,9 @@
 - **新專案預設改變，部分取代 #908。**#908 的「新專案預設 `local`」由本 ADR 取代：新專案 private 預設 `self-hosted`、public 預設 `hosted`。#908 的其餘內容保留：`local` 模式的行為，以及既有專案沒有欄位時維持 `hosted`。`docs/ci-policy.md` 的 #908 一節由 #1272 更新。
 - **Migration：**既有 `verification_mode: <值>` 依原值同時寫入兩個新設定，行為不變。依 #1069 決定 8，trusted base 的 reader 先支援新 schema，writer 才切換；migration 在外部 pinned CLI 執行。
 - **既有專案改用：**絕不自動切換。`csarc update` 報告在 private repo 建議改用並列出登記步驟；登記（D7）後，以 governance-switch PR 修改 `verification_mode_private`。
-- **登記完成前 fail closed：**新專案預設 `self-hosted` 但還沒登記時，lifecycle 找不到可用的 VM 證據，合併被擋，訊息說明「尚未登記」並列出登記步驟；`csarc init` 建立專案時就印出同一份指引。不改用 hosted 或 local（離開 self-hosted 的出口見 D10、Q1）。
+- **登記完成前 fail closed：**新專案預設 `self-hosted` 但還沒登記時，lifecycle 找不到可用的 VM 證據，合併被擋，訊息說明「尚未登記」並列出登記步驟；`csarc init` 建立專案時就印出同一份指引。不改用 hosted 或 local；例外只有兩個出口：離開 self-hosted（D10、Q1）與第一次登記（Q12）。
+- **第一次登記（Q12，#1317）：**還沒登記的 repo 拿不到 VM 證據，所以填入 `self_hosted_runner` 的登記 PR 本身也會被擋。trusted base 是 `self-hosted` 而且 `self_hosted_runner` 為空、candidate 仍是 `self-hosted` 並填入 runner、兩邊設定只有 `self_hosted_runner` 與 `self_hosted_environments` 不同、變更路徑都在 `.csarc/`、`.github/` 或 `AGENTS.md` 下時，這張 governance-switch PR 接受 `local` 的本機證明，merge trace 記為 `self-attested-local`，另寫一行 `self-hosted-registration-trace` 列出 VM ID 與 csarc-devops Issue URL。base 已登記、改了其他設定或產品程式碼的 PR 仍要求 VM 證據。理由：擁有者決定新專案預設 `self-hosted`（2026-10-25），改回 `local` 會推翻這個決定；登記 PR 只改設定與 render，與 Q1 的出口風險相同，而且 VM 是否接受這個 repo 仍由允許清單強制（D7、Q5），這條路線不讓任何程式碼在 VM 上執行。
+- **`csarc adopt` 不預設 `self-hosted`（Q12，#1317）：**adopt 導入的是已有產品內容的既有 repository，依「既有專案絕不自動切換」，預設工作模式維持 #1272 之前的 `solo-local`；需要 self-hosted 時明確選 `solo-self-hosted`。`csarc init` 的新專案預設不變。
 
 ### D3. 驗證 workflow 與派工
 
@@ -306,6 +308,7 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 | Q9 | 後續 Issue 的完成條件 | 授權依本 ADR 改寫 #1264、#1268、#1269、#1270、#1271、#1272 |
 | Q10 | #1264 的範圍 | **改變：**只屬於模板 repository，不下發到 `template/`；lifecycle 規則與模式無關；下游 fixture 不需為它保留空間 |
 | Q11 | 信任邊界 | **改變：縮小。**登記加入觸發者允許清單，存在 VM 端，修改走雙邊 Issue；L4 hook 拒絕 `actor` 或 `triggering_actor` 不在清單上的 job，清單外的寫入者不能在 VM 上執行程式碼。仍保留誠實的限制：Free private 沒有 Ruleset，寫入者可以不經 lifecycle 直接合併，由 merge trace 稽核發現 `untraced` 合併 |
+| Q12 | 新專案預設 `self-hosted` 而尚未登記時，登記 PR 本身取不到 VM 證據；adopt 也預設 `self-hosted`（#1317，2026-10-28） | 新專案預設不變；只為「未登記的 self-hosted base 只填入 `self_hosted_runner`（與環境）及其 render」的 PR 接受 `local` 本機證明，trace 另記 `self-hosted-registration-trace`；adopt 預設維持 `solo-local`（D2） |
 | — | D8 隔離 | 每個 job 一個新容器、固定版本的工具鏈 image、依（repo, 環境）分開的快取 volume；容器不掛 docker socket、不用 privileged 與 host network、不能存取 metadata endpoint；採用每個 job 丟棄 |
 
 ## 給 csarc-devops 的事項（需另開對方 Issue，雙方連結）
@@ -348,6 +351,8 @@ csarc-devops 端維護允許清單，每筆至少記錄：repo 全名、VM `id`�
 | 每次開窗也要雙邊核准 | 不採用；取得 token 本身就是授權動作 |
 | 窗口次數或總時數上限 | 不採用；擁有者決定只用固定 24 小時 |
 | 既有專案更新時自動改用 self-hosted | 不採用；切換一律經 governance-switch PR |
+| 新專案改回預設 `local`，登記時再切換（#1317） | 不採用；推翻擁有者 2026-10-25 的預設決定，改以 Q12 的登記出口解決 |
+| 登記 PR 以人工合併（`untraced`）或先切到 `local` 再切回 | 不採用；前者沒有 trace，後者多兩張 PR 而且中間的 `local` 期間降低信任 |
 
 ## 重新評估條件
 

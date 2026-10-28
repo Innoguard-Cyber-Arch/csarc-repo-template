@@ -13,6 +13,7 @@ import io
 import json
 import re
 import runpy
+import subprocess
 import tempfile
 import urllib.request
 from collections.abc import Callable
@@ -800,12 +801,106 @@ def test_no_exit_when_the_base_is_not_self_hosted(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# #1317 (ADR Q12): the first registration of an unregistered base.
+# ---------------------------------------------------------------------------
+
+UNREGISTERED = "self_hosted_runner: {}\n"
+UAT_ONLY = CONFIG.replace("- dev\n- uat\n", "- uat\n")
+
+
+@pytest.mark.parametrize("name", READERS)
+@pytest.mark.parametrize(
+    ("case", "base", "candidate", "changed", "qualifies"),
+    [
+        ("registers", CONFIG + UNREGISTERED, CONFIG + REGISTERED, RENDER, True),
+        (
+            "registers fewer environments",
+            CONFIG + UNREGISTERED,
+            UAT_ONLY + REGISTERED,
+            RENDER,
+            True,
+        ),
+        (
+            "base already registered",
+            CONFIG + REGISTERED,
+            CONFIG + REGISTERED.replace("vm-01", "vm-02"),
+            RENDER,
+            False,
+        ),
+        (
+            "stays unregistered",
+            CONFIG + UNREGISTERED,
+            UAT_ONLY + UNREGISTERED,
+            RENDER,
+            False,
+        ),
+        ("also leaves self-hosted", CONFIG + UNREGISTERED, LEFT, RENDER, False),
+        (
+            "changes another setting",
+            CONFIG + UNREGISTERED,
+            CONFIG.replace("public: hosted", "public: local") + REGISTERED,
+            RENDER,
+            False,
+        ),
+        (
+            "changes product code",
+            CONFIG + UNREGISTERED,
+            CONFIG + REGISTERED,
+            RENDER + "src/app.py\n",
+            False,
+        ),
+        ("base is local", LEFT, CONFIG + REGISTERED, RENDER, False),
+    ],
+)
+def test_only_a_first_registration_merges_on_local_evidence(
+    name: str,
+    case: str,
+    base: str,
+    candidate: str,
+    changed: str,
+    qualifies: bool,
+    tmp_path: Path,
+) -> None:
+    """#1317 AC1 (Q12): only filling an empty runner qualifies."""
+    reason = reader(name)["registration_reason"](
+        tmp_path,
+        write_config(tmp_path, base),
+        lease(),
+        exit_git(candidate, changed),
+    )
+    assert bool(reason) is qualifies, case
+    if qualifies:
+        assert reason == (
+            "the pull request only registers self_hosted_runner vm-01 "
+            f"({REGISTRATION}) on an unregistered self-hosted base (ADR Q12)"
+        )
+
+
+@pytest.mark.parametrize("name", READERS)
+def test_registration_fails_closed_on_an_unreadable_candidate(
+    name: str, tmp_path: Path
+) -> None:
+    """#1317 AC1: a candidate the base cannot read never qualifies."""
+
+    def broken(args: list[str]) -> str:
+        raise subprocess.CalledProcessError(128, args)
+
+    base = write_config(tmp_path, CONFIG + UNREGISTERED)
+    assert (
+        reader(name)["registration_reason"](tmp_path, base, lease(), broken)
+        == ""
+    )
+
+
+# ---------------------------------------------------------------------------
 # AC3: merge snapshot, evidence trust, and trace through the lifecycle.
 # ---------------------------------------------------------------------------
 
 
 def use_self_hosted_mode(
-    monkeypatch: pytest.MonkeyPatch, exit_reason: str = ""
+    monkeypatch: pytest.MonkeyPatch,
+    exit_reason: str = "",
+    registration_reason: str = "",
 ) -> dict[str, Any]:
     """Select self-hosted with local governance and stubbed VM evidence."""
     use_local_mode(monkeypatch)
@@ -835,6 +930,9 @@ def use_self_hosted_mode(
     )
     sibling = MODULE["self_hosted_evidence"]
     monkeypatch.setattr(sibling, "exit_reason", lambda *_: exit_reason)
+    monkeypatch.setattr(
+        sibling, "registration_reason", lambda *_: registration_reason
+    )
     monkeypatch.setattr(sibling, "require", lambda *_: evidence)
     return evidence
 
@@ -882,6 +980,63 @@ def test_self_hosted_exit_merges_on_local_evidence_with_its_reason(
         "self-hosted-exit-trace: pr=42 trust=self-attested-local because it "
         "only leaves self-hosted (ADR Q1)"
     ) in lines
+
+
+def use_unregistered_base(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, changed: str
+) -> dict[str, Any]:
+    """Run the real Q1 and Q12 checks against an unregistered base."""
+    bind_remote_lease(monkeypatch)
+    use_self_hosted_mode(monkeypatch)
+    sibling = MODULE["self_hosted_evidence"]
+    base = write_config(tmp_path, CONFIG + UNREGISTERED)
+    stub = exit_git(CONFIG + REGISTERED, changed)
+    real = reader("root")
+    for function in ("exit_reason", "registration_reason"):
+        monkeypatch.setattr(
+            sibling,
+            function,
+            lambda subject, _config, held, f=function: real[f](
+                subject, base, held, stub
+            ),
+        )
+
+    def no_vm(*_args: object) -> None:
+        raise real["unregistered"]()
+
+    monkeypatch.setattr(sibling, "require", no_vm)
+    return real
+
+
+def test_unregistered_base_merges_its_registration_pull_request(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#1317 AC2: lifecycle merges the registration PR on local evidence."""
+    use_unregistered_base(monkeypatch, tmp_path, RENDER)
+    snapshot = merge_snapshot(
+        SingleWriterGitHub(), lease_fixture(), AUTHORIZATION_URL
+    )
+    assert snapshot["self_hosted_verification"] is None
+    assert snapshot["self_hosted_exit"] == ""
+    assert snapshot["required_check_evidence"] == "local-self-attested"
+    _payload, trust = MODULE["merge_evidence"](snapshot, lease_fixture())
+    assert trust == "self-attested-local"
+    lines = MODULE["trace_lines"](snapshot, lease_fixture(), "pr=42")
+    assert (
+        "self-hosted-registration-trace: pr=42 trust=self-attested-local "
+        "because the pull request only registers self_hosted_runner vm-01 "
+        f"({REGISTRATION}) on an unregistered self-hosted base (ADR Q12)"
+    ) in lines
+    assert not any(line.startswith("self-hosted-exit-trace") for line in lines)
+
+
+def test_unregistered_base_still_fails_closed_for_other_changes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#1317 AC1/R1: any other PR on an unregistered base stays blocked."""
+    use_unregistered_base(monkeypatch, tmp_path, RENDER + "src/app.py\n")
+    with pytest.raises(RuntimeError, match="no registered VM evidence"):
+        merge_snapshot(SingleWriterGitHub(), lease_fixture(), AUTHORIZATION_URL)
 
 
 @pytest.mark.parametrize("name", ["root", "template"])

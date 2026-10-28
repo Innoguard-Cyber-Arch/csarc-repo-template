@@ -281,18 +281,17 @@ def require(
     )
 
 
-def exit_reason(
+def settings_change(
     subject: Path,
     base_config: Path,
     lease: dict[str, Any],
     git: Callable[[list[str]], str] | None = None,
-) -> str:
-    """Return why a pull request may leave self-hosted on local evidence.
+) -> tuple[dict[str, object], dict[str, object], set[str]] | None:
+    """Return the base and candidate settings and whether only they changed.
 
-    ADR D10/Q1: only a pull request that switches verification_mode_private
-    away from self-hosted, and changes nothing but that setting, its
-    registration, and the files a new render replaces, qualifies. Anything
-    else returns '' and keeps requiring VM evidence.
+    The third value names the settings that differ. None means the pull
+    request also changed a path outside the settings and their render, or
+    the settings could not be read; neither local-evidence route applies.
     """
     show = git or (
         lambda args: (
@@ -316,18 +315,39 @@ def exit_reason(
         head, base_sha = lease["head_sha"], lease["base_sha"]
         changed = show(["diff", "--name-only", f"{base_sha}...{head}"])
     except (OSError, ValueError, subprocess.CalledProcessError):
-        return ""
-    after = candidate.get("verification_mode_private")
+        return None
+    if not all(path.startswith(EXIT_PATHS) for path in changed.splitlines()):
+        return None
     differing = {
         key
         for key in {*base, *candidate}
         if base.get(key) != candidate.get(key)
     }
+    return base, candidate, differing
+
+
+def exit_reason(
+    subject: Path,
+    base_config: Path,
+    lease: dict[str, Any],
+    git: Callable[[list[str]], str] | None = None,
+) -> str:
+    """Return why a pull request may leave self-hosted on local evidence.
+
+    ADR D10/Q1: only a pull request that switches verification_mode_private
+    away from self-hosted, and changes nothing but that setting, its
+    registration, and the files a new render replaces, qualifies. Anything
+    else returns '' and keeps requiring VM evidence.
+    """
+    change = settings_change(subject, base_config, lease, git)
+    if change is None:
+        return ""
+    base, candidate, differing = change
+    after = candidate.get("verification_mode_private")
     if (
         base.get("verification_mode_private") != "self-hosted"
         or after == "self-hosted"
         or not differing <= EXIT_KEYS
-        or not all(path.startswith(EXIT_PATHS) for path in changed.splitlines())
     ):
         return ""
     return (
@@ -336,8 +356,44 @@ def exit_reason(
     )
 
 
+def registration_reason(
+    subject: Path,
+    base_config: Path,
+    lease: dict[str, Any],
+    git: Callable[[list[str]], str] | None = None,
+) -> str:
+    """Return why a first registration may merge on local evidence.
+
+    ADR D2/Q12 (#1317): a new project starts self-hosted with an empty
+    self_hosted_runner, so no VM evidence can exist yet. Only the pull
+    request that keeps self-hosted, fills the empty runner, and changes
+    nothing but the self-hosted settings and the files their render
+    replaces qualifies. Anything else returns '' and stays fail closed.
+    """
+    change = settings_change(subject, base_config, lease, git)
+    if change is None:
+        return ""
+    base, candidate, differing = change
+    runner = candidate.get("self_hosted_runner")
+    if (
+        base.get("verification_mode_private") != "self-hosted"
+        or candidate.get("verification_mode_private") != "self-hosted"
+        or base.get("self_hosted_runner")
+        or not isinstance(runner, dict)
+        or not runner
+        or "self_hosted_runner" not in differing
+        or not differing <= set(csarc_config.SELF_HOSTED_KEYS)
+    ):
+        return ""
+    return (
+        f"the pull request only registers self_hosted_runner {runner['id']} "
+        f"({runner['registration']}) on an unregistered self-hosted base "
+        "(ADR Q12)"
+    )
+
+
 def trace_lines(snapshot: dict[str, object], suffix: str) -> list[str]:
-    """Return the merge-trace lines for VM evidence or the Q1 exit."""
+    """Return the merge-trace lines for VM evidence, Q1 exit, or Q12."""
     evidence = snapshot.get("self_hosted_verification")
     if isinstance(evidence, dict):
         executor = evidence["executor"]
@@ -355,6 +411,12 @@ def trace_lines(snapshot: dict[str, object], suffix: str) -> list[str]:
     if reason:
         return [
             f"self-hosted-exit-trace: {suffix} trust="
+            f"{evidence_freshness.TRUST_LOCAL} because {reason}"
+        ]
+    reason = snapshot.get("self_hosted_registration")
+    if reason:
+        return [
+            f"self-hosted-registration-trace: {suffix} trust="
             f"{evidence_freshness.TRUST_LOCAL} because {reason}"
         ]
     return []

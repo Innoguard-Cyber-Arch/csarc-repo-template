@@ -65,7 +65,8 @@ tracking: none
 
 ## 6. CLI
 
-- 工作模式的 preset 改寫兩個模式設定：預設的 `solo-self-hosted` 是 `self-hosted`／`hosted`（#1272），`solo-local` 兩者都是 `local`，`solo-hosted`、`team` 兩者都是 `hosted`。`custom` 各問一題，private 可以選 `self-hosted`、`local` 或 `hosted`（建議 `self-hosted`），public 只能選 `hosted` 或 `local`。
+- 工作模式的 preset 改寫兩個模式設定：`csarc init` 預設的 `solo-self-hosted` 是 `self-hosted`／`hosted`（#1272），`solo-local` 兩者都是 `local`，`solo-hosted`、`team` 兩者都是 `hosted`。`custom` 各問一題，private 可以選 `self-hosted`、`local` 或 `hosted`（建議 `self-hosted`），public 只能選 `hosted` 或 `local`。
+- `csarc adopt` 導入的是既有 repository，依 ADR D2「既有專案不自動切換」，預設維持 #1272 之前的 `solo-local`（`local`／`local`），不預設 `self-hosted`；要用 self-hosted 時明確選 `solo-self-hosted` 或以 `--data` 指定（#1317、ADR Q12）。
 - 實際模式是 `self-hosted` 而 `self_hosted_runner` 是空的時，`csarc init` 與 `csarc adopt` 的 plan 印出設定警告 `W22-self-hosted-unregistered`（SPEC-009），列出登記步驟。設定已是 `self-hosted` 而尚未登記時，合併被拒絕的訊息也列出登記步驟（§2）。
 
 ## 7. VM 驗證與證據（#1269）
@@ -103,6 +104,8 @@ Labels 必須恰好是表中的三個值。VM 註冊 runner 時使用 `--no-defa
 合併證據記錄 run URL、run 的 `actor` 與 `triggering_actor`、runner、環境、窗口與模式，trailer 是 `CSARC-Trust: self-hosted-registered`，summary 多一行 `self-hosted-verification-trace`。窗口結束或登記撤銷不讓已完成的證據失效。
 
 **離開 self-hosted 的出口（ADR Q1）。**trusted base 的 `verification_mode_private` 是 `self-hosted`，candidate 改成其他值，而且兩邊設定只有 `verification_mode_private`、`self_hosted_runner`、`self_hosted_environments` 不同、變更的路徑都在 `.csarc/`、`.github/` 或 `AGENTS.md` 下時，這張 governance-switch PR 改用 `local` 的本機證據合併。trailer 是 `CSARC-Trust: self-attested-local`，summary 多一行 `self-hosted-exit-trace` 說明原因。其他 PR 都不適用。
+
+**第一次登記（ADR Q12，#1317）。**新專案預設 `self-hosted`，`self_hosted_runner` 是 `{}`，VM 還不能執行這個 repository 的驗證，所以登記 PR 本身拿不到 VM 證據。trusted base 的 `verification_mode_private` 是 `self-hosted` 而且 `self_hosted_runner` 是空的，candidate 仍是 `self-hosted` 並填入 `self_hosted_runner`，兩邊設定只有 `self_hosted_runner`、`self_hosted_environments` 不同，變更的路徑都在 `.csarc/`、`.github/` 或 `AGENTS.md` 下時，這張 governance-switch PR 改用 `local` 的本機證據合併。trailer 是 `CSARC-Trust: self-attested-local`，summary 多一行 `self-hosted-registration-trace`，寫出 VM ID 與 csarc-devops Issue URL。base 已經登記、candidate 清空或改掉 runner、改了其他設定或產品程式碼時都不適用，仍要求 VM 證據。
 
 ## 8. 窗口指令與工具鏈 image（#1271）
 
@@ -161,6 +164,7 @@ Labels 必須恰好是表中的三個值。VM 註冊 runner 時使用 `--no-defa
 - [x] 窗口指令、交付管道與工具鏈 image 契約如 §8（#1271）。
 - [x] `container` 加上 self-hosted 的限制與解除條件如 §9（#1281）。
 - [x] 新專案預設切換為 `self-hosted`、Copier 與 `csarc init` 提供這個選項、`W22` 登記指引與 `csarc update` 的改用建議如 §1、§4、§6（#1272）。
+- [x] 未登記 self-hosted base 的第一次登記 PR 以本機證據合併、`csarc adopt` 預設維持 `solo-local` 如 §6、§7（#1317）。
 
 ## Out of scope
 
@@ -171,5 +175,6 @@ Labels 必須恰好是表中的三個值。VM 註冊 runner 時使用 `--no-defa
 - root 與 template 的回歸測試涵蓋三種模式與兩種可見性、migration 不改變行為、public 設成 `self-hosted` 被拒絕，以及合併時的模式判斷。
 - payload：`solo-default` 量測 `solo-self-hosted` 預設（#1272）；`solo-local` fixture 量測原本的 `local` 預設，沿用同一組預算（ADR Q2）。
 - #1272：`tests/test_verification_mode_settings.py` 涵蓋 Copier 與 `csarc init` 的新預設、payload fixture 與 `csarc update` 的改用建議；`tests/test_setup_questions.py` 涵蓋 `W22`。
+- #1317：`tests/test_self_hosted_verification.py` 涵蓋 root 與 template 的第一次登記判斷、拒絕的情境，以及從未登記 base 經 lifecycle 合併的 snapshot 與 `self-hosted-registration-trace`；`tests/test_setup_questions.py` 涵蓋 adopt 的預設工作模式。
 - §8：`tests/test_self_hosted_window.py` 以 GitHub 與交付管道的 stub 涵蓋每個指令的盤點與拒絕路徑、沒有 `--apply` 時不改變任何東西、沒有管道時 fail closed、`extend` 不取得 token 也不註冊第二個 runner、預期之外的 runner 被全部移除、token 不出現在命令列、輸出與檔案，以及工具鏈清單與語言 profile 一致。
 - §9：`tests/test_verification_mode_settings.py` 的 container 測試涵蓋 root 與 template：self-hosted 加上 `container` 在 reader、CLI 寫入、lifecycle 與 Copier validator 都被拒絕；`hosted`、`local` 與每個 public 模式加上 `container` 不受影響。
