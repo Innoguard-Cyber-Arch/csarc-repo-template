@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+# Issue #1340: bash reads a script while it runs, so candidate code could
+# rewrite the rest of this file. The group below is parsed whole first.
+{
 
 # "Static assets and paired files" stage of scripts/verify-template.sh: the
 # repo site renders reproducibly, workflow/shell static analysis passes,
@@ -20,3 +23,4 @@ verification_step "Handbook render" ./scripts/build-handbook --check
 verification_step "Workflow and shell lint" ./scripts/lint-workflows-shell
 verification_step "Static-validation fixtures" ./scripts/test-static-validation
 verification_step "Paired-file drift" ./scripts/sync-paired-files.sh --check
+}; exit

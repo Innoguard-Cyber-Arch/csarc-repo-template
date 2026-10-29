@@ -30,6 +30,42 @@ verification_require_python() {
   fi
 }
 
+# Issue #1340: candidate code (tests, builds, `uv run`) runs between trusted
+# steps as the same user, so it can rewrite a staged control file that a
+# later step runs, and the manifest too. When a trusted manifest sits at the
+# control root, the first script to source this file pins its digests and an
+# absolute hasher path in the environment, before any candidate code runs.
+# Children of the same control root inherit the pins instead of rereading
+# the disk; every step rechecks them and fails closed on any difference.
+verification_pin_controls() {
+  local root hasher
+  root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  root="${root%/scripts}"
+  root="${root%/.csarc}"
+  [[ "${CSARC_TRUSTED_ROOT:-}" != "$root" ]] || return 0
+  unset CSARC_TRUSTED_ROOT CSARC_TRUSTED_PINS CSARC_TRUSTED_HASHER
+  [[ -f "$root/trusted-executor.json" ]] || return 0
+  hasher="$(command -v sha256sum)" || hasher="$(command -v shasum) -a 256"
+  CSARC_TRUSTED_PINS="$(python3 -I -c 'import json, sys
+for k, v in json.load(open(sys.argv[1]))["files"].items(): print(v + "  " + k)' \
+    "$root/trusted-executor.json")" && [[ -n "$CSARC_TRUSTED_PINS" ]] || {
+    echo "ERROR: Bad executor manifest: unreadable. Rerun the 'verify' job." >&2
+    return 2
+  }
+  export CSARC_TRUSTED_ROOT="$root" CSARC_TRUSTED_PINS CSARC_TRUSTED_HASHER="$hasher"
+  verification_check_controls
+}
+
+verification_check_controls() {
+  [[ -n "${CSARC_TRUSTED_ROOT:-}" ]] || return 0
+  # shellcheck disable=SC2086 # the hasher may carry `-a 256`
+  (cd "$CSARC_TRUSTED_ROOT" &&
+    $CSARC_TRUSTED_HASHER --quiet --strict -c - <<<"$CSARC_TRUSTED_PINS") >&2 || {
+    echo "ERROR: Control file changed: a FAILED file above. Rerun the 'verify' job." >&2
+    return 1
+  }
+}
+
 verification_command_string() {
   local argument
   local rendered=""
@@ -57,6 +93,7 @@ verification_step() {
   command="$(verification_command_string "$@")"
   printf '[verify-step] START %s; log=stdout\n' "$label"
   printf '[verify-step] COMMAND %s\n' "$command"
+  verification_check_controls || return
 
   (
     local last_heartbeat=$started
@@ -96,3 +133,5 @@ verification_step() {
   printf '[verify-step] RERUN %s\n' "$command" >&2
   return "$status"
 }
+
+verification_pin_controls

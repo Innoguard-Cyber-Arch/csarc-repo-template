@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+# Issue #1340: bash reads a script while it runs, so candidate code could
+# rewrite the rest of this file. The group below is parsed whole first.
+{
 
 # "Python quality" stage of scripts/verify-template.sh: formatting, lint, and
 # static typing on the same source tree the regression tests and package
@@ -24,3 +27,4 @@ cd "$repo_root"
 verification_step "Python formatting" uv run ruff format --check src scripts tests
 verification_step "Python lint" uv run ruff check src scripts tests
 verification_step "Python type check" uv run ty check
+}; exit

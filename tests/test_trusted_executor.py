@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import runpy
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -84,6 +86,9 @@ def candidate_repository(
         "    log.write('spec_to_issue.py subject='\n"
         "              + os.environ.get('CSARC_VERIFICATION_SUBJECT_ROOT',"
         " 'unset') + '\\n')\n"
+        "hook = os.environ.get('CANDIDATE_HOOK')\n"
+        "if hook:\n"
+        "    exec(open(hook).read())\n"
         "sys.exit(0)\n",
     )
     git(candidate, "add", "-A")
@@ -114,7 +119,12 @@ def candidate_repository(
 
 
 def run_entry(
-    entry: Path, candidate: Path, tmp_path: Path, *, subject: bool = True
+    entry: Path,
+    candidate: Path,
+    tmp_path: Path,
+    *,
+    subject: bool = True,
+    extra: dict[str, str] | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], str]:
     """Run one entry point against the candidate and return its check log."""
     log = tmp_path / "checks.log"
@@ -133,6 +143,7 @@ def run_entry(
     )
     if subject:
         env["CSARC_VERIFICATION_SUBJECT_ROOT"] = str(candidate)
+    env.update(extra or {})
     result = subprocess.run(  # noqa: S603 - fixture entry point
         [str(entry)],
         cwd=candidate if not subject else tmp_path,
@@ -309,6 +320,118 @@ def test_normal_candidate_passes_through_the_trusted_executor(
     ):
         # Nested checks never inherit the subject override.
         assert f"{name} subject=unset" in log
+
+
+# Candidate test code that rewrites a staged control file and its manifest
+# entry, as a hostile test can on the same runner (#1340).
+TAMPER_HOOK = """
+import hashlib, json, os, pathlib
+root = pathlib.Path(os.environ["TAMPER_ROOT"])
+target = root / os.environ["TAMPER_PATH"]
+target.chmod(0o755)
+target.write_text("#!/usr/bin/env bash\\nexit 0\\n", encoding="utf-8")
+manifest = root / "trusted-executor.json"
+data = json.loads(manifest.read_text(encoding="utf-8"))
+data["files"][os.environ["TAMPER_PATH"]] = hashlib.sha256(
+    target.read_bytes()
+).hexdigest()
+manifest.write_text(json.dumps(data), encoding="utf-8")
+"""
+
+
+def test_candidate_rewrite_of_a_later_trusted_stage_fails(
+    tmp_path: Path, executor: Path
+) -> None:
+    """Steps recheck the digests pinned before candidate code ran (#1340)."""
+    candidate = candidate_repository(
+        tmp_path, tamper_gate=False, failing_check=None
+    )
+    hook = tmp_path / "hook.py"
+    hook.write_text(TAMPER_HOOK, encoding="utf-8")
+    stage = "scripts/verify-stage-github-actions-audit"
+
+    result, log = run_entry(
+        executor / "scripts" / "verify-fast",
+        candidate,
+        tmp_path,
+        extra={
+            "CANDIDATE_HOOK": str(hook),
+            "TAMPER_PATH": stage,
+            "TAMPER_ROOT": str(executor),
+        },
+    )
+
+    assert "spec_to_issue.py subject=unset" in log
+    # The rewrite matches the rewritten manifest, so only the pins catch it.
+    verify_manifest(executor)
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert f"{stage}: FAILED" in result.stderr
+    assert "ERROR: Control file changed" in result.stderr
+    assert "build-repo-site" not in log
+
+
+def test_generated_layout_pins_and_rechecks_controls(tmp_path: Path) -> None:
+    """The template step gate finds a `.csarc` control root's manifest."""
+    root = tmp_path / "trusted-executor"
+    scripts = root / ".csarc" / "scripts"
+    scripts.mkdir(parents=True)
+    shutil.copy2(
+        REPO_ROOT / "template/.csarc/scripts/verification-step", scripts
+    )
+    check = scripts / "check"
+    write_script(check, "#!/usr/bin/env bash\nexit 0\n")
+    files = {
+        relative: hashlib.sha256((root / relative).read_bytes()).hexdigest()
+        for relative in (
+            ".csarc/scripts/verification-step",
+            ".csarc/scripts/check",
+        )
+    }
+    (root / "trusted-executor.json").write_text(
+        json.dumps({"executor": "trusted-base", "files": files}),
+        encoding="utf-8",
+    )
+    script = (
+        f'set -e; source "{scripts}/verification-step"\n'
+        f'verification_step one "{check}"\n'
+        f'printf "rewritten\\n" >>"{check}"\n'
+        f'verification_step two "{check}"\n'
+    )
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CSARC_")}
+
+    result = subprocess.run(  # noqa: S603 - fixture script
+        ["bash", "-c", script],  # noqa: S607
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "[verify-step] PASSED one" in result.stdout
+    assert ".csarc/scripts/check: FAILED" in result.stderr
+    assert "ERROR: Control file changed" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "scripts/verify-fast",
+        *sorted(
+            path.relative_to(REPO_ROOT).as_posix()
+            for path in (REPO_ROOT / "scripts").glob("verify-stage-*")
+        ),
+        "template/.csarc/scripts/verify.jinja",
+        "template/.csarc/scripts/verify-fast.jinja",
+    ],
+)
+def test_entry_scripts_are_parsed_whole_before_they_run(path: str) -> None:
+    """A rewrite of a running entry or stage cannot add commands (#1340)."""
+    lines = (REPO_ROOT / path).read_text(encoding="utf-8").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("set -"))
+    body = [line for line in lines[start + 1 :] if not line.startswith("#")]
+    assert body[0] == "{", path
+    assert lines[-1] == "}; exit", path
 
 
 def test_relative_subject_root_fails_closed(

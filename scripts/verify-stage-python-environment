@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+# Issue #1340: bash reads a script while it runs, so candidate code could
+# rewrite the rest of this file. The group below is parsed whole first.
+{
 
 # "Python environment" stage of scripts/verify-template.sh: the locked
 # environment installs from uv.lock, and the lockfile stays consistent with
@@ -27,3 +30,4 @@ cd "$repo_root"
 unset VIRTUAL_ENV
 verification_step "Locked Python environment" uv sync --locked --python "$UV_PYTHON"
 verification_step "Python lockfile consistency" uv lock --check
+}; exit

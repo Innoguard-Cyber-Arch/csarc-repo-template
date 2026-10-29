@@ -55,6 +55,8 @@ run_stage() {
   current_stage_started=$SECONDS
   current_stage_command="$(verification_command_string "$@")"
   printf '\n[verify-template] START %s\n' "$name"
+  # Issue #1340: recheck the pinned control set before each stage.
+  verification_check_controls
   "$@"
   local duration=$((SECONDS - current_stage_started))
   record_stage "$name" "PASSED" "$duration"

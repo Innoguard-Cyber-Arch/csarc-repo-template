@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+# Issue #1340: bash reads a script while it runs, so candidate code could
+# rewrite the rest of this file. The group below is parsed whole first.
+{
 
 # "Repository contracts" stage of scripts/verify-template.sh: changed-tree
 # hygiene, unresolved Copier/merge conflict markers, secret scanning, script
@@ -20,3 +23,4 @@ verification_step "Conflict-marker check" ./scripts/check-update-conflicts
 verification_step "Secret scan" ./scripts/scan-secrets
 verification_step "Message pattern check" ./scripts/check-message-style
 verification_step "Dependency scan" ./scripts/verify-dependencies
+}; exit
