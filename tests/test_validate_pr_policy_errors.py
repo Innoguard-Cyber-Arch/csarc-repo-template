@@ -31,6 +31,16 @@ HEAD_SHA = "a" * 40
 # A subprocess that has not finished by now is treated as a hang, such as a
 # `fail()` that recurses instead of exiting.
 TIMEOUT_SECONDS = 30
+
+
+def issue_fix(copy: str) -> str:
+    """Return the lifecycle fix command a #1344 message names."""
+    return (
+        f"python3 {COPIES[copy][0]}/pr_lifecycle.py issue-edit "
+        "--repo acme/project --issue-number 42"
+    )
+
+
 BASE_ENV = {
     "PR_POLICY_FIXTURE": "true",
     "GITHUB_REPOSITORY": "acme/project",
@@ -305,7 +315,7 @@ FAIL_CASES = (
     ),
     Case(
         "issue-label-repeats-type",
-        "Issue #42: work-kind label repeats its Type. Run 'gh issue edit 42 "
+        "Issue #42: work-kind label repeats its Type. Run '<FIX> "
         "--remove-label enhancement'.",
         {"PR_ISSUE_TYPE": "Feature"},
     ),
@@ -313,13 +323,13 @@ FAIL_CASES = (
     # for a native Type where the repository offers Issue Types.
     Case(
         "local-issue-without-type",
-        "Issue #42: no native Type. Run 'gh issue edit 42 --type Feature "
+        "Issue #42: no native Type. Run '<FIX> --type Feature "
         "--remove-label enhancement'.",
         {"PR_POLICY_LOCAL": "true", "PR_REPO_ISSUE_TYPES": "3"},
     ),
     Case(
         "local-issue-without-assignee",
-        "Issue #42: no assignee. Run 'gh issue edit 42 --add-assignee @me'.",
+        "Issue #42: no assignee. Run '<FIX> --add-assignee @me'.",
         {
             "PR_POLICY_LOCAL": "true",
             "PR_ISSUE_TYPE": "Feature",
@@ -744,7 +754,7 @@ def test_local_missing_type_names_one_fix_command(
     )
     assert result.returncode == 1, result.stderr
     assert result.stderr.strip() == (
-        "ERROR: Issue #42: no native Type. Run 'gh issue edit 42 "
+        f"ERROR: Issue #42: no native Type. Run '{issue_fix(copy)} "
         f"{LOCAL_TYPE_FIXES[label]}'."
     )
 
@@ -792,7 +802,8 @@ def test_fail_branch_reports_its_message(
         line for line in result.stderr.splitlines() if line.startswith("ERROR:")
     ]
     assert result.returncode == 1, result.stderr
-    assert errors == [f"ERROR: {case.message}"], result.stderr
+    message = case.message.replace("<FIX>", issue_fix(copy))
+    assert errors == [f"ERROR: {message}"], result.stderr
     assert "gh stub: unexpected call" not in result.stderr
 
 

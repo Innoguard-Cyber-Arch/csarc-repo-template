@@ -470,8 +470,9 @@ case "$issue_type" in
     fail "Issue #${issue_number}: unsupported native Type. Use Bug, Feature, or Task."
     ;;
 esac
+issue_fix="python3 .csarc/scripts/pr_lifecycle.py issue-edit --repo ${GITHUB_REPOSITORY} --issue-number ${issue_number}"
 if [[ -n "$issue_type" && -n "$issue_selected_label" && "$issue_selected_label" != "documentation" ]]; then
-  fail "Issue #${issue_number}: work-kind label repeats its Type. Run 'gh issue edit ${issue_number} --remove-label ${issue_selected_label}'."
+  fail "Issue #${issue_number}: work-kind label repeats its Type. Run '${issue_fix} --remove-label ${issue_selected_label}'."
 fi
 # Issue #1344: local and self-hosted modes have no hosted work-item
 # automation to turn an Issue form's fallback label into a native Type or to
@@ -486,10 +487,10 @@ if [[ "${PR_POLICY_LOCAL:-}" == "true" ]]; then
       documentation) type_fix="Task" ;;
       *) type_fix="<Bug|Feature|Task>" ;;
     esac
-    fail "Issue #${issue_number}: no native Type. Run 'gh issue edit ${issue_number} --type ${type_fix}'."
+    fail "Issue #${issue_number}: no native Type. Run '${issue_fix} --type ${type_fix}'."
   fi
   if [[ -z "$issue_assignees" ]]; then
-    fail "Issue #${issue_number}: no assignee. Run 'gh issue edit ${issue_number} --add-assignee @me'."
+    fail "Issue #${issue_number}: no assignee. Run '${issue_fix} --add-assignee @me'."
   fi
 fi
 if [[ -z "$issue_expected_label" || "$selected_label" != "$issue_expected_label" ]]; then
