@@ -1052,8 +1052,12 @@ def _delivery_row(
     number = issue.get("number")
     title = str(issue.get("title", "")).replace("|", "\\|")
     state = issue.get("state", "unknown")
-    merged_pulls = [pull for pull in pulls if _merged_at(pull)]
-    chosen = merged_pulls[0] if merged_pulls else (pulls[0] if pulls else None)
+    # #1335: an Issue reopened and finished later cites its last merged PR.
+    merged_pulls = sorted(
+        (pull for pull in pulls if _merged_at(pull)),
+        key=lambda pull: str(_merged_at(pull)),
+    )
+    chosen = merged_pulls[-1] if merged_pulls else (pulls[0] if pulls else None)
     pr_cell = f"#{chosen['number']}" if chosen else "(none found)"
     merged = chosen is not None and _merged_at(chosen) is not None
     if children and not pulls:
