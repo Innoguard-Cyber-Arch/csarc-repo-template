@@ -653,19 +653,6 @@ def checkpoint_role_for_commit(
     return checkpoint_role(github, repo, merged[0])
 
 
-def resolve_pr(
-    github: GitHubReader,
-    repo: str,
-    pr_number: int,
-    settings: Settings,
-) -> Decision:
-    """Load and resolve one pull request."""
-    pull = github.get(repo, f"pulls/{pr_number}")
-    if not isinstance(pull, dict):
-        raise RuntimeError(f"GitHub pull-request data: invalid. {GH_RETRY}.")
-    return resolve_pull(github, repo, pull, settings)
-
-
 class GitHubCLI:
     """Small read-only adapter around the authenticated GitHub CLI."""
 

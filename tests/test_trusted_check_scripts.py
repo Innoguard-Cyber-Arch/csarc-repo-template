@@ -208,7 +208,8 @@ SOURCE_DOCUMENTS = (
 def test_documents_name_who_supplies_checks_and_tests(document: str) -> None:
     """AC3: each record states the source of checks, settings and tests."""
     text = (ROOT / document).read_text(encoding="utf-8")
-    assert "#1325" in text
+    # A generated document never carries a template Issue number (#1329).
+    assert ("#1325" in text) is not document.startswith("template/")
     assert ".csarc/config.yml" in text
     assert "測試、lint 設定" in text
     assert "verification hook" in text
