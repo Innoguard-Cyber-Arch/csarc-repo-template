@@ -7,6 +7,12 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.48.3] - 2026-10-29
+
+### Bug Fixes
+
+* fix(deps): sync template copies of this dependency bump (#755) (c290a09)
+
 ## [0.48.2] - 2026-10-30
 
 ### Bug Fixes
