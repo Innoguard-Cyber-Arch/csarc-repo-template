@@ -45,7 +45,7 @@ jobs:
           persist-credentials: false
           ref: {% raw %}${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}{% endraw %}
       - name: Set up Python 3.14 for the trusted verification policy
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.14"
       - name: Preserve the trusted verification policy
@@ -407,7 +407,7 @@ jobs:
 {% if has_python %}
       - name: Set up Python {{ python_target }}
         if: {% raw %}${{ steps.sync.outputs.clean != 'true' && ((steps.reuse.outputs.reuse != 'true' && (steps.effective.outputs.suite == 'full' || steps.plan.outputs.run_project == 'true' || steps.plan.outputs.run_osv == 'true')) || (github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned')) }}{% endraw %}
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "{{ python_target }}"
 {% endif %}
