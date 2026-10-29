@@ -27,4 +27,5 @@ release_ownership: csarc-owned
 release_trigger: manual
 scheduled_checks: []
 security_reporting_channel: justyn.jt.chen@tw.ey.com
-verification_mode: hosted
+verification_mode_private: hosted
+verification_mode_public: hosted

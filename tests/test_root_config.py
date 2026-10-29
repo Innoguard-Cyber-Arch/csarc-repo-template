@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import shutil
 import subprocess
@@ -44,7 +45,11 @@ def test_root_uses_public_copier_setting_names() -> None:
     assert config["package_name"] == "csarc_cli"
     assert config["governance_mode"] == "managed"
     assert config["lifecycle"] == ["issues", "milestones"]
-    assert config["verification_mode"] == "hosted"
+    # Issue #1332: the visibility-based keys replace the legacy key; this
+    # public repository keeps the same effective hosted mode.
+    assert "verification_mode" not in config
+    assert config["verification_mode_private"] == "hosted"
+    assert config["verification_mode_public"] == "hosted"
     assert config["admin_bypass"] == "always"
     assert config["project_maturity"] == "early"
     assert config["copilot_review"] == "allowed"
@@ -132,7 +137,16 @@ def with_setting(key: str, value: str) -> str:
     ("key", "value", "message"),
     [
         ("governance_mode", "partial", "governance_mode is 'partial'"),
-        ("verification_mode", "automatic", "verification_mode is"),
+        (
+            "verification_mode_public",
+            "automatic",
+            "verification_mode_public is",
+        ),
+        (
+            "verification_mode_private",
+            "automatic",
+            "verification_mode_private is",
+        ),
         ("copilot_review", "required", "copilot_review is"),
         ("release_trigger", "tag", "release_trigger is"),
         ("lifecycle", "\n- projects", "lifecycle must be a list"),
@@ -239,3 +253,46 @@ def test_list_and_bool_settings_print_for_shell_callers(tmp_path: Path) -> None:
         run_reader(tmp_path, source, "release_ownership").stdout.strip()
         == "csarc-owned"
     )
+
+
+def test_root_verification_mode_matches_the_legacy_key(tmp_path: Path) -> None:
+    """Issue #1332: the switch keeps the effective mode for each visibility.
+
+    The pre-switch file carried one legacy `verification_mode: hosted`
+    key, which the reader expands to both visibilities; the switched file
+    must read the same values, and a file mixing both forms fails closed.
+    """
+    source = ROOT_CONFIG.read_text(encoding="utf-8")
+    legacy = (
+        "".join(
+            line
+            for line in source.splitlines(keepends=True)
+            if not line.startswith("verification_mode_")
+        )
+        + "verification_mode: hosted\n"
+    )
+    for key in ("verification_mode_private", "verification_mode_public"):
+        current = run_reader(tmp_path, source, key)
+        previous = run_reader(tmp_path, legacy, key)
+        assert current.returncode == 0, current.stderr
+        assert previous.returncode == 0, previous.stderr
+        assert current.stdout.strip() == previous.stdout.strip() == "hosted"
+
+    mixed = run_reader(
+        tmp_path, source + "verification_mode: hosted\n", "languages"
+    )
+    assert mixed.returncode == 1
+    assert "verification_mode is 'hosted'" in mixed.stderr
+
+    spec = importlib.util.spec_from_file_location(
+        "root_local_verification", ROOT / "scripts/local_verification.py"
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(str(ROOT / "scripts"))
+    assert module.verification_mode(ROOT) == "hosted"
