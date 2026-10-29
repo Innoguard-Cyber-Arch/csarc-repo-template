@@ -36,8 +36,6 @@
 {%- else %}
 - Issue 從最新 `main` 開分支並以 PR 回到 `main`。需要共同交付日期或整批驗收時，先以 `csarc update --data lifecycle=...` 啟用 `milestones`。
 {%- endif %}
-- 超出原 Issue 的工作另開 Issue。PR 先以 `.csarc/scripts/pr_lifecycle.py create` 建成 Draft；完成條件、PR checklist 與證據都齊備後才 Ready。
-- Repository 設定只先執行 `./.csarc/scripts/apply-repository-settings.sh plan`；沒有管理員明確授權不 apply。
 {%- if github_project_url | default('') %}
 
 ## Project Roadmap 設定
@@ -61,7 +59,7 @@
 實作中只跑變更 owner 的 focused checks；候選 commit 乾淨後執行一次 `./.csarc/scripts/verify-fast`，需要時它自動升級為 full。證據綁定 head、tree、base 與 tier，24 小時內有效；head 或 base 改變後重跑一次。合併只經 `.csarc/scripts/pr_lifecycle.py merge`：它取得 remote lease，從 trusted base 重驗 PR policy、exact-head 授權與本機證據，再以 squash 合併並寫入 durable summary 與 trailer。本機證據不能證明 GitHub event、遠端 runner 或 release provenance；需要這些保證時改用 `verification_mode_{{ 'public' if project_visibility == 'public' else 'private' }}: hosted`。
 {%- endif %}
 
-GitHub UI 或 `gh pr merge --admin` 合併會略過 lifecycle，`csarc status` 把它列為 `untraced`{% if release_ownership == 'csarc-owned' %}，並阻擋下一次 CSARC 發版{% endif %}。細節見 [`ci-policy.md`](ci-policy.md#審查與合併資格)。
+GitHub UI 或 `gh pr merge --admin` 合併會被列為 `untraced`，見 [`ci-policy.md`](ci-policy.md#審查與合併資格)。
 {% if admin_bypass != 'off' %}
 admin 以授權留言取代核准時，先取得 lifecycle lease，再由執行合併的 admin 本人在 PR 貼出下列留言（`pr_lifecycle.py authorization-template` 印出同一段），把 `<PR>`、`<head SHA>` 換成實際值，合併時以 `--authorization-url <留言 URL>` 帶入。留言只對該 head 有效；head 改變或早於目前 lease 時要重貼。
 
@@ -75,11 +73,11 @@ I authorize this exact pull request head for one merge attempt.
 {% endif %}
 ## Requirement evidence
 
-PR body 的 `## Requirement evidence` 為每個 AC 與風險 ID 列出 exact-head 證據，缺項時 PR 不能離開 Draft；證據格式、`R0` 與重新對應規則見 [`ci-policy.md`](ci-policy.md#requirement-evidence)。
+每個 AC 與風險 ID 都有 exact-head 證據，PR 才能離開 Draft；規則見 [`ci-policy.md`](ci-policy.md#requirement-evidence)。
 {% if release_ownership == 'csarc-owned' %}
 ## 發版
 
-release-worthy 的 PR 在仍是 Draft 時執行 `python3 .csarc/scripts/release_policy.py prepare-candidate --sha HEAD --phase <beta|stable>`，把版本與 CHANGELOG 作為同一張 PR 的最後一個 commit；{% if 'milestones' in lifecycle %}Milestone 工作用 `beta`，standalone、hotfix 與 promotion 用 `stable`{% else %}standalone 與 hotfix 用 `stable`{% endif %}。{% if hosted and (project_mode == 'new' or csarc_release_workflow | default(false)) %}合併後 `release.yml`{% if release_trigger == 'manual' %}（只接受手動 dispatch）{% endif %}呼叫 `.csarc/scripts/publish-release`；Actions 不健康時，維護者以自己的身分在本機執行同一支腳本。{% else %}合併後由維護者在本機執行 `.csarc/scripts/publish-release stage`／`publish`，不另建版本 PR 或手動建立 tag。{% endif %}writer 的發布前檢查見 [`ci-policy.md`](ci-policy.md#版本發版交付與部署矩陣)。
+release-worthy 的 PR 在 Draft 時把版本與 CHANGELOG 物化為最後一個 commit，命令與通道見 [`ci-policy.md`](ci-policy.md#版本發版交付與部署矩陣)。{% if hosted and (project_mode == 'new' or csarc_release_workflow | default(false)) %}合併後 `release.yml`{% if release_trigger == 'manual' %}（只接受手動 dispatch）{% endif %}呼叫 `.csarc/scripts/publish-release`；Actions 不健康時，維護者以自己的身分在本機執行同一支腳本。{% else %}合併後由維護者在本機執行 `.csarc/scripts/publish-release`。{% endif %}
 {% endif %}
 ## 公版更新
 
@@ -93,7 +91,7 @@ release-worthy 的 PR 在仍是 Draft 時執行 `python3 .csarc/scripts/release_
 
 - 驗證失敗或證據過期：修正後在新的 exact head 重跑，不沿用舊結果。
 - `csarc update` 失敗時 target 維持原狀；以同一份 final plan 重跑，已套用的 plan 不會重複修改。
-- `.csarc/provenance.json` 被手改時，`csarc status` 與 `csarc update` 在寫入前停止；設定只以 `csarc update --data KEY=VALUE` 變更。
+- `.csarc/provenance.json` 被手改時，`csarc status` 與 `csarc update` 在寫入前停止。
 {%- if release_ownership == 'csarc-owned' %}
 - 發布失敗時 Release 保持 draft；同一 candidate 重跑 `publish-release` 是冪等的，已公開的 Release 只做 `rerun-verify`。
 {%- endif %}
