@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+# Issue #1340: bash reads a script while it runs, so candidate code could
+# rewrite the rest of this file. The group below is parsed whole first.
+{
 
 # "GitHub Actions audit" stage of scripts/verify-template.sh: zizmor's
 # workflow-permission and injection audit across the checked-in workflows.
@@ -31,3 +34,4 @@ cd "$repo_root"
 verification_step "GitHub Actions security audit" \
   uv run zizmor --config zizmor.yml . --format plain
 verification_step "GitHub Actions pin check" python3 scripts/check_action_pins.py
+}; exit

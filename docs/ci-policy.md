@@ -1045,9 +1045,24 @@ base 的 config reader 讀不懂 candidate 設定（未知值或 schema）時，
 result。Execute step 名稱在 trusted executor 執行時附上 `executor=trusted-base`，`verification_evidence.py` 回傳
 `executor`；沒有這個 claim 的舊 run 或尚未同步 #1086 的 base 一律記為 `candidate-legacy`，並在 run 內發出 warning。
 
-限制：同一 job 內 candidate 測試碼仍與 trusted 入口共用 GitHub-hosted VM，trusted executor 防的是「改 gate 讓
-自己通過」，不是對惡意測試碼的 sandbox；保護仍靠 read-only `permissions`、不帶 secrets、`persist-credentials:
-false` 與人工審查。
+#1340 處理執行中的改寫。candidate 的測試、build 與 `uv run` 跟 trusted 入口以同一個使用者在同一台 runner 執行，
+寫得到 `$RUNNER_TEMP` 裡的可信副本與 manifest，唯讀權限擋不住。因此第一個載入 `verification-step` 的入口在任何
+candidate 程式碼執行前，把 manifest 的 digest 與 hasher 的絕對路徑記進環境變數 `CSARC_TRUSTED_*`；同一個 control
+root 的子程序沿用這份記錄，不重讀磁碟。每個 `verification_step`、`verify-template.sh` 的每個 stage，以及生成專案
+入口裡不經 `verification_step` 的可信呼叫，執行前都重新比對整份 control set（生成專案約 70 個檔案，每次約 4 毫秒），不一致就以
+`ERROR: Control file changed` 失敗，不產生成功證據。bash 執行時會繼續從檔案讀後面的指令，所以入口與 stage 腳本把
+整段包成 `{ ... }; exit`，先完整解析再執行。生成專案的 hosted `ci.yml` 與 VM 的 `csarc-verify.yml` 共用同一份
+`verification-step`。
+
+仍無法證明的部分：
+
+- GitHub-hosted runner 的使用者有免密碼 `sudo`，candidate 可以換掉 hasher、改寫執行中 bash 的記憶體或 runner 本身；
+  VM 給 runner 使用者 sudo 時也一樣。這項比對擋的是改寫檔案，不是對惡意測試碼的 sandbox。
+- 比對與讀取之間仍有空檔：candidate 留在背景的程序可以在比對之後、檔案被讀取之前改寫它。
+- 入口結束後的 workflow step（例如「Package the guided release candidate」）仍以磁碟上的 manifest 比對，candidate
+  在 Execute 期間可以一併改寫它與比對程式。
+
+保護仍靠 read-only `permissions`、不帶 secrets、`persist-credentials: false` 與人工審查。
 
 `release/v*` 進 `main` 的 guided release candidate 走同一個邊界（#1106）。checkout candidate 之前，
 `trusted_executor.py prepare --control-set release` 從 trusted base 複製 `scripts/verify-release-candidate` 與同目錄

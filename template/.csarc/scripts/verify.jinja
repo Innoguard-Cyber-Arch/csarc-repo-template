@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Issue #1340: bash reads a script while it runs, so candidate code could
+# rewrite the rest of this file. The group below is parsed whole first.
+# Functions in it run through traps and verification_step.
+# shellcheck disable=SC2329
+{
 
 # control_root holds this entry point and its configuration reader;
 # repo_root is the tree under verification (see verify-fast).
@@ -419,6 +424,7 @@ test "$(cat .claude/CLAUDE.md)" = "@../AGENTS.md"
 # project_mode is immutable provenance, rendered once (SPEC-009).
 template_mode="{{ project_mode }}"
 # The step selection reads check_root's settings (#1318).
+verification_check_controls
 documentation_mode="$("${platform_python[@]}" "$control_root/.csarc/scripts/csarc_config.py" \
   --config "$check_root/.csarc/config.yml" documentation_mode)"
 if [[ "$template_mode" == "new" && "$documentation_mode" != "off" ]]; then
@@ -584,8 +590,10 @@ fi
 # project verification hook passed.
 {% if verification_mode != "hosted" -%}
 # The recorder comes from check_root (#1318).
+verification_check_controls
 python3 "$checks"/local_verification.py record \
   --control-root "$check_root" --tier full --scopes all \
   --base "$verification_base" --head-sha "$verification_head_sha" \
   --base-sha "$verification_base_sha"
 {% endif -%}
+}; exit

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+# Issue #1340: bash reads a script while it runs, so candidate code could
+# rewrite the rest of this file. The group below is parsed whole first.
+{
 
 # "Regression tests" stage of scripts/verify-template.sh: the full pytest
 # suite (including the `large` Copier create/existing-adoption/update
@@ -65,3 +68,4 @@ verification_step "Release-drift self-test" ./scripts/test-check-release-drift
 verification_step "Fleet-adoption self-test" \
   ./scripts/test-audit-fleet-adoption
 verification_step "Milestone-creation self-test" ./scripts/test-create-milestone
+}; exit

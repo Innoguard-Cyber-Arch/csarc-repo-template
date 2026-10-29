@@ -5,6 +5,9 @@
 {% set has_go = "go" in languages -%}
 #!/usr/bin/env bash
 set -euo pipefail
+# Issue #1340: bash reads a script while it runs, so candidate code could
+# rewrite the rest of this file. The group below is parsed whole first.
+{
 
 # control_root holds this entry point, its router, and its stage gate;
 # repo_root is the tree under verification. Hosted CI stages the control
@@ -270,8 +273,10 @@ fi
 {% if verification_mode != "hosted" -%}
 # The recorder comes from check_root, so the trusted base can record a
 # candidate render that no longer ships it (#1318).
+verification_check_controls
 python3 "$checks"/local_verification.py record \
   --control-root "$check_root" --tier fast \
   --scopes "${scope_csv:-unknown}" --base "$verification_base" \
   --head-sha "$verification_head_sha" --base-sha "$verification_base_sha"
 {% endif -%}
+}; exit

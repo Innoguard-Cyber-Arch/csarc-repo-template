@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Issue #1340: bash reads a script while it runs, so candidate code could
+# rewrite the rest of this file. The group below is parsed whole first.
+{
 
 # control_root holds this entry point, its router, and its stage gate;
 # repo_root is the tree under verification (Issue #1086).
@@ -289,3 +292,4 @@ if [[ "$scopes" == *,docs,* ]]; then
   verification_step "Handbook render" ./scripts/build-handbook --check
   verification_step "Paired-file drift" ./scripts/sync-paired-files.sh --check
 fi
+}; exit
