@@ -70,8 +70,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Squash merges lose the reviewed history that owns a promotion or
-          # authenticated Dependabot sync candidate (#1027, #1056).
           python3 scripts/check-trusted-verification "$GITHUB_SHA" \
             --github-repo "$GITHUB_REPOSITORY" \
             --resolve-release-source \
@@ -183,8 +181,6 @@ jobs:
           CSARC_CI_TIER: ${{ steps.route.outputs.required_tier }}
           GOTOOLCHAIN: local
         run: |
-          # A dispatched run has no push base; the merged commit's first parent
-          # is the real pre-merge base, never the accumulated default branch.
           export CSARC_CI_BASE="${CSARC_CI_BASE:-$(git rev-parse "$GITHUB_SHA^1")}"
           if [[ "$CSARC_CI_TIER" == full ]]; then
             ./scripts/verify-template.sh

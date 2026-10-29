@@ -1,9 +1,5 @@
 name: Dependabot exact merge
 
-# Runs from the trusted default branch after a candidate producer completes.
-# Read-only readiness checks avoid taking a lease until every required check
-# appears ready; pr_lifecycle.py remains the security boundary and revalidates
-# the exact head, trusted producer identities, authorization, and Rulesets.
 on:
   workflow_run:
     workflows: ["CI", "PR policy", "PR review", "Dependabot auto-merge"]
@@ -47,9 +43,6 @@ jobs:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-        # Issue #1087: zero exact open Dependabot pull requests is an ordinary
-        # no-op (success, no writes); many, incomplete, or contradictory
-        # candidates fail closed. Closed or merged records are never reused.
         run: |
           gh api \
             -H "Accept: application/vnd.github+json" \
@@ -178,7 +171,6 @@ jobs:
           HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
           OWNER: dependabot-exact-merge-${{ github.run_id }}-${{ github.run_attempt }}
           PR_NUMBER: ${{ needs.resolve-pr.outputs.number }}
-        # Issue #1262: fail on a refused snapshot so the next step releases the lease.
         run: |
           python3 .csarc/scripts/pr_lifecycle.py check \
             --repo "$GITHUB_REPOSITORY" \

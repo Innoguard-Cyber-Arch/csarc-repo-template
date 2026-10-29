@@ -6,13 +6,9 @@ authorizes a scan.
 
 ## Policy chain
 
-- Root `SECURITY.md` is the scanner threat model and trust-boundary policy. A
-  nearer `SECURITY.md` may narrow a real component.
-- `.github/SECURITY.md` is the human vulnerability-disclosure policy and
-  names the approved private reporting channel. Do not merge the two.
-- Root `AGENTS.md` and `.csarc/docs/agent-workflow.md` list the build and
-  validation commands for the selected language profile; `.claude/CLAUDE.md`
-  only imports the root entry point.
+Root `SECURITY.md`, or a nearer one for a real component, is the scanner
+threat model; `.github/SECURITY.md` is the separate human disclosure policy.
+`AGENTS.md` lists the validation commands.
 
 ## Providers
 

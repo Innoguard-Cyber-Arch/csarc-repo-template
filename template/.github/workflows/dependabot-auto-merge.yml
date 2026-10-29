@@ -1,14 +1,11 @@
 name: Dependabot auto-merge
 
 on:
-  # The privileged jobs must use the workflow from the trusted base branch.
-  # They authenticate the current head before doing any write.
   pull_request_target:
     branches: [main]
     types: [opened, synchronize, reopened]
 
 concurrency:
-  # Serialize every head transition for one PR without cancelling a sync run.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
@@ -56,8 +53,6 @@ jobs:
           fi
           gh api "repos/$BASE_REPO/commits/$head_sha" > "$RUNNER_TEMP/head-commit.json"
           gh api "repos/$BASE_REPO/compare/$base_sha...$head_sha" > "$RUNNER_TEMP/comparison.json"
-          # Generated projects never push a template sync child, so only
-          # the direct signed Dependabot head can be authenticated here.
           echo '{}' > "$RUNNER_TEMP/parent-commit.json"
           echo '{}' > "$RUNNER_TEMP/grandparent-commit.json"
           echo '{}' > "$RUNNER_TEMP/grandparent-comparison.json"
@@ -120,8 +115,6 @@ jobs:
         env:
           UPDATED_DEPENDENCIES: ${{ steps.metadata.outputs.updated-dependencies-json }}
         run: |
-          # update-type is only the highest level present and ignores a
-          # dependency without one, so a group is judged per entry.
           if jq -e \
             'type == "array" and length > 0 and
              all(.[]; .updateType == "version-update:semver-patch" or
