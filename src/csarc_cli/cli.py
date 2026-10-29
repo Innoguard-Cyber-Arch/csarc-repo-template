@@ -9888,7 +9888,9 @@ def command_status(args: argparse.Namespace) -> int:
         # message-pattern: allow-end
         print_governance_audit(governance)
         if control:
+            # message-pattern: allow-begin X5 status report
             print(f"Replacement control: {control}")
+            # message-pattern: allow-end
     return 1 if governance["blocking"] else 0
 
 
