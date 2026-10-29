@@ -30,4 +30,6 @@ cd "$repo_root"
 # find first.
 verification_step "GitHub Actions security audit" \
   uv run zizmor --config zizmor.yml . --format plain
-verification_step "GitHub Actions pin check" python3 scripts/check_action_pins.py
+# Issue #1333: the pin check comes from the control root.
+verification_step "GitHub Actions pin check" \
+  python3 -I "$control_root/scripts/check_action_pins.py" --root "$repo_root"

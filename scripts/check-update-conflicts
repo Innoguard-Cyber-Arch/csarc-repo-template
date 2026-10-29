@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Issue #1333: a trusted copy names the tree it checks in
+# CSARC_VERIFICATION_SUBJECT_ROOT.
+repo_root="$(cd "${CSARC_VERIFICATION_SUBJECT_ROOT:-$(dirname "${BASH_SOURCE[0]}")/..}" && pwd)"
 cd "$repo_root"
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then

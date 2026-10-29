@@ -14,9 +14,15 @@ repo_root="$(verification_subject_root "$control_root")"
 # Checks below must not inherit the subject override into nested fixtures.
 unset CSARC_VERIFICATION_SUBJECT_ROOT
 cd "$repo_root"
+# Issue #1333: security checks come from the control root and read the
+# subject; the message pattern check stays the subject's own.
+checks="$control_root/scripts"
+subject=(env "CSARC_VERIFICATION_SUBJECT_ROOT=$repo_root")
 
 verification_step "Changed-tree hygiene" git diff --check
-verification_step "Conflict-marker check" ./scripts/check-update-conflicts
-verification_step "Secret scan" ./scripts/scan-secrets
+verification_step "Conflict-marker check" \
+  "${subject[@]}" "$checks/check-update-conflicts"
+verification_step "Secret scan" "${subject[@]}" "$checks/scan-secrets"
 verification_step "Message pattern check" ./scripts/check-message-style
-verification_step "Dependency scan" ./scripts/verify-dependencies
+verification_step "Dependency scan" \
+  "${subject[@]}" "$checks/verify-dependencies"

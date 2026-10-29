@@ -17,6 +17,10 @@ cd "$repo_root"
 
 verification_step "Repository site render" ./scripts/build-repo-site --check
 verification_step "Handbook render" ./scripts/build-handbook --check
-verification_step "Workflow and shell lint" ./scripts/lint-workflows-shell
+# Issue #1333: this security check comes from the control root and reads
+# the subject; the render and paired-file checks stay the subject's own.
+verification_step "Workflow and shell lint" \
+  env "CSARC_VERIFICATION_SUBJECT_ROOT=$repo_root" \
+  "$control_root/scripts/lint-workflows-shell"
 verification_step "Static-validation fixtures" ./scripts/test-static-validation
 verification_step "Paired-file drift" ./scripts/sync-paired-files.sh --check
