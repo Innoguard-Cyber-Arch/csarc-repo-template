@@ -940,8 +940,12 @@ def test_new_project_defaults_to_self_hosted_verification(
     guidance = (project / ".csarc/docs/agent-workflow.md").read_text(
         encoding="utf-8"
     )
-    assert "self-attested evidence" in guidance
-    assert "run `./.csarc/scripts/verify-fast` once" in guidance
+    # #1336: self-hosted merge evidence is the VM run; verify-fast is a
+    # local diagnostic, so the self-attested local wording is absent.
+    assert "Merge evidence comes from the registered VM" in guidance
+    assert "csarc self-hosted verify --pr <N> --apply" in guidance
+    assert "self-attested evidence" not in guidance
+    assert "run `./.csarc/scripts/verify-fast` once" not in guidance
     payload = json.loads(
         (project / ".csarc/policies/rulesets.json").read_text(encoding="utf-8")
     )

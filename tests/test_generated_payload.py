@@ -422,6 +422,26 @@ def test_options_select_one_verifier_and_at_most_one_publisher(
 
 
 @pytest.mark.parametrize("name", list(MATRIX))
+def test_agent_workflow_names_the_merge_evidence_of_its_mode(
+    renders: dict[str, Path], name: str
+) -> None:
+    """#1336: the agent workflow names the evidence its mode merges on."""
+    mode = render_mode(MATRIX[name])
+    guidance = (renders[name] / ".csarc/docs/agent-workflow.md").read_text(
+        encoding="utf-8"
+    )
+    vm = "csarc self-hosted verify --pr <N> --apply"
+    local = "it records self-attested evidence bound to the clean exact head"
+    assert (vm in guidance) is (mode == "self-hosted")
+    assert (local in guidance) is (mode == "local")
+    assert ("run `./.csarc/scripts/verify-fast` once" in guidance) is (
+        mode == "local"
+    )
+    if mode == "self-hosted":
+        assert "`./.csarc/scripts/verify-fast` is a diagnostic" in guidance
+
+
+@pytest.mark.parametrize("name", list(MATRIX))
 def test_render_stays_inside_the_adr_allowlist(
     renders: dict[str, Path], name: str
 ) -> None:
