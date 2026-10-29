@@ -47,6 +47,7 @@
 1. 在 `{{ github_project_url }}` 新增兩個 DATE 欄位，名稱逐字為 `Project start` 與 `Project target`。
 2. 確認 `gh` 的 token 有 `project` scope（`gh auth refresh -s project`），而且你對這個 Project 有寫入權。
 3. 先對一張 Issue 執行 `csarc issue sync-project --issue <N>`：寫入前檢查 Project、欄位、scope 與權限，缺一項就停止；既有日期不同時先列出差異，確認後才以 `--yes` 覆寫。
+4. `Status` 由 Project 自己的 workflow 推進，範本不寫入；`csarc issue sync-project --report --all` 唯讀列出已關閉未 Done、應在 board 卻不在與缺日期的項目。
 
 只以 stub 驗證，未經 live ProjectV2 驗證。
 {%- endif %}

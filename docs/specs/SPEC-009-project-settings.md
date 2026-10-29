@@ -288,7 +288,8 @@ WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup
 - `csarc issue sync-project --issue <N>`／`--milestone <M>` 依目前的 Milestone 冪等同步；空欄直接寫入，既有值不同時先列 diff，經確認（互動確認或 `--yes`）才覆寫。只同步 Issue，不同步 PR。
 - Issue 已建立但 Project 寫入失敗時保留 Issue，輸出單一可重跑的修復指令；加入 item 以 Issue 與 Project 的 identity upsert，重跑不產生重複 item。
 - 只有經 `csarc issue create` 建立或 `csarc issue sync-project` 明確同步、且在上述範圍內的 Issue 會進 Project；UI、`scripts/gh-issue-create` 或其他工具建立的 Issue 需要時再跑 `sync-project`。
-- **未經 live ProjectV2 驗證**：本節行為只以 stub／記錄回應驗證（類似 `actions/add-to-project`），沒有對真實 ProjectV2 執行 pilot（2026-10-15 擁有者決定，#1058 Kill criteria 8）。任何手動試用都只能用專用的拋棄式 Project，不得碰既有 Project #1。
+- `Status` 歸屬（#1346）：`Status` 由 GitHub Project 自己的 workflow（例如 Item closed → Done）推進，範本從不寫入 `Status`，只報告漂移。`csarc issue sync-project --report` 搭配 `--issue <N>`、`--milestone <M>` 或 `--all`（整個 repository）唯讀列出三種漂移：Issue 已關閉但 `Status` 不是 `Done` 的 item；依上看板規則應在 board 上卻沒有 item 的 Milestone tracker 或 standalone Issue；這類 Issue 的 item 缺 `Project start` 或 `Project target`。它只送查詢，不呼叫任何 mutation，也不要求 `viewerCanUpdate`；token 能回報 scopes 時要求 `read:project` 或 `project`。`Status`（SINGLE_SELECT）或日期欄位不存在、重複或型別不符時，逐欄說明並略過該項檢查，不猜測。發現漂移時 exit 1，沒有時 exit 0；空的 `github_project_url` 不呼叫 API。
+- **未經 live ProjectV2 驗證**：本節行為（含 `--report`）只以 stub／記錄回應驗證（類似 `actions/add-to-project`），沒有對真實 ProjectV2 執行 pilot（2026-10-15 擁有者決定，#1058 Kill criteria 8）。任何手動試用都只能用專用的拋棄式 Project，不得碰既有 Project #1。
 
 ## Acceptance criteria
 
@@ -301,6 +302,7 @@ WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup
 - [x] `github_project_url` 是唯一的 Project 設定，預設空字串，只保存完整 organization／user ProjectV2 URL（#1080 AC1）。
 - [x] 已關閉或 `Status` 為 `Done` 的 Issue，`Project target` 是實際完成日；覆寫沿用 diff 與確認流程（#1179 AC1–AC3）。
 - [x] 只有 Milestone tracker 與 standalone Issue 上看板；開始日與完成日採台北日期；沒有 due date 時 target 為開始日後 14 個曆日；不新增設定（#1186 AC1–AC3）。
+- [x] `Status` 由 GitHub Project 自己的 workflow 推進；`csarc issue sync-project --report` 唯讀報告已關閉未 Done、應在 board 卻不在、缺日期三種漂移，只以 stub 驗證（#1346 AC1–AC3）。
 
 ## Out of scope
 
@@ -312,7 +314,7 @@ WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup
 - `python3 scripts/spec_to_issue.py validate`
 - `uv run pytest tests/test_settings_spec.py tests/test_repository_facts.py tests/test_setup_questions.py`
 - `uv run pytest tests/test_settings_migration.py tests/test_root_config.py tests/test_base_policy.py`
-- `uv run pytest tests/test_project_roadmap.py`
+- `uv run pytest tests/test_project_roadmap.py tests/test_project_drift.py`
 
 ## References
 
@@ -323,6 +325,7 @@ WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup
 - [Issue #1078](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1078)：設定問卷、工作模式與 approval route preflight
 - [Issue #1080](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1080)：GitHub Project Roadmap 同步
 - [Issue #1186](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1186)：看板範圍、台北日期與 14 天預設 target
+- [Issue #1346](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1346)：`Status` 歸屬與唯讀漂移報告
 - [Issue #1058](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1058)：決定 3、8、14–17、23、25
 - [Issue #900](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/900)：平面、最少的設定
 - [Issue #919](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/919)：文件模式與語言
