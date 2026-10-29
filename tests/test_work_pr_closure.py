@@ -92,6 +92,7 @@ class FakeGitHub:
             "milestone": {"number": 8},
         }
         self.comments: list[dict[str, Any]] = []
+        self.others: dict[str, dict[str, Any]] = {}
         self.writes: list[str] = []
 
     def get(self, _repo: str, path: str) -> object:
@@ -99,6 +100,8 @@ class FakeGitHub:
             return {"default_branch": "main"}
         if path == "pulls/44":
             return self.pull
+        if path in self.others:
+            return self.others[path]
         if path == "issues/42":
             return self.issue
         raise AssertionError(path)
@@ -203,3 +206,72 @@ def test_closed_unmerged_and_unknown_prior_closure_fail_closed(
     with pytest.raises(RuntimeError, match="without matching evidence"):
         lifecycle.close_work_issue(arguments(), closed)
     assert unmerged.writes == closed.writes == []
+
+
+def earlier_pr(
+    lifecycle: ModuleType, github: FakeGitHub, drift: dict[str, Any]
+) -> None:
+    """Record PR #43 as an earlier merged closure of Issue #42."""
+    prior = {**github.pull, "number": 43, "merged_at": "2026-08-31T00:00:00Z"}
+    prior.update(head={**github.pull["head"], "sha": "c" * 40})
+    prior.update(merge_commit_sha="d" * 40)
+    binding = {
+        "base_ref": "dev/m8-docs",
+        "head_sha": "c" * 40,
+        "issue": 42,
+        "merge_commit_sha": "d" * 40,
+        "pull_request": 43,
+        "repository": "owner/repo",
+        "schema_version": 1,
+    }
+    binding.update(drift.get("binding", {}))
+    prior.update({k: v for k, v in drift.items() if k != "binding"})
+    github.others["pulls/43"] = prior
+    message = lifecycle.work_closure_message(binding)
+    github.comments.append({"body": message})
+
+
+def test_reopened_issue_closes_with_the_later_merged_pr(
+    lifecycle: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Issue #1335: sequential PRs for one Issue close it with the last."""
+    github = FakeGitHub()
+    earlier_pr(lifecycle, github, {})
+
+    lifecycle.close_work_issue(arguments(), github)
+    lifecycle.close_work_issue(arguments(), github)
+
+    assert github.writes == ["comment", "close"]
+    assert '"pull_request":44' in github.comments[-1]["body"]
+    assert "already closed" in capsys.readouterr().out
+    replay = argparse.Namespace(
+        repo="owner/repo", pr_number=43, head_sha="c" * 40
+    )
+    github.pull = github.others["pulls/43"]
+    with pytest.raises(RuntimeError, match="conflicting closure evidence"):
+        lifecycle.close_work_issue(replay, github)
+
+
+@pytest.mark.parametrize(
+    "drift",
+    [
+        {"merged": False},
+        {"merged_at": "2026-09-02T00:00:00Z"},
+        {"merge_commit_sha": "e" * 40},
+        {"binding": {"issue": 41}},
+        {"binding": {"base_ref": "dev/m9-other"}},
+        {"binding": {"pull_request": 44}},
+        {"binding": {"head_sha": "e" * 40}},
+    ],
+)
+def test_conflicting_earlier_evidence_still_fails_closed(
+    lifecycle: ModuleType, drift: dict[str, Any]
+) -> None:
+    """Only an earlier merged PR for the same Issue and route is accepted."""
+    github = FakeGitHub()
+    earlier_pr(lifecycle, github, drift)
+
+    with pytest.raises(RuntimeError, match="conflicting closure evidence"):
+        lifecycle.close_work_issue(arguments(), github)
+
+    assert github.writes == []

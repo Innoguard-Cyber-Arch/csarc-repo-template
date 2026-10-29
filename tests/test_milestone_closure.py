@@ -212,6 +212,25 @@ def test_reconciliation_marks_delivered_when_pr_merged() -> None:
     assert closure_decision(state).allowed
 
 
+def test_sequential_pull_requests_deliver_with_the_last_merged_one() -> None:
+    """Issue #1335: a reopened Issue finished by a later PR is delivered."""
+    state = _base_snapshot()
+    state["issues"].append(
+        {
+            "number": 101,
+            "title": "Finish #42",
+            "state": "closed",
+            "body": "Closes #42\n",
+            "pull_request": {"merged_at": "2026-09-02T00:00:00Z"},
+        }
+    )
+    body = regenerate_reconciliation(state)
+    state["issues"][1]["body"] = body
+
+    assert "| #42 Deliver work | closed | #101 | yes | Delivered |" in body
+    assert closure_decision(state).allowed
+
+
 @pytest.mark.parametrize(
     ("gap", "status"),
     [

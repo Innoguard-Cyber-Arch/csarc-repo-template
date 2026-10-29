@@ -5221,6 +5221,29 @@ def work_closure_message(binding: dict[str, object]) -> str:
     return f"{WORK_CLOSURE_MARKER}\n\n`{canonical_json(binding)}`"
 
 
+def prior_closure(
+    github: GitHub, binding: dict[str, object], text: str, merged_at: str
+) -> bool:
+    """Return whether evidence binds an earlier merged PR to this Issue."""
+    try:
+        prior = json.loads(text.removeprefix(WORK_CLOSURE_MARKER).strip("\n`"))
+        number = prior["pull_request"]
+        pull: Any = github.get(str(binding["repository"]), f"pulls/{number}")
+        keys = ("base_ref", "issue", "repository", "schema_version")
+        return (
+            text == work_closure_message(prior)
+            and all(prior[key] == binding[key] for key in keys)
+            and number != binding["pull_request"]
+            and pull["merged"] is True
+            and str(pull["merged_at"]) < merged_at
+            and pull["head"]["sha"] == prior["head_sha"]
+            and pull["base"]["ref"] == prior["base_ref"]
+            and pull["merge_commit_sha"] == prior["merge_commit_sha"]
+        )
+    except (ValueError, LookupError, TypeError):
+        return False
+
+
 def close_work_issue(  # noqa: C901
     args: argparse.Namespace, github: GitHub
 ) -> None:
@@ -5329,13 +5352,19 @@ def close_work_issue(  # noqa: C901
         for comment in comments
         if str(comment.get("body") or "").startswith(WORK_CLOSURE_MARKER)
     ]
-    if len(evidence) > 1 or (evidence and evidence != [message]):
+    # #1335: a reopened Issue may be finished by a later merged PR.
+    current = evidence[-1:] == [message]
+    earlier = evidence[:-1] if current else evidence
+    if message in earlier or not all(
+        prior_closure(github, binding, text, pull["merged_at"])
+        for text in earlier
+    ):
         raise RuntimeError(
             "Work Issue: conflicting closure evidence. Run 'gh issue view'."
         )
     state = issue.get("state")
     if state == "closed":
-        if issue.get("state_reason") != "completed" or evidence != [message]:
+        if issue.get("state_reason") != "completed" or not current:
             raise RuntimeError(
                 "Work Issue: closed without matching evidence. Reopen it."
             )
@@ -5346,7 +5375,7 @@ def close_work_issue(  # noqa: C901
         return
     if state != "open":
         raise RuntimeError("Work Issue: invalid state. Run 'gh issue view'.")
-    if not evidence:
+    if not current:
         github.comment(args.repo, issue_number, message)
     result = github.close_issue(args.repo, issue_number)
     if (
