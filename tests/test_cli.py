@@ -11475,6 +11475,155 @@ def test_status_classifies_merge_trailer_findings(
     assert main(["status", str(repo), "--json"]) == 0
 
 
+def fixture_install_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Skip the release lookup so status reports only the merge audit."""
+    monkeypatch.setattr(
+        cli,
+        "detect_install_state",
+        lambda *_args, **_kwargs: {
+            "state": "current",
+            "reason": "fixture",
+            "next_command": "none",
+        },
+    )
+
+
+def test_status_lists_merges_made_outside_the_lifecycle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Status names each unevidenced merge and the range it checked (#1345)."""
+    repo = audit_repository(tmp_path)
+    write_files(repo, {"old.txt": "old\n"})
+    commit(repo, "fix: UI merge before the cutover (#3)")
+    shas = baseline_history(repo, "release-init")
+    fixture_install_state(monkeypatch)
+    responses: dict[str, tuple[int, str]] = {}
+    stub_github(monkeypatch, responses)
+
+    # No merge after the baseline: the range is still named.
+    assert main(["status", str(repo)]) == 0
+    assert (
+        f"Merge audit: 0 merges checked in {shas['baseline']}..HEAD; "
+        "all have lifecycle evidence"
+    ) in capsys.readouterr().out
+
+    locator = "https://github.com/owner/repo/pull/7#issuecomment-201"
+    traced, body = traced_commit(repo, "evidenced", locator=locator)
+    responses["repos/owner/repo/issues/comments/201"] = (
+        0,
+        json.dumps({"body": body}),
+    )
+    assert main(["status", str(repo)]) == 0
+    assert (
+        f"Merge audit: 1 merges checked in {shas['baseline']}..HEAD; "
+        "all have lifecycle evidence"
+    ) in capsys.readouterr().out
+
+    write_files(repo, {"ui.txt": "merged in the GitHub UI\n"})
+    ui_merge = commit(repo, "fix: propagate roles (#171)")
+    responses["repos/owner/repo/pulls/171"] = (
+        0,
+        json.dumps(
+            {
+                "merged_by": {"login": "outsider"},
+                "merged_at": "2026-10-27T05:01:52Z",
+            }
+        ),
+    )
+    write_files(repo, {"unknown.txt": "no pull request\n"})
+    bare = commit(repo, "fix: pushed without a pull request")
+
+    assert main(["status", str(repo), "--json"]) == 0
+    audit = json.loads(capsys.readouterr().out)["merge_audit"]
+    assert audit["checked_range"] == f"{shas['baseline']}..HEAD"
+    assert [item["sha"] for item in audit["merges"]] == [traced, ui_merge, bare]
+    outside = audit["outside_lifecycle"]
+    assert [item["sha"] for item in outside] == [ui_merge, bare]
+    assert outside[0] | {"detail": ""} == {
+        "sha": ui_merge,
+        "finding": "untraced",
+        "detail": "",
+        "pull_request": 171,
+        "merged_by": "outsider",
+        "merged_at": "2026-10-27T05:01:52Z",
+    }
+    assert outside[1]["pull_request"] is None
+    assert outside[1]["merged_by"] is None
+    assert re.fullmatch(
+        r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", outside[1]["merged_at"]
+    )
+
+    assert main(["status", str(repo)]) == 0
+    text = capsys.readouterr().out
+    assert "3 merges checked" in text and "2 lack lifecycle evidence" in text
+    assert (
+        f"Notice: PR #171 merge {ui_merge} by outsider at "
+        "2026-10-27T05:01:52Z is untraced"
+    ) in text
+    assert f"Notice: no PR merge {bare} by unknown at" in text
+    assert traced not in text
+    assert "(#3)" not in text and "Replacement control" not in text
+
+
+def test_status_without_a_baseline_says_no_merge_was_checked(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A repository without the trailer writer audits no merge (#1345)."""
+    repo = audit_repository(tmp_path)
+    baseline_history(repo, "not-installed")
+    fixture_install_state(monkeypatch)
+    stub_github(monkeypatch, {})
+    assert main(["status", str(repo)]) == 0
+    assert (
+        "Merge audit: no merge checked (no governance baseline)"
+        in capsys.readouterr().out
+    )
+
+
+@pytest.mark.parametrize(
+    ("settings", "expected"),
+    [
+        ("verification_mode: local\nscheduled_checks: []\n", "local"),
+        (
+            "verification_mode_private: self-hosted\n"
+            "verification_mode_public: hosted\nscheduled_checks: []\n",
+            "self-hosted",
+        ),
+        (
+            "verification_mode: local\nscheduled_checks: [governance-drift]\n",
+            None,
+        ),
+        ("verification_mode: hosted\nscheduled_checks: []\n", None),
+    ],
+)
+def test_status_names_the_replacement_control(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    settings: str,
+    expected: str | None,
+) -> None:
+    """Without a server gate or drift schedule, status names itself (#1345)."""
+    repo = audit_repository(tmp_path)
+    write_files(repo, {".csarc/config.yml": f"_commit: {SOURCE_A}\n{settings}"})
+    commit(repo, "chore: settings")
+    fixture_install_state(monkeypatch)
+    stub_github(monkeypatch, {})
+    assert main(["status", str(repo), "--json"]) == 0
+    control = json.loads(capsys.readouterr().out).get("replacement_control")
+    if expected is None:
+        assert control is None
+        return
+    assert control.startswith(f"'{expected}' mode has no server-side merge")
+    assert "Run 'csarc status' regularly" in control
+    assert main(["status", str(repo)]) == 0
+    assert f"Replacement control: {control}" in capsys.readouterr().out
+
+
 def test_release_path_audit_fails_closed_on_untraced_merges(
     tmp_path: Path,
 ) -> None:

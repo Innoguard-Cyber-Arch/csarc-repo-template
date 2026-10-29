@@ -9874,6 +9874,9 @@ def command_status(args: argparse.Namespace) -> int:
     )
     result["governance_baseline"] = governance["baseline"]
     result["merge_audit"] = governance["merges"]
+    control = replacement_control(target)
+    if control:
+        result["replacement_control"] = control
     if args.json:
         print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     else:
@@ -9884,7 +9887,39 @@ def command_status(args: argparse.Namespace) -> int:
         print(f"Next: {result['next_command']}")
         # message-pattern: allow-end
         print_governance_audit(governance)
+        if control:
+            print(f"Replacement control: {control}")
     return 1 if governance["blocking"] else 0
+
+
+def replacement_control(target: Path) -> str | None:
+    """Name the control left when no server or schedule watches merges.
+
+    `local` and `self-hosted` keep the required-checks Ruleset off, and a
+    Free private repository has no Ruleset at all, so GitHub does not stop
+    a merge made outside the lifecycle. With `governance-drift` also off,
+    the regular `csarc status` audit is the only check left (#1345).
+    """
+    if not config_path(target).is_file():
+        return None
+    try:
+        answers = load_saved_settings(target).answers
+    except CliError:
+        return None
+    mode = effective_mode_data(answers).get(
+        "verification_mode", answers.get("verification_mode")
+    )
+    checks = answers.get("scheduled_checks")
+    drift_off = answers.get("enable_governance_drift_check") is False or (
+        isinstance(checks, list) and "governance-drift" not in checks
+    )
+    if mode not in {"local", "self-hosted"} or not drift_off:
+        return None
+    return (
+        f"'{mode}' mode has no server-side merge gate and governance-drift "
+        "is off, so GitHub does not stop a merge made outside the "
+        "lifecycle. Run 'csarc status' regularly; it lists such merges."
+    )
 
 
 def governance_audit(  # noqa: C901
@@ -9965,13 +10000,85 @@ def governance_audit(  # noqa: C901
         identity,
     )
     try:
-        return merge_trace.audit(context, ref, confirm)
+        result = merge_trace.audit(context, ref, confirm)
     except merge_trace.EvidenceError as error:
         raise CliError(str(error)) from error
+    code, remote = git(["remote", "get-url", "origin"])
+    describe_merge_audit(
+        result,
+        ref,
+        git,
+        api,
+        github_repository(remote.strip()) if code == 0 else None,
+    )
+    return result
+
+
+PULL_REQUEST_SUBJECT = re.compile(r"\(#([1-9][0-9]*)\)\s*$")
+
+
+def merge_origin(
+    sha: str,
+    git: Callable[[list[str]], tuple[int, str]],
+    api: Callable[[str], tuple[int, str]],
+    repository: str | None,
+) -> dict[str, object]:
+    """Return the pull request, merger, and time of one merge (#1345).
+
+    The squash subject names the pull request; GitHub names its merger.
+    When GitHub cannot be read, the merger stays None and the time falls
+    back to the commit time.
+    """
+    _, text = git(["log", "-1", "--format=%ct %s", sha])
+    seconds, _, subject = text.strip().partition(" ")
+    match = PULL_REQUEST_SUBJECT.search(subject)
+    number = int(match.group(1)) if match else None
+    pull: object = {}
+    if number is not None and repository is not None:
+        code, body = api(f"repos/{repository}/pulls/{number}")
+        try:
+            pull = json.loads(body) if code == 0 else {}
+        except json.JSONDecodeError:
+            pull = {}
+    pull = pull if isinstance(pull, dict) else {}
+    merger = pull.get("merged_by")
+    login = merger.get("login") if isinstance(merger, dict) else None
+    merged_at = pull.get("merged_at")
+    if not isinstance(merged_at, str):
+        merged_at = datetime.fromtimestamp(
+            int(seconds) if seconds.isdigit() else 0, UTC
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return {
+        "pull_request": number,
+        "merged_by": login if isinstance(login, str) else None,
+        "merged_at": merged_at,
+    }
+
+
+def describe_merge_audit(
+    result: dict[str, object],
+    ref: str,
+    git: Callable[[list[str]], tuple[int, str]],
+    api: Callable[[str], tuple[int, str]],
+    repository: str | None,
+) -> None:
+    """Add the checked range and each merge without lifecycle evidence.
+
+    The audit starts at the governance baseline, so merges before the
+    cutover are never checked or listed (#1345).
+    """
+    merges = cast(dict[str, object], result["merges"])
+    start = cast(dict[str, object], result["baseline"]).get("baseline")
+    merges["checked_range"] = f"{start}..{ref}" if start else None
+    merges["outside_lifecycle"] = [
+        {**item, **merge_origin(item["sha"], git, api, repository)}
+        for item in cast(list[dict[str, str]], merges["merges"])
+        if item["finding"] != "traced"
+    ]
 
 
 def print_governance_audit(governance: Mapping[str, object]) -> None:
-    """Print the baseline and every merge finding that needs attention."""
+    """Print the baseline, the checked range, and each untraced merge."""
     baseline = cast(dict[str, object], governance["baseline"])
     merges = cast(dict[str, object], governance["merges"])
     # message-pattern: allow-begin X5 governance audit report
@@ -9987,13 +10094,29 @@ def print_governance_audit(governance: Mapping[str, object]) -> None:
             "--confirm-governance-baseline <SHA>: "
             + ", ".join(cast(list[str], baseline["candidates"]))
         )
-    for item in cast(list[dict[str, str]], merges["merges"]):
-        if item["finding"] != "traced":
-            kind = "Notice" if item["finding"] == "untraced" else "Blocking"
-            print(
-                f"  {kind}: merge {item['sha']} is {item['finding']} "
-                f"({item['detail']})"
-            )
+    checked = merges.get("checked_range")
+    outside = cast(list[dict[str, object]], merges.get("outside_lifecycle", []))
+    if not checked:
+        print("Merge audit: no merge checked (no governance baseline)")
+    elif not outside:
+        print(
+            f"Merge audit: {len(cast(list[object], merges['merges']))} "
+            f"merges checked in {checked}; all have lifecycle evidence"
+        )
+    else:
+        print(
+            f"Merge audit: {len(cast(list[object], merges['merges']))} "
+            f"merges checked in {checked}; {len(outside)} lack lifecycle "
+            "evidence"
+        )
+    for item in outside:
+        kind = "Notice" if item["finding"] == "untraced" else "Blocking"
+        number = item["pull_request"]
+        print(
+            f"  {kind}: {f'PR #{number}' if number else 'no PR'} merge "
+            f"{item['sha']} by {item['merged_by'] or 'unknown'} at "
+            f"{item['merged_at']} is {item['finding']} ({item['detail']})"
+        )
     # message-pattern: allow-end
 
 
