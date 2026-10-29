@@ -172,8 +172,9 @@ def test_root_rulesets_match_the_template_render_of_root_settings() -> None:
             for key, value in config.items()
             if key in settings_schema.INTENT_SETTINGS
         },
-        # SPEC-011: root keeps the legacy key, one mode for both sides.
-        verification_mode=config["verification_mode"],
+        # SPEC-011 (#1332): the render reads the mode of the live
+        # visibility; this repository is public.
+        verification_mode=config["verification_mode_public"],
     )
     for name in ("rulesets", "rulesets-required-checks"):
         root = json.loads(
