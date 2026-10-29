@@ -2,6 +2,8 @@
 set -euo pipefail
 # Issue #1340: bash reads a script while it runs, so candidate code could
 # rewrite the rest of this file. The group below is parsed whole first.
+# Functions in it run through traps and verification_step.
+# shellcheck disable=SC2329
 {
 
 # control_root holds this entry point and its configuration reader;
