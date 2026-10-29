@@ -409,7 +409,7 @@ jobs:
           python-version: "3.14"
       - name: Set up uv 0.12.15
         if: ${{ steps.sync.outputs.clean != 'true' && (steps.reuse.outputs.reuse != 'true' || (github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned')) }}
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: "0.12.15"
       - name: Set up pnpm 11.22.0
