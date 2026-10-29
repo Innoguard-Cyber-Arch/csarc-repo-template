@@ -56,12 +56,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/trusted-verification"
           cp .csarc/scripts/*.py .csarc/scripts/check-trusted-verification \
             "$RUNNER_TEMP/trusted-verification/"
-          # Issue #1325: release ownership decides which release checks
-          # run, so it is read from this trusted base, not the candidate.
+          # Release ownership picks the release checks; read it from the base.
           cp .csarc/config.yml "$RUNNER_TEMP/trusted-verification/base-config.yml"
-          # Issue #1086: the entry point, stage gate, router, and config
-          # reader that decide the required result come from this trusted
-          # base, never from the candidate checked out next.
+          # The entry point, stage gate, router, and config reader come from
+          # this trusted base, never from the candidate checked out next.
           if [[ -f .csarc/scripts/trusted_executor.py ]]; then
             python3 .csarc/scripts/trusted_executor.py prepare \
               --source "$GITHUB_WORKSPACE" \
@@ -71,8 +69,7 @@ jobs:
             echo "::warning title=Trusted verification executor::This pull request base predates the trusted executor; verification runs the candidate entry point and is recorded as candidate-legacy until the base is synchronized."
             echo "executor=candidate-legacy" >> "$GITHUB_OUTPUT"
           fi
-          # Issue #1106: the guided release candidate check comes from the
-          # same trusted base; its step fails closed without this copy.
+          # The guided release check also comes from the trusted base.
           if [[ "$GUIDED_RELEASE" == "true" && -f .csarc/scripts/verify-release-candidate ]]; then
             python3 .csarc/scripts/trusted_executor.py prepare \
               --control-set release \
@@ -87,10 +84,8 @@ jobs:
           ref: {% raw %}${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}{% endraw %}
       - name: Read release ownership
         id: release
-        # The trusted reader must accept the candidate configuration; a value
-        # or schema it does not understand fails this step instead of
-        # silently skipping the release checks below. The value itself
-        # comes from the trusted base (Issue #1325).
+        # The trusted reader must accept the candidate configuration, or this
+        # step fails; the value itself comes from the trusted base.
         run: |
           python3 "$RUNNER_TEMP/trusted-verification/csarc_config.py" release_ownership >/dev/null
           ownership="$(python3 "$RUNNER_TEMP/trusted-verification/csarc_config.py" \
@@ -220,7 +215,7 @@ jobs:
           fi
           # The squash merge keeps only the PR title, so check its release
           # intent against the branch commits; older trusted bases without
-          # --pr-title keep their earlier interface (#1137).
+          # --pr-title keep their earlier interface.
           title_args=()
           if grep -q -- '"--pr-title"' "$release_policy"; then
             title_args=(--pr-title "$PR_TITLE")
@@ -381,9 +376,8 @@ jobs:
           evidence="${evidence//'%'/'%25'}"
           printf '::notice title=Trusted verification route evidence::%s\n' "$evidence"
       - name: Validate the guided release candidate
-        # Issue #1106: only this step holds the read-only token. It runs
-        # before any candidate code in this job and executes the trusted-base
-        # copy staged before checkout; the candidate tree is only data.
+        # Only this step holds the read-only token. It runs the trusted-base
+        # copy before any candidate code; the candidate tree is only data.
         if: {% raw %}${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}
         env:
           CSARC_PUBLISH_CANDIDATE_STATUS: "false"
@@ -462,10 +456,8 @@ jobs:
           CSARC_VERIFICATION_SUITE: {% raw %}${{ steps.effective.outputs.suite }}{% endraw %}
           EXECUTOR: {% raw %}${{ steps.trusted.outputs.executor }}{% endraw %}
         run: |
-          # The authoritative entry point is the trusted-base copy staged
-          # before checkout; it runs the checks inside the exact candidate
-          # tree. Only a base that predates Issue #1086 falls back to the
-          # candidate entry point, and its evidence omits executor=trusted-base.
+          # The trusted-base entry point checks the exact candidate tree; only
+          # an older base falls back to the candidate entry point.
           entry_root="$GITHUB_WORKSPACE"
           if [[ "$EXECUTOR" == "trusted-base" ]]; then
             entry_root="$RUNNER_TEMP/trusted-executor"
@@ -479,9 +471,8 @@ jobs:
             "$entry_root/.csarc/scripts/verify-fast"
           fi
       - name: Package the guided release candidate
-        # Packaging runs candidate build code, so this step gets no token
-        # and runs only after the trusted checks; the bundler itself is
-        # still the trusted-base copy (Issue #1106).
+        # Packaging runs candidate build code: no token, after the trusted
+        # checks, with the trusted-base bundler.
         if: {% raw %}${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}
         env:
           PR_HEAD_SHA: {% raw %}${{ github.event.pull_request.head.sha }}{% endraw %}
@@ -495,11 +486,9 @@ jobs:
             --root "$worktree" \
             --output "$RUNNER_TEMP/release-candidate-assets"
       - name: Candidate gate self-test (non-authoritative)
-        # Runs after the required result is decided. The trusted helper
-        # replays the trusted router arguments through the candidate's own
-        # router and config reader, without tokens or file-command variables,
-        # and only reports differences; continue-on-error keeps it from
-        # deciding the job.
+        # Runs after the required result: replays the trusted router
+        # arguments through the candidate router without tokens and only
+        # reports differences.
         if: {% raw %}${{ !cancelled() && steps.trusted.outputs.executor == 'trusted-base' && steps.plan.outcome == 'success' }}{% endraw %}
         continue-on-error: true
         timeout-minutes: 5

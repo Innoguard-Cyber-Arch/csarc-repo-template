@@ -429,13 +429,6 @@ def renders_release_workflow(
     return resolve_release_ownership(config, path) == "csarc-owned"
 
 
-def documentation_language_pair(config: dict[str, object]) -> tuple[str, str]:
-    """Return the primary and optional secondary documentation language."""
-    value = str(config["documentation_languages"])
-    primary, _, secondary = value.partition("+")
-    return primary, secondary
-
-
 # ---------------------------------------------------------------------------
 # Native project facts (SPEC-009 one-time seeds and derived context).
 # ---------------------------------------------------------------------------
