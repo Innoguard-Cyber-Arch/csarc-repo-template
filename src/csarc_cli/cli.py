@@ -14277,6 +14277,8 @@ def command_risk(args: argparse.Namespace) -> int:  # noqa: C901
         gh_arguments = list(args.gh_arguments)
         if gh_arguments[:1] == ["--"]:
             gh_arguments = gh_arguments[1:]
+        # Issue #1344: set the native Type and assignee at creation time.
+        gh_arguments = risk_tools.work_item_arguments(gh_arguments)
         url = project_roadmap.configured_project_url()
         if not url or args.body_out is not None:
             # An empty github_project_url never calls a Project API (#1080).

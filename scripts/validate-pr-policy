@@ -364,6 +364,7 @@ if [[ "${PR_ISSUE_STATE+x}" == "x" ]]; then
   issue_milestone_number="${PR_ISSUE_MILESTONE_NUMBER:-0}"
   issue_labels="${PR_ISSUE_LABELS-$PR_LABELS}"
   issue_type="${PR_ISSUE_TYPE:-}"
+  issue_assignees="${PR_ISSUE_ASSIGNEES:-}"
   issue_has_unchecked=false
   if grep -Eq "$unchecked_task_pattern" <<<"$issue_body"; then
     issue_has_unchecked=true
@@ -371,14 +372,15 @@ if [[ "${PR_ISSUE_STATE+x}" == "x" ]]; then
 else
   issue_payload="$(
     gh api "repos/$GITHUB_REPOSITORY/issues/$issue_number" \
-      --jq 'select(.pull_request | not) | [.state, .title, ((.body // "") | test("(?m)^\\s*-\\s+\\[\\s*\\]")), (.milestone.number // 0), (([.labels[].name] | join(",")) | if . == "" then "-" else . end), (.type.name // "-")] | @tsv' \
+      --jq 'select(.pull_request | not) | [.state, .title, ((.body // "") | test("(?m)^\\s*-\\s+\\[\\s*\\]")), (.milestone.number // 0), (([.labels[].name] | join(",")) | if . == "" then "-" else . end), (.type.name // "-"), (([.assignees[].login] | join(",")) | if . == "" then "-" else . end)] | @tsv' \
       2>/dev/null || true
   )"
   IFS=$'\t' read -r issue_state issue_title issue_has_unchecked \
-    issue_milestone_number issue_labels issue_type \
+    issue_milestone_number issue_labels issue_type issue_assignees \
     <<<"$issue_payload"
   [[ "$issue_labels" == "-" ]] && issue_labels=""
   [[ "$issue_type" == "-" ]] && issue_type=""
+  [[ "$issue_assignees" == "-" ]] && issue_assignees=""
   if [[ "${tracker_promotion:-false}" == "true" ]]; then
     issue_body="$(
       gh api "repos/$GITHUB_REPOSITORY/issues/$issue_number" \
@@ -468,8 +470,28 @@ case "$issue_type" in
     fail "Issue #${issue_number}: unsupported native Type. Use Bug, Feature, or Task."
     ;;
 esac
+issue_fix="python3 scripts/pr_lifecycle.py issue-edit --repo ${GITHUB_REPOSITORY} --issue-number ${issue_number}"
 if [[ -n "$issue_type" && -n "$issue_selected_label" && "$issue_selected_label" != "documentation" ]]; then
-  fail "Issue #${issue_number}: work-kind label repeats its Type. Remove the label."
+  fail "Issue #${issue_number}: work-kind label repeats its Type. Run '${issue_fix} --remove-label ${issue_selected_label}'."
+fi
+# Issue #1344: local and self-hosted modes have no hosted work-item
+# automation to turn an Issue form's fallback label into a native Type or to
+# assign the Issue, so the local lifecycle check requires both itself. A
+# repository without Issue Types (or an unreadable count) keeps the fallback
+# label path.
+if [[ "${PR_POLICY_LOCAL:-}" == "true" ]]; then
+  if [[ -z "$issue_type" && "${PR_REPO_ISSUE_TYPES-$(gh api graphql -f query="{repository(owner:\"${GITHUB_REPOSITORY%%/*}\",name:\"${GITHUB_REPOSITORY#*/}\"){issueTypes(first:1){totalCount}}}" --jq .data.repository.issueTypes.totalCount 2>/dev/null || true)}" =~ ^[1-9] ]]; then
+    case "$issue_selected_label" in
+      bug) type_fix="Bug --remove-label bug" ;;
+      enhancement) type_fix="Feature --remove-label enhancement" ;;
+      documentation) type_fix="Task" ;;
+      *) type_fix="<Bug|Feature|Task>" ;;
+    esac
+    fail "Issue #${issue_number}: no native Type. Run '${issue_fix} --type ${type_fix}'."
+  fi
+  if [[ -z "$issue_assignees" ]]; then
+    fail "Issue #${issue_number}: no assignee. Run '${issue_fix} --add-assignee @me'."
+  fi
 fi
 if [[ -z "$issue_expected_label" || "$selected_label" != "$issue_expected_label" ]]; then
   fail "PR label: differs from Issue #${issue_number}'s Type or label. Match it."

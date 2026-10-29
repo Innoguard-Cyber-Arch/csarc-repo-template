@@ -2752,6 +2752,8 @@ def require_local_pull_policy(repo: str, pull: dict[str, Any]) -> None:
             ),
             "PR_HEAD_SHA": str(head.get("sha") or ""),
             "PR_NUMBER": str(pull.get("number") or ""),
+            # Issue #1344: require native Type and assignee locally.
+            "PR_POLICY_LOCAL": "true",
             "PR_POLICY_READ_ONLY": "true",
             "PR_TITLE": str(pull.get("title") or ""),
         }

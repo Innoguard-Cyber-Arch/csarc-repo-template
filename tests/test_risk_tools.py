@@ -357,12 +357,15 @@ def test_cli_routes_issue_and_risk_commands(
 ) -> None:
     seen: list[object] = []
     monkeypatch.setattr(
+        risk_tools, "work_item_arguments", lambda arguments: [*arguments, "+"]
+    )
+    monkeypatch.setattr(
         risk_tools,
         "issue_create",
         lambda arguments, body_out: seen.append((arguments, body_out)) or 0,
     )
     assert cli.main(["issue", "create", "--", "--title", "Add report"]) == 0
-    assert seen == [(["--title", "Add report"], None)]
+    assert seen == [(["--title", "Add report", "+"], None)]
     monkeypatch.setattr(
         risk_tools,
         "register",
@@ -412,3 +415,69 @@ def test_saved_m18_backfill_manifest_is_canonical_and_bound() -> None:
         assert entry["acceptance"]
         assert entry["risks"]
         assert entry["problems"] == []
+
+
+class TypesStub:
+    """A `gh` runner whose repository has `count` Issue Types."""
+
+    def __init__(self, count: str) -> None:
+        self.count = count
+        self.calls: list[list[str]] = []
+
+    def __call__(self, command: list[str]) -> str:
+        self.calls.append(command)
+        if command[:2] == ["repo", "view"]:
+            return "o/r\n"
+        assert command[:2] == ["api", "graphql"], command
+        if self.count == "error":
+            raise risk_tools.RiskToolError("gh api failed")
+        return self.count + "\n"
+
+
+def test_work_item_arguments_set_native_type_and_assignee() -> None:
+    """#1344 AC2: the fallback label becomes a Type; @me is assigned."""
+    run = TypesStub("3")
+    assert risk_tools.work_item_arguments(
+        ["--title", "Fix report", "--label", "bug,security", "-b", "x"], run
+    ) == [
+        "--title",
+        "Fix report",
+        "-b",
+        "x",
+        "--assignee",
+        "@me",
+        "--label",
+        "security",
+        "--type",
+        "Bug",
+    ]
+    assert 'owner:"o",name:"r"' in run.calls[1][3]
+    assert risk_tools.work_item_arguments(
+        ["-a", "bob", "--type", "Task", "--label=enhancement,documentation"],
+        TypesStub("3"),
+    ) == ["-a", "bob", "--type", "Task", "--label", "documentation"]
+    assert risk_tools.work_item_arguments(
+        ["--repo", "x/y", "-l", "enhancement"], TypesStub("1")
+    )[-2:] == ["--type", "Feature"]
+
+
+def test_work_item_arguments_keep_fallback_labels_without_types() -> None:
+    """#1344 AC3: a repository without Issue Types keeps its label."""
+    for count in ("0", "null", "", "error"):
+        assert risk_tools.work_item_arguments(
+            ["--title", "Fix report", "--label", "bug"], TypesStub(count)
+        ) == ["--title", "Fix report", "--label", "bug", "--assignee", "@me"]
+
+
+def test_work_item_arguments_require_a_type_where_types_exist() -> None:
+    """#1344 AC2: no Type and no fallback label fails with the fix."""
+    with pytest.raises(risk_tools.RiskToolError, match="--type Bug"):
+        risk_tools.work_item_arguments(
+            ["--title", "Fix report"], TypesStub("3")
+        )
+    tracker = ["--title", "Milestone 9: Tracker"]
+    assert risk_tools.work_item_arguments(tracker, TypesStub("3")) == [
+        *tracker,
+        "--assignee",
+        "@me",
+    ]

@@ -45,7 +45,7 @@ Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─→ main
 ## Milestone 掛勾與持續同步
 
 {% if 'milestones' in lifecycle -%}
-PR 從唯一的 linked Issue 繼承 Milestone{% if hosted %}；`pr-policy-writes.yml` 在 PR 事件同步 classification、assignee 與 Milestone，Issue 改掛 Milestone 時 `work-item-lifecycle.yml` 同步所有 linked open PR{% else %}；local 模式不自動同步，由建立者以本機 wrapper 設定，`pr_lifecycle.py check` 在合併前比對{% endif %}。PR 指向多張 Issue、或 Issue 與 PR 的 Milestone 不一致時 fail closed。`promote/m<N>-*` PR 由 `pr_lifecycle.py create` 掛上 `Refs #<tracker>` 的 Milestone；tracker 標題或 Milestone 不符 `<N>` 時不建立 PR。
+PR 從唯一的 linked Issue 繼承 Milestone{% if hosted %}；`pr-policy-writes.yml` 在 PR 事件同步 classification、assignee 與 Milestone，Issue 改掛 Milestone 時 `work-item-lifecycle.yml` 同步所有 linked open PR{% else %}；local 模式不自動同步，由建立者以 `csarc issue create` 等本機 wrapper 設定，`pr_lifecycle.py check` 在合併前比對，並要求 linked Issue 有 assignee 與原生 Type（repository 支援 Issue Types 時）{% endif %}。PR 指向多張 Issue、或 Issue 與 PR 的 Milestone 不一致時 fail closed。`promote/m<N>-*` PR 由 `pr_lifecycle.py create` 掛上 `Refs #<tracker>` 的 Milestone；tracker 標題或 Milestone 不符 `<N>` 時不建立 PR。
 {%- if not hosted %}
 
 工作 PR 合併進 `dev/m*` 時，GitHub 不會依 `Closes #N` 關閉 Issue，本模式也沒有 workflow 補關。合併後執行 `python3 .csarc/scripts/pr_lifecycle.py close-work --repo <owner/repo> --pr-number <PR> --head-sha <head SHA>`：PR 已合併進 linked Issue 所屬 Milestone 的 `dev/m*`、head 與 PR 相符時，它在 Issue 留下綁定 PR 與 head 的證據並關閉 Issue，重跑不會重複寫入。條件不符時以 exit 1 結束並說明要修正什麼，Issue 保持 open。

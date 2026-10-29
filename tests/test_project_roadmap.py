@@ -331,6 +331,7 @@ def test_empty_setting_keeps_issue_create_free_of_project_calls(
     )
     monkeypatch.chdir(tmp_path)
     seen: list[tuple[object, ...]] = []
+    monkeypatch.setattr(risk_tools, "work_item_arguments", list)
     monkeypatch.setattr(
         risk_tools,
         "issue_create",
