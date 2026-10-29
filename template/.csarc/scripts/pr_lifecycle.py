@@ -2919,11 +2919,18 @@ def requirement_trace(
     keys = ("filename", "previous_filename")
 
     def read(path: str) -> str | None:
+        # Issue #1334: only a 404 means missing; other errors are retryable.
         quoted = urllib.parse.quote(path)
-        with contextlib.suppress(RuntimeError):
+        try:
             data = github.get(repo, f"contents/{quoted}?ref={head}")
-            if isinstance(data, dict) and data.get("type") == "file":
-                return base64.b64decode(str(data["content"])).decode()
+        except CommandError as error:
+            if "(HTTP 404)" in error.detail:
+                return None
+            raise RuntimeError(
+                f"Head file {path}: read failed. {GH_RETRY}."
+            ) from error
+        if isinstance(data, dict) and data.get("type") == "file":
+            return base64.b64decode(str(data["content"])).decode()
         return None
 
     logins = [str(a.get("login")) for a in issue.get("assignees") or []]

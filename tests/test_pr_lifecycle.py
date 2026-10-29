@@ -6064,6 +6064,44 @@ def test_untraced_routes_and_body_without_issue_skip_the_trace() -> None:
         trace(github, "owner/repo", pull, "a" * 40, None)
 
 
+@pytest.mark.parametrize("layer", ["scripts", "template/.csarc/scripts"])
+@pytest.mark.parametrize(
+    ("detail", "message"),
+    [
+        ("gh: Not Found (HTTP 404)", "RK29 AC1: tests/x.py::y is not in"),
+        (
+            "error connecting to api.github.com",
+            "Head file tests/x.py: read failed. Run 'gh auth status' and rerun",
+        ),
+    ],
+)
+def test_trace_separates_a_missing_head_file_from_a_read_error(
+    monkeypatch: pytest.MonkeyPatch, layer: str, detail: str, message: str
+) -> None:
+    """Issue #1334: only a 404 is missing; a read error asks for a retry."""
+    module = runpy.run_path(
+        str(Path(__file__).parents[1] / layer / "pr_lifecycle.py")
+    )
+    github = FakeGitHub("a" * 40)
+    github.trace_evidence = False
+    section = trace_section().split("| AC1 |")[0] + (
+        "| AC1 | tests/x.py::y |\n"
+        "| R1 | accepted: Solo maintainer accepts the residual risk |\n"
+    )
+    pull = github.pull()
+    pull["body"] = "Closes #42" + section
+    fixture = github.get
+
+    def get(repo: str, path: str) -> object:
+        if path.startswith("contents/"):
+            raise module["CommandError"](["gh", "api", path], detail)
+        return fixture(repo, path)
+
+    monkeypatch.setattr(github, "get", get)
+    with pytest.raises(RuntimeError, match=re.escape(message)):
+        module["requirement_trace"](github, "owner/repo", pull, "a" * 40, None)
+
+
 def test_ready_preflight_keeps_an_incomplete_trace_in_draft(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
