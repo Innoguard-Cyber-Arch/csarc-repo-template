@@ -43,6 +43,7 @@ from csarc_cli import (
     lifecycle_report,
     merge_trace,
     policy_documentation,
+    project_drift,
     project_roadmap,
     release_phase,
     repository_facts,
@@ -14231,6 +14232,19 @@ def parser() -> argparse.ArgumentParser:
     selection = sync_project.add_mutually_exclusive_group(required=True)
     selection.add_argument("--issue", type=int)
     selection.add_argument("--milestone", type=int)
+    selection.add_argument(
+        "--all",
+        action="store_true",
+        help="with --report: every Issue of the repository",
+    )
+    sync_project.add_argument(
+        "--report",
+        action="store_true",
+        help=(
+            "read-only: list closed items not at Done, board Issues missing "
+            "from the Project, and empty dates; never writes (exit 1 on drift)"
+        ),
+    )
     sync_project.add_argument("--target-date", default="", metavar="YYYY-MM-DD")
     sync_project.add_argument("--repo", default="", metavar="OWNER/NAME")
     sync_project.add_argument(
@@ -14265,6 +14279,21 @@ def parser() -> argparse.ArgumentParser:
 def command_risk(args: argparse.Namespace) -> int:  # noqa: C901
     """Run `csarc issue create` or one read-only `csarc risk` command."""
     if args.command == "issue" and args.issue_command == "sync-project":
+        if args.report:
+            if args.yes or args.target_date:
+                raise CliError(
+                    "--report cannot take '--yes' or '--target-date': the "
+                    "drift report never writes. Remove those options."
+                )
+            return project_drift.command_report(
+                args.repo, issue=args.issue, milestone=args.milestone
+            )
+        if args.all:
+            raise CliError(
+                "--all is only valid with --report: a date sync takes one "
+                "Issue or one Milestone. Add '--report' or pass '--issue' or "
+                "'--milestone'."
+            )
         return project_roadmap.command_sync(
             args.repo,
             issue=args.issue,

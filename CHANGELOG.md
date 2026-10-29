@@ -7,6 +7,16 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.49.0] - 2026-10-30
+
+### Features
+
+* feat(project): report ProjectV2 status drift read-only (e68a780)
+
+### Bug Fixes
+
+* fix(project): keep the generated Project guide unchanged (107a665)
+
 ## [0.48.2] - 2026-10-30
 
 ### Bug Fixes
