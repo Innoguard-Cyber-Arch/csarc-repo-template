@@ -286,10 +286,15 @@ def test_local_verify_fast_computes_workflow_scope(tmp_path: Path) -> None:
     """A weaker explicit scope cannot suppress workflow-specific checks."""
     output, log = _run_stubbed_verify_fast(tmp_path, ".github/workflows/ci.yml")
     assert "suite=fast scopes=source,workflow" in output
-    assert "Workflow and shell lint ./scripts/lint-workflows-shell" in log
-    # The audit stage belongs to the control set (Issue #1086): it runs from
-    # the entry point's own tree and receives the subject tree explicitly.
+    # The audit stage and, since Issue #1333, the security checks belong to
+    # the control set (Issue #1086): they run from the entry point's own
+    # tree and receive the subject tree explicitly.
     repo = (tmp_path / "repo").resolve()
+    assert (
+        "Workflow and shell lint env "
+        f"CSARC_VERIFICATION_SUBJECT_ROOT={repo} "
+        f"{repo}/scripts/lint-workflows-shell"
+    ) in log
     assert (
         "GitHub Actions audit env "
         f"CSARC_VERIFICATION_SUBJECT_ROOT={repo} "
@@ -304,7 +309,12 @@ def test_local_verify_fast_computes_dependency_scope(
     """A dependency lockfile change cannot silently skip the scan."""
     output, log = _run_stubbed_verify_fast(tmp_path, lockfile)
     assert "suite=fast scopes=dependency,source" in output
-    assert "Dependency scan ./scripts/verify-dependencies" in log
+    repo = (tmp_path / "repo").resolve()
+    assert (
+        "Dependency scan env "
+        f"CSARC_VERIFICATION_SUBJECT_ROOT={repo} "
+        f"{repo}/scripts/verify-dependencies"
+    ) in log
 
 
 @pytest.mark.parametrize(
