@@ -1,10 +1,5 @@
 name: Work item lifecycle
 
-# Issue triage, Milestone lifecycle, and Work Issue closure share one job:
-# they react to the same events and need the same permissions. CI and
-# reviewer assignment (pull-request write permission) stay separate. Each
-# step keeps its own `if:` with `!cancelled()`, so one failure skips no other.
-
 on:
   issues:
     types:
@@ -66,7 +61,6 @@ jobs:
         with:
           persist-credentials: false
 
-      # -- Issue triage: assign the author and apply issue classification --
       - name: "Issue triage: assign author and apply issue classification"
         if: >-
           !cancelled() &&
@@ -85,7 +79,6 @@ jobs:
           ISSUE_TYPE: ${{ github.event.issue.type.name }}
         run: ./scripts/validate-issue-policy
 
-      # -- Issue metadata: keep linked open pull requests on the same Milestone --
       - name: "Issue metadata: synchronize linked pull requests"
         if: >-
           !cancelled() &&
@@ -101,7 +94,6 @@ jobs:
           --repo "$GITHUB_REPOSITORY"
           --issue "$ISSUE_NUMBER"
 
-      # -- Milestone lifecycle: reconcile the current Milestone --
       - name: "Milestone lifecycle: reconcile lifecycle and refresh PR checks"
         if: >-
           !cancelled() &&
@@ -119,12 +111,6 @@ jobs:
           --event-issue "$EVENT_ISSUE_NUMBER"
           --event-action "$EVENT_ACTION"
 
-      # -- Milestone lifecycle: refresh a standalone/hotfix Issue's linked PR check (#743) --
-      # The no-Milestone counterpart to the step above: an Issue comment is
-      # the only event that can flip a standalone/hotfix Issue's approval
-      # state (Approve/Admin-approve:/Object:/Resolve:, #743), so this is
-      # deliberately scoped to issue_comment rather than every event type
-      # the step above reacts to.
       - name: "Milestone lifecycle: refresh standalone Issue PR check"
         if: >-
           !cancelled() &&
@@ -140,7 +126,6 @@ jobs:
           --repo "$GITHUB_REPOSITORY"
           --issue "$ISSUE_NUMBER"
 
-      # -- Milestone lifecycle: reconcile the Milestone an Issue moved off of --
       - name: "Milestone lifecycle: reconcile the previous Milestone"
         if: >-
           !cancelled() &&
@@ -159,7 +144,6 @@ jobs:
           --event-issue "$EVENT_ISSUE_NUMBER"
           --event-action "$EVENT_ACTION"
 
-      # -- Work Issue closure: close the Issue a merged dev/m* work PR completes --
       - name: "Work Issue closure: checkout the merge commit"
         if: >-
           !cancelled() &&
