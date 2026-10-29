@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-actionlint_bin="$("$repo_root/.csarc/scripts/install-tool" actionlint)"
-shellcheck_bin="$("$repo_root/.csarc/scripts/install-tool" shellcheck)"
+script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Issue #1318: tools and settings come from this checkout; a trusted
+# check root names the tree it checks in CSARC_VERIFICATION_SUBJECT_ROOT.
+repo_root="$(cd "${CSARC_VERIFICATION_SUBJECT_ROOT:-$script_root}" && pwd)"
+actionlint_bin="$("$script_root/.csarc/scripts/install-tool" actionlint)"
+shellcheck_bin="$("$script_root/.csarc/scripts/install-tool" shellcheck)"
 
 workflow_files=()
 while IFS= read -r -d '' file_path; do

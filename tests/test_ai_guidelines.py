@@ -11,6 +11,19 @@ from jinja2 import Environment, StrictUndefined
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "template" / "AGENTS.md.jinja"
 WORKFLOW_TEMPLATE = ROOT / "template/.csarc/docs/agent-workflow.md.jinja"
+CI_POLICY_TEMPLATE = ROOT / "template/.csarc/docs/ci-policy.md.jinja"
+# Issue #1274: each ci-policy rule agent-workflow names, the anchor it must
+# link, and the rendered ci-policy text that proves that section owns it.
+CI_POLICY_CLAIMS = {
+    "review requirements, merge eligibility": (
+        "審查與合併資格",
+        "目前 head 有有效授權",
+    ),
+    "the Actions-outage governance-switch route": (
+        "failure-與-fallback",
+        "Hosted Actions 中斷時改走 governance-switch 路線",
+    ),
+}
 READINESS = ROOT / "docs/security-scanner-readiness.md"
 
 
@@ -113,6 +126,63 @@ def test_generated_guidance_has_one_source_and_real_commands(
     # the Linux/WSL2 system C linker prerequisite (build-essential), not
     # just this template repo's own README/docs/install.md.
     assert ("build-essential" in rendered) is rust_command
+
+
+def _sections(text: str) -> dict[str, str]:
+    """Map each GitHub heading slug to the text up to the next heading."""
+    sections: dict[str, str] = {}
+    parts = re.split(r"(?m)^#{1,6} +(.+?) *$", text)
+    for heading, body in zip(parts[1::2], parts[2::2], strict=True):
+        slug = re.sub(r"[^\w\- ]", "", heading.lower()).replace(" ", "-")
+        sections[slug] = body
+    return sections
+
+
+@pytest.mark.parametrize("verification_mode", ["local", "hosted"])
+def test_agent_workflow_names_only_rendered_ci_policy_rules(
+    verification_mode: str,
+) -> None:
+    """Issue #1274: each named ci-policy rule and anchor is rendered."""
+    environment = Environment(autoescape=True, undefined=StrictUndefined)
+    context = {
+        "admin_bypass": "off",
+        "copilot_review": "disabled",
+        "documentation_mode": "content-only",
+        "language": "ci",
+        "languages": [],
+        "lifecycle": ["issues", "milestones"],
+        "package_name": "guidance_fixture",
+        "project_maturity": "development",
+        "project_mode": "new",
+        "project_name": "Guidance fixture",
+        "release_ownership": "csarc-owned",
+        "release_trigger": "manual",
+        "scheduled_checks": [],
+        "verification_mode": verification_mode,
+        "project_visibility": "private",
+    }
+    workflow = environment.from_string(
+        WORKFLOW_TEMPLATE.read_text(encoding="utf-8")
+    ).render(**context)
+    policy = environment.from_string(
+        CI_POLICY_TEMPLATE.read_text(encoding="utf-8")
+    ).render(**context)
+    sections = _sections(policy)
+
+    anchors = re.findall(r"\]\(ci-policy\.md#([^)\s]+)\)", workflow)
+    assert anchors
+    assert [anchor for anchor in anchors if anchor not in sections] == []
+    for claim, (anchor, rule) in CI_POLICY_CLAIMS.items():
+        rendered = rule in policy
+        lines = [line for line in workflow.splitlines() if claim in line]
+        assert bool(lines) is rendered, claim
+        if rendered:
+            assert rule in sections[anchor], (anchor, rule)
+            # The claim links the section that owns it, not a neighbor.
+            line = lines[0]
+            link = f"](ci-policy.md#{anchor})"
+            assert link in line[: line.index(claim)], (claim, anchor)
+    assert ("governance-switch" in workflow) is (verification_mode == "hosted")
 
 
 def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:

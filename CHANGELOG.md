@@ -7,11 +7,104 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.48.0] - 2026-10-29
+
+### Included prereleases
+
+* v0.45.0-beta.1
+* v0.46.0-beta.1
+* v0.47.0-beta.1
+* v0.47.1-beta.1
+* v0.47.2-beta.1
+* v0.47.3-beta.1
+* v0.47.4-beta.1
+* v0.47.5-beta.1
+
+### Features
+
+* feat(settings): choose the verification mode by repository visibility (12f9fd2)
+* feat(lifecycle): route self-hosted verification to registered VMs (8e4f56a)
+* feat(lifecycle): require a linked registration for self-hosted mode (3dc1ca1)
+* feat(cli): manage self-hosted verification windows (5cbece2)
+* feat(settings): refuse container with self-hosted verification (ba888dd)
+* feat(dependabot): accept reverified squashes in sync and release (b47da5f)
+* feat(self-hosted): warn about retire in update and lifecycle (9f26cca)
+* feat(settings): default private projects to self-hosted verification (b7e70df)
+* feat(self-hosted): enforce the dispatch cutoff in the workflow (10f731c)
+
+### Bug Fixes
+
+* fix(agent-docs): point the governance-switch route at its rendered section (058d428)
+* fix(dependabot): reverify behind updates on the latest main (a8d5acd)
+* fix(verification): skip local VM record (695bcac)
+* fix(update): preserve hidden settings in M21 beta (6fa539c)
+* fix(update): allow verification mode changes (01b104e)
+* fix(workflow): quote self-hosted run name (f4f2694)
+* fix(self-hosted): allow retire public transition (1c0e45e)
+* fix(self-hosted): validate public settings before retire (d989fa8)
+* fix(self-hosted): count only the newest VM run on a head (388446f)
+* fix(self-hosted): let an unregistered project merge its registration (3920f89)
+* fix(self-hosted): let the retire exit record evidence (01ea207)
+* fix(verification): run trusted check scripts in hosted and VM runs (3fba6b5)
+* fix(template): trim generated payload back under budget (42fd9b5)
+* fix(template): restore the local evidence note in agent workflow (3dd6a0f)
+
+## [0.47.5-beta.1] - 2026-10-27
+
+### Bug Fixes
+
+* fix(self-hosted): allow retire public transition (d2872a8)
+
+## [0.47.4-beta.1] - 2026-10-27
+
+### Bug Fixes
+
+* fix(workflow): quote self-hosted run name (6d33991)
+
+## [0.47.3-beta.1] - 2026-10-27
+
+### Bug Fixes
+
+* fix(update): separate mode transition render contexts (2d71b36)
+
+## [0.47.2-beta.1] - 2026-10-27
+
+### Bug Fixes
+
+* fix(update): preserve M21 hidden settings (73deb47)
+
+## [0.47.1-beta.1] - 2026-10-27
+
+### Bug Fixes
+
+* fix(verification): skip local VM record (5b6e770)
+
+## [0.47.0-beta.1] - 2026-10-26
+
+### Features
+
+* feat(settings): refuse container with self-hosted verification (ba888dd)
+* feat(settings): default new private projects to self-hosted verification (f316cf7)
+* feat(dependabot): accept reverified squashes in sync and release (b47da5f)
+* feat(self-hosted): warn about retire in update and lifecycle (9f26cca)
+
+### Bug Fixes
+
+* fix(dependabot): reverify behind updates on the latest main (a8d5acd)
+
 ## [0.46.0] - 2026-10-27
 
 ### Features
 
 * feat(update): detect policy documentation drift (4c5e5f4)
+
+## [0.46.0-beta.1] - 2026-10-25
+
+### Features
+
+* feat(lifecycle): route self-hosted verification to registered VMs (8e4f56a)
+* feat(cli): manage self-hosted verification windows (7ef2029)
+* feat(lifecycle): require a linked registration for self-hosted mode (3dc1ca1)
 
 ## [0.45.2] - 2026-10-26
 
@@ -30,6 +123,18 @@ CHANGELOG 的 tag。
 ### Features
 
 * feat(drift): run the governance drift check weekly (5dc8fa7)
+
+## [0.45.0-beta.1] - 2026-10-25
+
+### Features
+
+* feat(settings): choose the verification mode by repository visibility (40a5624)
+
+### Bug Fixes
+
+* fix(agent-docs): point the governance-switch route at its rendered section (058d428)
+* fix(settings): keep the local default and do not offer self-hosted yet (d1a04ba)
+* fix(update): pass the derived verification mode to both render sides (69d3155)
 
 ## [0.44.5] - 2026-10-26
 

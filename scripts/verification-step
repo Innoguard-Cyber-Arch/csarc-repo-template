@@ -19,6 +19,17 @@ verification_subject_root() {
   (cd "$subject" && pwd)
 }
 
+# Issue #1325: trusted helpers run on the system python3 (hosted CI sets up
+# 3.14; the VM image ships at least 3.12). Fail closed on an older one
+# instead of failing later inside a check.
+verification_require_python() {
+  if ! python3 -I -c 'import sys; sys.exit(sys.version_info < (3, 12))' \
+    >/dev/null 2>&1; then
+    echo "ERROR: Python is too old: trusted checks need python3 3.12 or newer. Put such a python3 first on PATH." >&2
+    return 2
+  fi
+}
+
 verification_command_string() {
   local argument
   local rendered=""

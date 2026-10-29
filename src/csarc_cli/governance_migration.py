@@ -42,7 +42,8 @@ GOVERNANCE_KEYS = frozenset(
         "lifecycle",
         "project_maturity",
         "release_trigger",
-        "verification_mode",
+        "verification_mode_private",
+        "verification_mode_public",
     }
 )
 # A governance key may only keep its value, move to an equivalent or
@@ -148,8 +149,12 @@ def legacy_governance_values(
         ),
         "release_trigger": "main",
         # Older repositories were verified by hosted checks; migrating them
-        # to local evidence would lower the existing protection.
-        "verification_mode": "hosted",
+        # to local evidence would lower the existing protection. A saved
+        # legacy mode carries to both visibilities unchanged (SPEC-011).
+        **dict.fromkeys(
+            settings_schema.MODE_KEYS,
+            answers.get(settings_schema.LEGACY_MODE, "hosted"),
+        ),
     }
 
 

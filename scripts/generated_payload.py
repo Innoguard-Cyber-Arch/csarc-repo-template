@@ -41,28 +41,42 @@ BASE_DATA: dict[str, object] = {
     "repository_url": "https://github.com/example/payload-fixture",
     "security_reporting_channel": "Use the private security contact.",
 }
-# `solo-local` as #1058 decision 14 expands it for an empty folder.
+HOSTED: dict[str, object] = {
+    "verification_mode_private": "hosted",
+    "verification_mode_public": "hosted",
+}
+# The `solo-local` preset as #1058 decision 14 expands it for an empty folder.
 SOLO_LOCAL: dict[str, object] = {
-    "verification_mode": "local",
+    "verification_mode_private": "local",
+    "verification_mode_public": "local",
     "documentation_mode": "content-only",
     "documentation_languages": "zh-tw",
     "lifecycle": [],
     "scheduled_checks": [],
     "languages": [],
 }
+# SPEC-011 (ADR self-hosted-verification Q2): `solo-default` measures the
+# `solo-self-hosted` default preset (#1272); `solo-local` keeps the former
+# local default on the same budgets.
+SOLO_SELF_HOSTED: dict[str, object] = {
+    **SOLO_LOCAL,
+    "verification_mode_private": "self-hosted",
+    "verification_mode_public": "hosted",
+}
 ADOPTED_HOSTED: dict[str, object] = {
     "project_mode": "existing",
     "release_ownership": "product-owned",
-    "verification_mode": "hosted",
+    **HOSTED,
     "documentation_mode": "content-only",
     "documentation_languages": "zh-tw",
     "languages": ["python"],
 }
 FIXTURES: dict[str, dict[str, object]] = {
-    "solo-default": dict(SOLO_LOCAL),
+    "solo-default": dict(SOLO_SELF_HOSTED),
+    "solo-local": dict(SOLO_LOCAL),
     "solo-python": {**SOLO_LOCAL, "languages": ["python"]},
     "hosted-csarc-owned-python": {
-        "verification_mode": "hosted",
+        **HOSTED,
         "release_ownership": "csarc-owned",
         "documentation_mode": "content-only",
         "documentation_languages": "zh-tw",
@@ -83,6 +97,7 @@ FIXTURES: dict[str, dict[str, object]] = {
 CONVERSION_REF = "cd0b69d"
 RAW_TARGETS: dict[str, int] = {
     "solo-default": 1_000_000,
+    "solo-local": 1_000_000,
     "solo-python": 1_010_000,
     "hosted-csarc-owned-python": 1_200_000,
     "consumer-a": 1_050_000,
@@ -90,26 +105,36 @@ RAW_TARGETS: dict[str, int] = {
 }
 CONVERSION_OFFSETS: dict[str, int] = {
     "solo-default": 215_456,
+    "solo-local": 215_456,
     "solo-python": 215_476,
     "hosted-csarc-owned-python": 278_881,
     "consumer-a": 229_124,
     "consumer-b": 228_687,
 }
-# Every per-fixture budget (#1231). A later change may only lower these.
+# Every per-fixture budget (#1231). A later change may only lower these;
+# raising one needs an ADR revision and owner approval, as #1267 did for the
+# solo agent_doc_tokens (2026-10-25).
 TARGETS: dict[str, dict[str, int]] = {
     "solo-default": {
         "files": 92,
         "canonical_bytes": 784_000,
         "write_workflows": 0,
         "pull_request_target_workflows": 0,
-        "agent_doc_tokens": 13_500,
+        "agent_doc_tokens": 14_000,
+    },
+    "solo-local": {
+        "files": 92,
+        "canonical_bytes": 784_000,
+        "write_workflows": 0,
+        "pull_request_target_workflows": 0,
+        "agent_doc_tokens": 14_000,
     },
     "solo-python": {
         "files": 95,
         "canonical_bytes": 794_000,
         "write_workflows": 0,
         "pull_request_target_workflows": 0,
-        "agent_doc_tokens": 13_500,
+        "agent_doc_tokens": 14_000,
     },
     "hosted-csarc-owned-python": {
         "files": 126,
@@ -197,6 +222,7 @@ RUNTIME_GROUPS: dict[str, frozenset[str]] = {
             "local_verification.py",
             "resolve-cache-root",
             "scan-secrets",
+            "self_hosted_evidence.py",
             "verification-step",
             "verification_cost.py",
             "verification_evidence.py",

@@ -11,6 +11,8 @@
 
 Copier update 可以更新第一層；第二層首次建立後必須保留。若結構遷移無法無損完成，更新應提出人工步驟並 fail closed，不得靜默覆寫或搬移內容。
 
+`.csarc/docs/ci-policy.md` 與 `csarc.md` 只描述目前可見性生效的驗證模式（`verification_mode_private` 或 `verification_mode_public`）。可見性改變後以 `csarc update` 重新產生；`self-hosted` 轉成 public 前改用 `csarc self-hosted retire`，它建立的 PR 會以 public 模式重新產生。
+
 ## 核心設定
 
 | 設定 | 值 | 行為 |

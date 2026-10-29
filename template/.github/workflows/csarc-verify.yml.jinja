@@ -1,0 +1,187 @@
+{% set vm = self_hosted_runner.id if self_hosted_runner else "unregistered" -%}
+# ADR self-hosted-verification D3 (Issue #1269): an operator dispatches this
+# read-only workflow on the pull request's target branch; it never triggers
+# itself. The registered VM runs it, and pr_lifecycle.py reads the run back.
+name: CSARC self-hosted verify
+run-name: "{% raw %}Self-hosted verify PR #${{ inputs.pull_request }} ${{ inputs.head_sha }}{% endraw %}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Pull request number
+        required: true
+      head_sha:
+        description: Exact pull request head SHA
+        required: true
+      environment:
+        description: Registered environment for the target branch
+        required: true
+        type: choice
+        options:
+{%- for env in self_hosted_environments %}
+          - {{ env }}
+{%- endfor %}
+      window_end:
+        description: Window end in UTC, such as 2026-10-25T09:00Z
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+jobs:
+  verify:
+    name: verify
+    # Labels come from self_hosted_runner; the expression keeps actionlint
+    # from rejecting the registered custom label.
+    runs-on: [self-hosted, "{{ '${{' }} 'csarc-vm-{{ vm }}' }}", {% raw %}"csarc-env-${{ inputs.environment }}"{% endraw %}] # zizmor: ignore[obfuscation]
+    timeout-minutes: 30
+    steps:
+      - name: Check the dispatch before any candidate code
+        id: dispatch
+        env:
+          ENVIRONMENT: {% raw %}${{ inputs.environment }}{% endraw %}
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+          HEAD_SHA: {% raw %}${{ inputs.head_sha }}{% endraw %}
+          PR_NUMBER: {% raw %}${{ inputs.pull_request }}{% endraw %}
+          WINDOW_END: {% raw %}${{ inputs.window_end }}{% endraw %}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, urllib.request
+          from datetime import UTC, datetime
+          e = os.environ
+          repo, base = e["GITHUB_REPOSITORY"], e["GITHUB_REF_NAME"]
+
+
+          def fail(message):
+              print(f"ERROR: Self-hosted dispatch: {message}")
+              raise SystemExit(1)
+
+
+          def api(path):
+              request = urllib.request.Request(
+                  f"{e['GITHUB_API_URL']}/repos/{repo}{path}",
+                  headers={"Authorization": f"Bearer {e['GH_TOKEN']}"},
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+
+
+          env = "uat" if base == "main" else ""
+          env = "dev" if re.fullmatch(r"dev/[mi].+", base) else env
+          window = e["WINDOW_END"]
+          if not (
+              e["PR_NUMBER"].isdigit()
+              and re.fullmatch(r"[0-9a-f]{40}", e["HEAD_SHA"])
+              and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d)?Z", window)
+          ):
+              fail("bad inputs. Pass a PR number, a full SHA, and a UTC time.")
+          if e["GITHUB_EVENT_NAME"] != "workflow_dispatch" or e[
+              "GITHUB_WORKFLOW_REF"
+          ] != f"{repo}/.github/workflows/csarc-verify.yml@refs/heads/{base}":
+              fail("not this workflow on a branch. Dispatch it on the target.")
+          if api("").get("private") is not True:
+              fail("the repository is public. Verify it in its public mode.")
+          pull = api(f"/pulls/{e['PR_NUMBER']}")
+          if (pull["head"].get("repo") or {}).get("full_name") != repo:
+              fail("the head is a fork. Fork pull requests never run here.")
+          if pull["head"]["sha"] != e["HEAD_SHA"] or pull["state"] != "open":
+              fail("the head moved or closed. Dispatch the current head.")
+          if pull["base"]["ref"] != base or env != e["ENVIRONMENT"] or not env:
+              fail(f"{base} needs '{env or 'dev or uat'}'. Dispatch on it.")
+          end = datetime.fromisoformat(window.replace("Z", "+00:00"))
+          left = max(int((end - datetime.now(UTC)).total_seconds()), 0)
+          # Issue #1320: the operator declares window_end; this runner's clock
+          # checks it. A window lasts at most 24 hours (ADR D7), and a job
+          # needs the 30-minute timeout before the window closes.
+          if left > 86400:
+              fail(f"window_end {window} is over 24h ahead. Pass the VM's end.")
+          if left < 1800:
+              fail(
+                  f"the {env} window ends at {window} ({left // 60}m left), "
+                  f"under the 30m job timeout. Run 'csarc self-hosted extend "
+                  f"--env {env}', then dispatch again."
+              )
+          if left < 7200:
+              line = (
+                  f"WARNING: Self-hosted {env} verification: the window ends "
+                  f"at {window} ({left // 3600}h{left % 3600 // 60:02d}m "
+                  f"left). Run 'csarc self-hosted extend --env {env}' before "
+                  "it closes."
+              )
+              print(line)
+              with open(e["GITHUB_STEP_SUMMARY"], "a") as summary:
+                  summary.write(line + "\n")
+          labels = ",".join(sorted(item["name"] for item in pull["labels"]))
+          with open(e["GITHUB_OUTPUT"], "a") as output:
+              output.write(
+                  f"head={e['HEAD_SHA']}\nhead_ref={pull['head']['ref']}\n"
+                  f"labels={labels}\nenvironment={env}\nwindow={window}\n"
+              )
+          PY
+      - name: Check out the trusted verification policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          ref: {% raw %}${{ github.sha }}{% endraw %}
+      - name: Preserve the trusted verification policy
+        run: |
+          mkdir -p "$RUNNER_TEMP/trusted-verification"
+          cp .csarc/scripts/*.py "$RUNNER_TEMP/trusted-verification/"
+          # Issue #1086: the entry point and router come from this trusted
+          # base, never from the candidate checked out next. Issue #1325:
+          # so do every check script and the settings that select steps.
+          python3 .csarc/scripts/trusted_executor.py prepare \
+            --source "$GITHUB_WORKSPACE" \
+            --destination "$RUNNER_TEMP/trusted-executor"
+      - name: Check out the exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: {% raw %}${{ steps.dispatch.outputs.head }}{% endraw %}
+      - name: Select the trusted verification plan
+        id: plan
+        env:
+          HEAD_REF: {% raw %}${{ steps.dispatch.outputs.head_ref }}{% endraw %}
+          HEAD_SHA: {% raw %}${{ steps.dispatch.outputs.head }}{% endraw %}
+          LABELS: {% raw %}${{ steps.dispatch.outputs.labels }}{% endraw %}
+        run: |
+          trusted="$RUNNER_TEMP/trusted-verification"
+          files="$RUNNER_TEMP/changed-files"
+          merge_base="$(git merge-base "$GITHUB_SHA" "$HEAD_SHA")"
+          git diff --no-renames --name-only -z "$merge_base" "$HEAD_SHA" > "$files"
+          python3 "$trusted/ci_tier.py" --event pull_request \
+            --base "$GITHUB_REF_NAME" --head "$HEAD_REF" --labels "$LABELS" \
+            --files-from "$files" --output-json "$RUNNER_TEMP/ci-plan.json" \
+            --github-output "$RUNNER_TEMP/plan-output"
+          scopes="$(sed -n 's/^scopes=//p' "$RUNNER_TEMP/plan-output")"
+          path_tier="$(sed -n 's/^tier=//p' "$RUNNER_TEMP/plan-output")"
+          floor="$(python3 "$trusted/trusted_executor.py" channel-floor \
+            --base "$GITHUB_REF_NAME" --labels "$LABELS" --path-tier "$path_tier")"
+          {
+            echo "tier=${floor##*suite=}"
+            echo "scopes=${scopes:-unknown}"
+            echo "tree=$(git rev-parse "$HEAD_SHA^{tree}")"
+          } >> "$GITHUB_OUTPUT"
+      - name: Execute self-hosted verification head={% raw %}${{ steps.dispatch.outputs.head }}{% endraw %} tree={% raw %}${{ steps.plan.outputs.tree }}{% endraw %} tier={% raw %}${{ steps.plan.outputs.tier }}{% endraw %} scopes={% raw %}${{ steps.plan.outputs.scopes }}{% endraw %} mode=self-hosted environment={% raw %}${{ steps.dispatch.outputs.environment }}{% endraw %} window={% raw %}${{ steps.dispatch.outputs.window }}{% endraw %}
+        env:
+          CSARC_CI_BASE: {% raw %}${{ github.ref_name }}{% endraw %}
+          CSARC_CI_LABELS: {% raw %}${{ steps.dispatch.outputs.labels }}{% endraw %}
+          CSARC_CI_SCOPES: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
+          CSARC_CI_TIER: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
+          CSARC_SELF_HOSTED_VM: "true"
+          CSARC_VERIFICATION_SUITE: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
+        run: |
+          entry_root="$RUNNER_TEMP/trusted-executor"
+          python3 "$RUNNER_TEMP/trusted-verification/trusted_executor.py" \
+            verify --destination "$entry_root"
+          export CSARC_VERIFICATION_SUBJECT_ROOT="$GITHUB_WORKSPACE"
+          if [[ "$CSARC_CI_TIER" == "full" ]]; then
+            "$entry_root/.csarc/scripts/verify"
+          else
+            "$entry_root/.csarc/scripts/verify-fast"
+          fi

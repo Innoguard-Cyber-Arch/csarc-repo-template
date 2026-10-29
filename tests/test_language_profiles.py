@@ -1001,9 +1001,7 @@ def test_optional_features_render_independently(
     assert (project / "docs/site").exists() is site_enabled
     assert (project / ".csarc/scripts/build-repo-site").exists() is site_enabled
     verify = (project / ".csarc/scripts/verify").read_text(encoding="utf-8")
-    assert (
-        "./.csarc/scripts/build-repo-site --check" in verify
-    ) is site_enabled
+    assert ('"$checks/build-repo-site" --check' in verify) is site_enabled
     pages = json.loads(
         (project / ".csarc/policies/pages.json").read_text(encoding="utf-8")
     )

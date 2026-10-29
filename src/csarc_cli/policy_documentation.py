@@ -74,10 +74,27 @@ POLICY_KEYWORDS: dict[str, tuple[str, ...]] = {
         "single writer merger",
         "單一寫入者",
     ),
-    "verification_mode": (
-        "verification_mode",
-        "verification mode",
-        "驗證模式",
+    "self_hosted_environments": (
+        "self_hosted_environments",
+        "self-hosted environments",
+        "self-hosted 環境",
+    ),
+    "self_hosted_runner": (
+        "self_hosted_runner",
+        "self-hosted runner",
+        "self-hosted 登記",
+    ),
+    # Milestone 21 (#1265) split the single verification_mode setting by
+    # repository visibility; each half keeps its own keyword map.
+    "verification_mode_private": (
+        "verification_mode_private",
+        "private verification mode",
+        "private 驗證模式",
+    ),
+    "verification_mode_public": (
+        "verification_mode_public",
+        "public verification mode",
+        "public 驗證模式",
     ),
 }
 

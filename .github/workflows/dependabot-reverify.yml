@@ -1,0 +1,250 @@
+name: Dependabot reverify
+
+# Issue #1264 (template repository only): when main advances, verify each
+# approved, eligible, conflict-free Dependabot pull request again on GitHub's
+# test merge of its unchanged head into the current main, instead of waiting
+# for Dependabot to rebase. Nothing here changes Dependabot's branch or
+# commit. pr_lifecycle.py accepts a base behind main only on the Dependabot
+# path and only with this result bound to the current main.
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: ["CI", "PR policy", "PR review", "Dependabot auto-merge"]
+    branches: ["dependabot/**"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions: {}
+
+# One run at a time; a newer pending run replaces an older pending one.
+concurrency:
+  group: dependabot-reverify-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    name: inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
+    outputs:
+      main_sha: ${{ steps.main.outputs.sha }}
+      matrix: ${{ steps.inventory.outputs.matrix || '[]' }}
+      conflicts: ${{ steps.inventory.outputs.conflicts || '[]' }}
+    steps:
+      - name: Check out the trusted default-branch revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Bind the current main
+        id: main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          live="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          if [[ "$live" != "$GITHUB_SHA" ]]; then
+            echo "NOTICE: Main moved to $live; the run for that commit reverifies it."
+            exit 0
+          fi
+          echo "sha=$live" >> "$GITHUB_OUTPUT"
+      - name: List open Dependabot pull requests before any action
+        id: inventory
+        if: ${{ steps.main.outputs.sha != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_SHA: ${{ steps.main.outputs.sha }}
+        run: |
+          python3 scripts/dependabot_reverify.py inventory \
+            --repo "$GITHUB_REPOSITORY" \
+            --main-sha "$MAIN_SHA" \
+            --github-output "$GITHUB_OUTPUT" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+  notice:
+    name: conflict notice
+    needs: inventory
+    if: ${{ needs.inventory.outputs.conflicts != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check out the trusted default-branch revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.inventory.outputs.main_sha }}
+      - name: Post one conflict notice per pull request
+        env:
+          CONFLICTS: ${{ needs.inventory.outputs.conflicts }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/dependabot_reverify.py notice \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr-numbers "$CONFLICTS"
+
+  reverify:
+    # The check name carries the pull request number so each one keeps its
+    # own latest result on the main commit.
+    name: dependabot-reverify (#${{ matrix.number }})
+    needs: inventory
+    if: ${{ needs.inventory.outputs.matrix != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJSON(needs.inventory.outputs.matrix) }}
+    steps:
+      - name: Check out the trusted verification policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          ref: ${{ needs.inventory.outputs.main_sha }}
+      - name: Set up Python 3.14
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Preserve the trusted verification policy
+        run: |
+          mkdir -p "$RUNNER_TEMP/trusted-verification"
+          cp scripts/*.py "$RUNNER_TEMP/trusted-verification/"
+          python3 scripts/trusted_executor.py prepare \
+            --source "$GITHUB_WORKSPACE" \
+            --destination "$RUNNER_TEMP/trusted-executor"
+      - name: Check out GitHub's test merge of the unchanged head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: refs/pull/${{ matrix.number }}/merge
+      - name: Bind the test merge to this head and main
+        id: bind
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ matrix.head_ref }}
+          HEAD_SHA: ${{ matrix.head_sha }}
+          MAIN_SHA: ${{ needs.inventory.outputs.main_sha }}
+          PR_NUMBER: ${{ matrix.number }}
+        run: |
+          trusted="$RUNNER_TEMP/trusted-verification"
+          merge="$(git rev-parse HEAD)"
+          parents="$(git rev-list --parents -n 1 HEAD | cut -d' ' -f2-)"
+          python3 "$trusted/dependabot_reverify.py" bind \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr-number "$PR_NUMBER" \
+            --head-sha "$HEAD_SHA" \
+            --main-sha "$MAIN_SHA" \
+            --merge-sha "$merge" \
+            --parents "$parents"
+          files="$RUNNER_TEMP/changed-files"
+          git diff --no-renames --name-only -z "$MAIN_SHA" "$merge" > "$files"
+          python3 "$trusted/ci_tier.py" \
+            --event pull_request \
+            --base main \
+            --head "$HEAD_REF" \
+            --labels "" \
+            --draft false \
+            --files-from "$files" \
+            --output-json "$RUNNER_TEMP/ci-plan.json" \
+            --github-output "$GITHUB_OUTPUT" \
+            --force-full
+          {
+            echo "merge=$merge"
+            echo "tree=$(git rev-parse "HEAD^{tree}")"
+          } >> "$GITHUB_OUTPUT"
+      - name: Set up uv 0.12.15
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.15"
+          # Candidate code runs in this job on a main-ref event; never save a
+          # cache that later main workflows could restore.
+          enable-cache: false
+      - name: Set up pnpm 11.22.0
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: "11.22.0"
+          run_install: false
+      - name: Set up Node.js 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Set up Rust 1.98.0
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
+          rustup default 1.98.0
+      - name: Set up Go 1.27.1
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache: false
+      - name: Execute Dependabot reverification pr=${{ matrix.number }} head=${{ matrix.head_sha }} main=${{ needs.inventory.outputs.main_sha }} merge=${{ steps.bind.outputs.merge }} tree=${{ steps.bind.outputs.tree }} scopes=${{ steps.bind.outputs.scopes }} tier=full command=./scripts/verify-template.sh executor=trusted-base
+        env:
+          CSARC_CI_BASE: main
+          CSARC_CI_DRAFT: "false"
+          CSARC_CI_SCOPES: ${{ steps.bind.outputs.scopes }}
+          CSARC_CI_TIER: full
+          CSARC_VERIFICATION_SUITE: full
+          GOTOOLCHAIN: local
+        run: |
+          # The trusted-base entry point runs the checks inside the test
+          # merge tree; the candidate's own entry point is never used.
+          entry_root="$RUNNER_TEMP/trusted-executor"
+          python3 "$RUNNER_TEMP/trusted-verification/trusted_executor.py" \
+            verify --destination "$entry_root"
+          export CSARC_VERIFICATION_SUBJECT_ROOT="$GITHUB_WORKSPACE"
+          "$entry_root/scripts/verify-template.sh"
+
+  dispatch:
+    name: dispatch exact merge
+    needs: [inventory, reverify]
+    if: ${{ always() && needs.inventory.outputs.matrix != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      checks: read
+      contents: read
+    steps:
+      - name: Check out the trusted default-branch revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.inventory.outputs.main_sha }}
+      - name: Select pull requests whose reverification passed
+        id: passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_SHA: ${{ needs.inventory.outputs.main_sha }}
+          MATRIX: ${{ needs.inventory.outputs.matrix }}
+        run: |
+          python3 scripts/dependabot_reverify.py passed \
+            --repo "$GITHUB_REPOSITORY" \
+            --main-sha "$MAIN_SHA" \
+            --matrix "$MATRIX" \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Wake the lifecycle exact merge for each passing pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          READY: ${{ steps.passed.outputs.ready }}
+        run: |
+          jq -c '.[]' <<<"$READY" | while read -r item; do
+            gh workflow run dependabot-merge.yml \
+              --repo "$GITHUB_REPOSITORY" \
+              --ref main \
+              -f pr_number="$(jq -r .number <<<"$item")" \
+              -f head_sha="$(jq -r .head_sha <<<"$item")"
+          done

@@ -7,7 +7,6 @@ import argparse
 import importlib
 import json
 import os
-import re
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -24,30 +23,13 @@ else:
         f"{__package__}.evidence_freshness"
     )
 
-SCHEMA_VERSION = 1
-SHA = re.compile(r"[0-9a-f]{40}")
+SCHEMA_VERSION = evidence_freshness.RECORD_SCHEMA_VERSION
+SHA = evidence_freshness.SHA
 VALID_TIERS = {"fast", "full"}
-# One normalized verification record serves both trust modes. Only the trust
-# label differs, so a reader can compare candidates without ever treating
-# self-attested local evidence as trusted hosted evidence.
-TRUST_LOCAL = "self-attested-local"
-TRUST_HOSTED = "github-hosted"
-RECORD_KEYS = frozenset(
-    {
-        "schema_version",
-        "trust",
-        "success",
-        "head_sha",
-        "tree_sha",
-        "base_ref",
-        "base_sha",
-        "tier",
-        "scopes",
-        "command",
-        "completed_at",
-    }
-)
-RECORD_TIERS = {"docs", "fast", "full"}
+TRUST_LOCAL = evidence_freshness.TRUST_LOCAL
+TRUST_HOSTED = evidence_freshness.TRUST_HOSTED
+RECORD_KEYS = evidence_freshness.RECORD_KEYS
+RECORD_TIERS = evidence_freshness.RECORD_TIERS
 TIER_RANK = {"fast": 0, "full": 1}
 VALID_SCOPES = {
     "all",
@@ -62,73 +44,7 @@ VALID_SCOPES = {
 }
 
 
-def normalized_record(evidence: dict[str, Any], trust: str) -> dict[str, Any]:
-    """Project local or hosted evidence onto the shared record contract.
-
-    Local evidence names its base `base_ref`; hosted evidence names it `base`
-    and may omit it for legacy execution claims. Every other field and its
-    validation are identical, and the trust label is kept as given.
-    """
-    if trust not in {TRUST_LOCAL, TRUST_HOSTED}:
-        raise RuntimeError(
-            f"Bad trust label: '{trust}' is unknown. Use 'local' or 'hosted'."
-        )
-    declared = evidence.get("trust")
-    if declared is not None and declared != trust:
-        raise RuntimeError(
-            "Bad trust label: evidence differs. Run verify again."
-        )
-    base_ref = evidence.get("base_ref", evidence.get("base"))
-    base_sha = evidence.get("base_sha")
-    scopes = evidence.get("scopes")
-    record: dict[str, Any] = {
-        "schema_version": SCHEMA_VERSION,
-        "trust": trust,
-        "success": True,
-        "head_sha": evidence.get("head_sha"),
-        "tree_sha": evidence.get("tree_sha"),
-        "base_ref": base_ref,
-        "base_sha": base_sha,
-        "tier": evidence.get("tier"),
-        "scopes": sorted(set(scopes)) if isinstance(scopes, list) else scopes,
-        "command": evidence.get("command"),
-        "completed_at": evidence.get("completed_at"),
-    }
-    legacy_hosted_base = trust == TRUST_HOSTED and not base_ref and not base_sha
-    exact_base = (
-        isinstance(base_ref, str)
-        and bool(base_ref)
-        and isinstance(base_sha, str)
-        and SHA.fullmatch(base_sha) is not None
-    )
-    if (
-        evidence.get("success", True) is not True
-        or not isinstance(record["head_sha"], str)
-        or SHA.fullmatch(record["head_sha"]) is None
-        or not isinstance(record["tree_sha"], str)
-        or SHA.fullmatch(record["tree_sha"]) is None
-        or not (legacy_hosted_base or exact_base)
-        or record["tier"] not in RECORD_TIERS
-        or not isinstance(record["scopes"], list)
-        or not record["scopes"]
-        or not all(isinstance(scope, str) for scope in record["scopes"])
-        or not isinstance(record["command"], str)
-        or not record["command"]
-        or not isinstance(record["completed_at"], str)
-    ):
-        raise RuntimeError(
-            "Bad evidence: a field is invalid. Run verify again."
-        )
-    try:
-        completed_at = datetime.fromisoformat(record["completed_at"])
-    except ValueError as error:
-        raise RuntimeError(
-            "Record completion time is malformed: not ISO 8601. "
-            "Run verify again."
-        ) from error
-    if completed_at.tzinfo is None:
-        raise RuntimeError("Bad completion time: no zone. Run verify again.")
-    return record
+normalized_record = evidence_freshness.normalized_record
 
 
 def git(*args: str) -> str:
@@ -186,11 +102,18 @@ def evidence_path(head_sha: str) -> Path:
 
 
 def verification_mode(root: Path | None = None) -> str:
-    """Return the configured verification trust mode."""
-    target = root or repository_root()
-    return str(
-        csarc_config.load_config(config_path(target))["verification_mode"]
-    )
+    """Return `hosted` when no visibility uses local-family evidence.
+
+    Only local and self-hosted renders ship this file (SPEC-011), and both
+    record self-attested local evidence; self-hosted merges never accept it
+    as VM evidence.
+    """
+    config = csarc_config.load_config(config_path(root or repository_root()))
+    sides = {
+        config["verification_mode_private"],
+        config["verification_mode_public"],
+    }
+    return "hosted" if sides == {"hosted"} else "local"
 
 
 def resolve_base(base: str = "") -> tuple[str, str]:
@@ -255,10 +178,20 @@ def record(
     base: str = "",
     expected_head_sha: str = "",
     expected_base_sha: str = "",
+    control_root: Path | None = None,
 ) -> dict[str, Any] | None:
-    """Write evidence only after a canonical local suite has succeeded."""
+    """Write evidence only after a canonical local suite has succeeded.
+
+    control_root is the checkout whose verifier ran. It is the candidate
+    itself in an ordinary run. When the trusted base's verifier checks a
+    candidate that no longer ships this recorder, such as the public render
+    of a self-hosted exit (ADR self-hosted-verification Q1, #1318), the
+    base's settings decide whether local evidence applies.
+    """
+    if os.environ.get("CSARC_SELF_HOSTED_VM") == "true":
+        return None
     root = repository_root()
-    if verification_mode(root) != "local":
+    if verification_mode(control_root or root) != "local":
         return None
     if tier not in VALID_TIERS:
         raise RuntimeError(f"Tier is invalid: '{tier}'. Use 'fast' or 'full'.")
@@ -295,8 +228,12 @@ def record(
     tree_sha = git("rev-parse", "HEAD^{tree}")
     base_ref, base_sha = resolve_base(base)
     if expected_base_sha and base_sha != expected_base_sha:
+        # The base moved during the run, or a commit was given as the base
+        # and the configured branch is not at it (#1318).
         raise RuntimeError(
-            "Base changed during verification: stale. Run verify again."
+            f"Base does not match: '{base_ref}' is at {base_sha[:12]}, "
+            f"not the planned {expected_base_sha[:12]}. Update '{base_ref}' "
+            "or run verify again."
         )
     command_root = (
         ".csarc/scripts"
@@ -432,6 +369,7 @@ def main() -> None:
     parser.add_argument("--base", default="")
     parser.add_argument("--head-sha", default="")
     parser.add_argument("--base-sha", default="")
+    parser.add_argument("--control-root", type=Path, default=None)
     args = parser.parse_args()
     try:
         record(
@@ -440,6 +378,7 @@ def main() -> None:
             args.base,
             args.head_sha,
             args.base_sha,
+            args.control_root,
         )
     except (RuntimeError, subprocess.CalledProcessError) as error:
         sys.stderr.write(f"ERROR: {error}\n")

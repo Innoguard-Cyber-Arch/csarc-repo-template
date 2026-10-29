@@ -9,7 +9,11 @@ base instead of the candidate. `prepare` copies exactly that control set out
 of the trusted base checkout before the candidate is checked out; the hosted
 job then runs the staged entry point with `CSARC_VERIFICATION_SUBJECT_ROOT`
 pointing at the exact candidate tree, so the checks themselves (tests, lint,
-scans) still exercise the candidate's code.
+scans) still exercise the candidate's code. Issue #1325: in a generated
+project the control set also holds every `.csarc/scripts` file and the
+base's `.csarc/config.yml`, so the check scripts and the settings that
+select steps come from the base too; the candidate's own tests and lint
+configuration still run, because they are the subject.
 
 `self-test` runs only after the authoritative result exists. It compares the
 candidate's own router and configuration reader with the trusted decision and
@@ -52,7 +56,7 @@ import sys
 import tempfile
 from collections.abc import Generator
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 if __package__ in {None, ""}:
@@ -85,6 +89,11 @@ GENERATED_CONTROL_FILES = (
     ".csarc/scripts/verify",
     ".csarc/scripts/verify-fast",
 )
+# Issue #1325: a generated control set also carries every check script
+# beside the entry points and the settings that select steps, so the
+# hosted and VM runs never execute a candidate copy of a check. The
+# candidate only supplies the files the checks read.
+GENERATED_SETTINGS = ".csarc/config.yml"
 MANIFEST = "trusted-executor.json"
 # Issue #1106: the release control set is the guided candidate entry point
 # plus every Python module in the same directory, so a module it loads
@@ -128,7 +137,15 @@ def control_paths(
             "Use 'verification' or 'release'."
         )
     if scripts_prefix(root) == GENERATED_SCRIPTS:
-        return sorted(GENERATED_CONTROL_FILES)
+        paths = {*GENERATED_CONTROL_FILES, GENERATED_SETTINGS}
+        # Symbolic links are listed too, so prepare rejects them instead of
+        # silently leaving that check to the candidate.
+        paths.update(
+            path.relative_to(root).as_posix()
+            for path in (root / GENERATED_SCRIPTS).iterdir()
+            if path.is_symlink() or path.is_file()
+        )
+        return sorted(paths)
     paths = set(CONTROL_FILES)
     for pattern in CONTROL_GLOBS:
         paths.update(
@@ -143,7 +160,8 @@ def is_control_path(path: str) -> bool:
     """Return whether one repository path belongs to the control set."""
     return (
         path in CONTROL_FILES
-        or path in GENERATED_CONTROL_FILES
+        or path == GENERATED_SETTINGS
+        or PurePosixPath(path).parent.as_posix() == GENERATED_SCRIPTS
         or (path.startswith("scripts/verify-stage-") and "/" not in path[8:])
     )
 
@@ -383,8 +401,16 @@ GOVERNANCE_ORDER: dict[str, tuple[str, ...]] = {
     "admin_bypass": ("off", "beta-only", "always"),
     "copilot_review": ("off", "allowed"),
     "governance_mode": ("managed", "observe"),
-    "verification_mode": ("hosted", "local"),
+    # SPEC-011: self-hosted is in neither order, so any switch to or from
+    # it takes the reviewed route.
+    "verification_mode_private": ("hosted", "local"),
+    "verification_mode_public": ("hosted", "local"),
 }
+# Any change to the self-hosted registration is a governance switch.
+GOVERNANCE_EXACT = csarc_config.SELF_HOSTED_KEYS
+# Issue #1325: hosted CI reads release_ownership from the candidate to pick
+# the release checks, so any change to it takes the reviewed route.
+GOVERNANCE_CHANGES = ("release_ownership",)
 GOVERNANCE_FLAGS = ("enable_codeql",)
 GOVERNANCE_LISTS = ("lifecycle", "scheduled_checks")
 GOVERNANCE_MINIMUMS = ("coverage_threshold",)
@@ -537,9 +563,9 @@ def read_candidate_config(
             + ("matches" if matches else "does not match")
         )
     if known and all(item.endswith(" matches") for item in items):
-        csarc_config.validate_config(
-            {key: values[key] for key in values if key not in new}, path
-        )
+        checked = {key: values[key] for key in values if key not in new}
+        csarc_config.validate_config(checked, path)
+        values = {**checked, **{key: values[key] for key in new}}
         seen = ",".join(f"{key}:{known[key][0]}:{tag}" for key in new)
         source = f"release:{tag} inventory={seen}"
         # message-pattern: allow X1 stdout carries the JSON route decision
@@ -570,6 +596,9 @@ def governance_relaxations(  # noqa: C901
             # An unordered change (added, removed, or unknown) counts as a
             # relaxation so it can only land through the reviewed route.
             relaxed.append(f"{key}: {before} -> {after}")
+    for key in GOVERNANCE_CHANGES:
+        if base.get(key) != candidate.get(key):
+            relaxed.append(f"{key}: {base.get(key)} -> {candidate.get(key)}")
     for key in GOVERNANCE_FLAGS:
         if base.get(key) is True and candidate.get(key) is not True:
             relaxed.append(f"{key}: true -> {candidate.get(key)}")
@@ -589,6 +618,9 @@ def governance_relaxations(  # noqa: C901
         before, after = base.get(key), candidate.get(key)
         if type(before) is int and (type(after) is not int or after < before):
             relaxed.append(f"{key}: {before} -> {after}")
+    for key in GOVERNANCE_EXACT:
+        if base.get(key) != candidate.get(key):
+            relaxed.append(f"{key}: {base.get(key)} -> {candidate.get(key)}")
     for key in GOVERNANCE_GRANTS:
         before, after = base.get(key, ""), candidate.get(key, "")
         if after and after != before:
@@ -652,6 +684,43 @@ def require_route(decision: RouteDecision, labels: set[str]) -> None:
             + "; ".join(decision.reasons)
             + f". Add the '{GOVERNANCE_SWITCH_LABEL}' label; it keeps "
             "required checks, the exact head, and the remote lease."
+        )
+
+
+def require_registration(
+    base: dict[str, object], candidate: dict[str, object], issue: str = "-"
+) -> None:
+    """Print the registration inventory, then require its link (#1270).
+
+    Only the URL format is checked; csarc-devops is never read, because the
+    VM enforces the registration itself (ADR D7, Q5).
+    """
+    keys = ("verification_mode_private", *GOVERNANCE_EXACT)
+    changes = [
+        f"- {key}: {base.get(key, '-')} -> {candidate.get(key, '-')}"
+        for key in keys
+        if base.get(key) != candidate.get(key)
+    ]
+    if not changes:
+        return
+    runner = candidate.get(keys[1])
+    runner = runner if isinstance(runner, dict) else {}
+    url = runner.get("registration")
+    sys.stdout.write(
+        "NOTICE: Self-hosted registration inventory follows; csarc-devops "
+        "is not read.\n"
+    )
+    changes[:0] = [f"- Issue: {issue}", f"- registration: {url or '-'}"]
+    sys.stdout.writelines(f"{line}\n" for line in changes)
+    if candidate.get(keys[0]) == "self-hosted" and not (
+        csarc_config.RUNNER.fullmatch(f"{runner.get('id')} {url}")
+    ):
+        detail = f"{url} is not a csarc-devops Issue" if url else "missing"
+        raise RuntimeError(
+            f"Self-hosted registration: {detail}. Set "
+            "self_hosted_runner.registration to "
+            "https://github.com/<owner>/csarc-devops/issues/<n>, and keep "
+            f"the '{GOVERNANCE_SWITCH_LABEL}' label."
         )
 
 
@@ -869,6 +938,7 @@ def _route_command(args: argparse.Namespace) -> int:
     if args.enforce:
         try:
             require_route(decision, labels)
+            require_registration(base, candidate)
         except RuntimeError as error:
             sys.stderr.write(f"ERROR: {error}\n")
             return 1

@@ -15,19 +15,32 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import cast
 
-LIFECYCLE_REPORT_FORMAT_VERSION = "2.4.0"
-# The reader still validates a 2.0.0, 2.1.0, or 2.2.0 report (for example
-# one embedded in an earlier final plan) by its own rules; the writer emits
-# only 2.4.0.
+LIFECYCLE_REPORT_FORMAT_VERSION = "2.5.0"
+# The reader still validates a 2.0.0, 2.1.0, 2.2.0, 2.3.0, or 2.4.0 report
+# (for example one embedded in an earlier final plan) by its own rules; the
+# writer emits only 2.5.0.
 PREVIOUS_REPORT_FORMAT_VERSION = "2.0.0"
 REPORT_FORMAT_VERSION_2_1 = "2.1.0"
 REPORT_FORMAT_VERSION_2_2 = "2.2.0"
 REPORT_FORMAT_VERSION_2_3 = "2.3.0"
+REPORT_FORMAT_VERSION_2_4 = "2.4.0"
 READABLE_REPORT_FORMAT_VERSIONS = (
     PREVIOUS_REPORT_FORMAT_VERSION,
     REPORT_FORMAT_VERSION_2_1,
     REPORT_FORMAT_VERSION_2_2,
     REPORT_FORMAT_VERSION_2_3,
+    REPORT_FORMAT_VERSION_2_4,
+    LIFECYCLE_REPORT_FORMAT_VERSION,
+)
+# Versions that carry the 2.3.0 writing-guide prompt.
+WRITING_GUIDE_VERSIONS = (
+    REPORT_FORMAT_VERSION_2_3,
+    REPORT_FORMAT_VERSION_2_4,
+    LIFECYCLE_REPORT_FORMAT_VERSION,
+)
+# Versions that carry the 2.4.0 policy-documentation results (Issue #1297).
+POLICY_DOCUMENTATION_VERSIONS = (
+    REPORT_FORMAT_VERSION_2_4,
     LIFECYCLE_REPORT_FORMAT_VERSION,
 )
 # 2.3.0 adds the read-only writing-guide review prompt (Issue #1224).
@@ -173,6 +186,8 @@ APPROVAL_ROUTE_KEYS = frozenset({"confirmation", "reason", "state"})
 APPROVAL_ROUTE_STATES = ("route-observed", "none-observed", "inconclusive")
 APPROVAL_CONFIRMATIONS = ("second-approver", "copilot-entitlement")
 WORK_MODES = ("solo-local", "solo-hosted", "team", "custom")
+# 2.5.0 adds the self-hosted default work mode (Issue #1272).
+SELF_HOSTED_WORK_MODE = "solo-self-hosted"
 PLAN_KEYS = frozenset(
     {"mode", "path", "replayable", "schema_version", "sha256"}
 )
@@ -355,11 +370,7 @@ def _validate_files(report: Mapping[str, object]) -> list[Mapping[str, object]]:
         _member(row["reason"], FILE_ACTIONS[action], f"{path}.reason")
         if row["reason"] == COMPATIBILITY_SHIM and report[
             "report_format_version"
-        ] not in (
-            REPORT_FORMAT_VERSION_2_2,
-            REPORT_FORMAT_VERSION_2_3,
-            LIFECYCLE_REPORT_FORMAT_VERSION,
-        ):
+        ] not in (REPORT_FORMAT_VERSION_2_2, *WRITING_GUIDE_VERSIONS):
             raise _fail(f"{path}.reason", "compatibility-shim needs 2.2.0")
         if not isinstance(row["path"], str):
             raise _fail(f"{path}.path", "must be a string")
@@ -390,7 +401,7 @@ def _validate_actions(
             or kind not in UPDATE_ONLY_ACTION_KINDS_2_0
         )
         and (
-            report["report_format_version"] == LIFECYCLE_REPORT_FORMAT_VERSION
+            report["report_format_version"] in POLICY_DOCUMENTATION_VERSIONS
             or kind != "documentation-review"
         )
     ]
@@ -503,7 +514,12 @@ def _validate_setup(report: Mapping[str, object], operation: str) -> None:  # no
         raise _fail("$.setup", "only adopt carries a setup record")
     setup = _mapping(report["setup"], "$.setup")
     _exact_keys(setup, SETUP_KEYS, "$.setup")
-    _member(setup["work_mode"], WORK_MODES, "$.setup.work_mode")
+    modes = (
+        (SELF_HOSTED_WORK_MODE, *WORK_MODES)
+        if report["report_format_version"] == LIFECYCLE_REPORT_FORMAT_VERSION
+        else WORK_MODES
+    )
+    _member(setup["work_mode"], modes, "$.setup.work_mode")
     questions = setup["questions"]
     if not isinstance(questions, list) or not all(
         isinstance(item, str) for item in cast(list[object], questions)
@@ -619,7 +635,7 @@ def validate_report(report: object) -> Mapping[str, object]:
         REPORT_KEYS_2_0
         if version == PREVIOUS_REPORT_FORMAT_VERSION
         else REPORT_KEYS_2_4
-        if version == LIFECYCLE_REPORT_FORMAT_VERSION
+        if version in POLICY_DOCUMENTATION_VERSIONS
         else REPORT_KEYS_2_3
         if version == REPORT_FORMAT_VERSION_2_3
         else REPORT_KEYS_2_1,
@@ -634,9 +650,9 @@ def validate_report(report: object) -> Mapping[str, object]:
     _validate_summary(value, settings, files, actions)
     _validate_status(value, operation, actions)
     _validate_sections(value)
-    if version in (REPORT_FORMAT_VERSION_2_3, LIFECYCLE_REPORT_FORMAT_VERSION):
+    if version in WRITING_GUIDE_VERSIONS:
         _validate_writing_guide(value)
-    if version == LIFECYCLE_REPORT_FORMAT_VERSION:
+    if version in POLICY_DOCUMENTATION_VERSIONS:
         _validate_policy_documentation(value, actions)
     if not isinstance(value["generated_at"], str):
         raise _fail("$.generated_at", "must be a string")

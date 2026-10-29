@@ -67,7 +67,8 @@ def init_transcript(
 # --- Question counts (#1058 Targets) ---------------------------------------
 
 
-def test_init_solo_local_private_asks_six_questions() -> None:
+def test_init_solo_self_hosted_private_asks_six_questions() -> None:
+    """#1272 AC6: the default work mode verifies on a self-hosted VM."""
     session, result = init_transcript("")
 
     assert session.asked == [
@@ -78,8 +79,9 @@ def test_init_solo_local_private_asks_six_questions() -> None:
         "documentation_languages",
         "work_mode",
     ]
-    assert result.work_mode == "solo-local"
-    assert result.values["verification_mode"] == "local"
+    assert result.work_mode == "solo-self-hosted"
+    assert result.values["verification_mode_private"] == "self-hosted"
+    assert result.values["verification_mode_public"] == "hosted"
     assert result.values["admin_bypass"] == "always"
     assert result.values["lifecycle"] == []
     assert result.values["scheduled_checks"] == []
@@ -97,16 +99,32 @@ def test_init_solo_local_private_asks_six_questions() -> None:
 @pytest.mark.parametrize(
     ("mode_answers", "extra"),
     [
+        (("solo-local",), []),
         (("solo-hosted", ""), ["release_trigger"]),
         (("team", "", ""), ["copilot_review", "release_trigger"]),
         (
-            ("custom", "local", "", ""),
-            ["verification_mode", "admin_bypass", "copilot_review"],
+            ("custom", "local", "", "", ""),
+            [
+                "verification_mode_private",
+                "verification_mode_public",
+                "admin_bypass",
+                "copilot_review",
+            ],
         ),
         (
-            ("custom", "hosted", "", "", "manual"),
+            ("custom", "", "", "", ""),
             [
-                "verification_mode",
+                "verification_mode_private",
+                "verification_mode_public",
+                "admin_bypass",
+                "copilot_review",
+            ],
+        ),
+        (
+            ("custom", "hosted", "", "", "", "manual"),
+            [
+                "verification_mode_private",
+                "verification_mode_public",
                 "admin_bypass",
                 "copilot_review",
                 "release_trigger",
@@ -198,11 +216,12 @@ def test_explicit_inputs_and_preset_ask_zero_questions() -> None:
 
     assert session.asked == []
     assert session.transcript == []
-    assert result.values["verification_mode"] == "local"
-    assert result.sources["verification_mode"] == {
-        "note": "work mode solo-local",
-        "source": "explicit",
-    }
+    for key in setup_plan.MODE_KEYS:
+        assert result.values[key] == "local"
+        assert result.sources[key] == {
+            "note": "work mode solo-local",
+            "source": "explicit",
+        }
 
 
 def adopt_detections(**overrides: object) -> list[setup_plan.Detection]:
@@ -243,6 +262,40 @@ def test_adopt_asks_three_questions_when_detection_is_certain() -> None:
         "note": "detected: pyproject.toml",
         "source": "derived",
     }
+
+
+@pytest.mark.parametrize("interactive", [True, False])
+def test_adopt_never_defaults_an_existing_repository_to_self_hosted(
+    interactive: bool,
+) -> None:
+    """#1317 AC4: adopt keeps the pre-#1272 solo-local default (ADR Q12)."""
+    session = tty("", "", "") if interactive else script()
+    result = setup_plan.plan_adopt(
+        session,
+        {},
+        None,
+        adopt_detections(),
+        release_ownership="product-owned",
+        dockerfile=False,
+    )
+
+    assert result.work_mode == "solo-local"
+    assert result.values["verification_mode_private"] == "local"
+    assert result.values["verification_mode_public"] == "local"
+    if interactive:
+        assert session.transcript[-2].endswith("custom) [solo-local]: "), (
+            session.transcript[-2]
+        )
+    # An explicit choice still selects self-hosted.
+    chosen = setup_plan.plan_adopt(
+        script(),
+        {},
+        "solo-self-hosted",
+        adopt_detections(),
+        release_ownership="product-owned",
+        dockerfile=False,
+    )
+    assert chosen.values["verification_mode_private"] == "self-hosted"
 
 
 def test_adopt_uncertain_detection_dockerfile_and_policy_add_questions() -> (
@@ -398,7 +451,7 @@ def test_script_takes_documented_defaults_and_solo_local() -> None:
     )
     session.require_complete("init")
 
-    assert result.work_mode == "solo-local"
+    assert result.work_mode == "solo-self-hosted"
     assert sorted(session.suggested) == [
         "documentation_languages",
         "project_license",
@@ -422,8 +475,12 @@ def test_script_custom_preset_requires_no_guess() -> None:
 
     assert result.work_mode == "custom"
     assert "admin_bypass" not in result.values
-    assert result.values["verification_mode"] == "local"
-    assert result.sources["verification_mode"]["note"] == "suggested default"
+    assert result.values["verification_mode_private"] == "self-hosted"
+    assert result.values["verification_mode_public"] == "hosted"
+    assert (
+        result.sources["verification_mode_private"]["note"]
+        == "suggested default"
+    )
 
 
 def test_preset_override_keeps_explicit_values_and_never_saves_name() -> None:
@@ -441,7 +498,8 @@ def test_preset_override_keeps_explicit_values_and_never_saves_name() -> None:
 
     assert inputs["admin_bypass"] == "beta-only"
     assert inputs["scheduled_checks"] == "governance-drift"
-    assert inputs["verification_mode"] == "local"
+    assert inputs["verification_mode_private"] == "local"
+    assert inputs["verification_mode_public"] == "local"
     assert inputs["lifecycle"] == []
     assert inputs["languages"] == "python"
     for name in ("work_mode", "preset", "solo-local"):
@@ -535,7 +593,7 @@ def test_rejected_combinations_stop_before_render(
             "--data enable_codeql=false",
         ),
         (
-            {"languages": ["go"], "verification_mode": "local"},
+            {"languages": ["go"], "verification_mode_private": "local"},
             {"release_trigger": "manual"},
             "init",
             "drop --data release_trigger",
@@ -728,11 +786,11 @@ def test_approval_route_is_inconclusive_before_the_repository_exists() -> None:
 
 
 HOSTED_OFF = {
-    "verification_mode": "hosted",
+    "verification_mode_private": "hosted",
     "admin_bypass": "off",
     "copilot_review": "allowed",
 }
-LOCAL_OFF = {**HOSTED_OFF, "verification_mode": "local"}
+LOCAL_OFF = {**HOSTED_OFF, "verification_mode_private": "local"}
 
 
 def test_none_observed_blocks_even_with_second_approver_confirmation() -> None:
@@ -826,7 +884,7 @@ def test_finish_setup_skips_collaborator_reads_for_always(
         setup_plan.SetupResult(mode="init", work_mode="solo-local"),
         {
             "admin_bypass": "always",
-            "verification_mode": "local",
+            "verification_mode_private": "local",
             "languages": [],
         },
         {},
@@ -884,7 +942,7 @@ def test_cli_peer_roles_match_the_merge_gate() -> None:
 
 BASE = {
     "admin_bypass": "off",
-    "verification_mode": "hosted",
+    "verification_mode_private": "hosted",
     "copilot_review": "off",
     "governance_mode": "managed",
     "coverage_mode": "global",
@@ -904,7 +962,7 @@ BASE = {
     [
         ({"admin_bypass": "always"}, {}, "W01-admin-bypass-always"),
         (
-            {"verification_mode": "local", "admin_bypass": "always"},
+            {"verification_mode_private": "local", "admin_bypass": "always"},
             {},
             "W02-local-verification",
         ),
@@ -919,12 +977,12 @@ BASE = {
             "W04-copilot-entitlement-confirmed",
         ),
         (
-            {"verification_mode": "local", "copilot_review": "allowed"},
+            {"verification_mode_private": "local", "copilot_review": "allowed"},
             {},
             "W05-copilot-reference-only",
         ),
         (
-            {"verification_mode": "local", "admin_bypass": "beta-only"},
+            {"verification_mode_private": "local", "admin_bypass": "beta-only"},
             {},
             "W06-local-beta-only",
         ),
@@ -949,14 +1007,14 @@ BASE = {
         ),
         (
             {
-                "verification_mode": "local",
+                "verification_mode_private": "local",
                 "scheduled_checks": ["governance-drift"],
             },
             {},
             "W15-local-actions-minutes",
         ),
         (
-            {"verification_mode": "local", "admin_bypass": "always"},
+            {"verification_mode_private": "local", "admin_bypass": "always"},
             {},
             "W20-ui-merge-without-approval",
         ),
@@ -994,6 +1052,52 @@ def test_each_warning_has_a_stable_code(
     assert code not in [row["code"] for row in baseline]
 
 
+def test_unregistered_self_hosted_prints_the_registration_steps() -> None:
+    """#1272 AC6: init warns until csarc-devops registers the repository."""
+
+    def codes(values: dict[str, object]) -> list[object]:
+        return [
+            row["code"]
+            for row in setup_plan.setup_warnings(
+                values,
+                approval=None,
+                runner_role=None,
+                plan_name=None,
+                single_writer=None,
+            )
+        ]
+
+    base: dict[str, object] = {
+        "project_visibility": "private",
+        "verification_mode_private": "self-hosted",
+        "verification_mode_public": "hosted",
+        "admin_bypass": "off",
+    }
+    rows = setup_plan.setup_warnings(
+        base,
+        approval=None,
+        runner_role=None,
+        plan_name=None,
+        single_writer=None,
+    )
+    assert [row["code"] for row in rows] == ["W22-self-hosted-unregistered"]
+    message = str(rows[0]["message"])
+    for step in ("csarc-devops", "governance-switch", "self-hosted status"):
+        assert step in message
+    registered = {
+        **base,
+        "self_hosted_runner": {
+            "id": "vm1",
+            "registration": "https://github.com/example/csarc-devops/issues/1",
+        },
+    }
+    assert codes(registered) == []
+    assert codes({**base, "project_visibility": "public"}) == []
+    assert codes({**base, "verification_mode_private": "local"}) == [
+        "W02-local-verification"
+    ]
+
+
 def test_warning_codes_are_documented_in_spec_009() -> None:
     spec = (ROOT / "docs/specs/SPEC-009-project-settings.md").read_text(
         encoding="utf-8"
@@ -1012,7 +1116,7 @@ def test_observe_mode_gets_only_a_warning(tmp_path: Path) -> None:
         setup_plan.SetupResult(mode="adopt", work_mode="solo-local"),
         {
             "admin_bypass": "always",
-            "verification_mode": "local",
+            "verification_mode_private": "local",
             "governance_mode": "observe",
             "languages": [],
         },

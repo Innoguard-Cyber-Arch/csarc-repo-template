@@ -356,7 +356,7 @@
       <h1>repo-template 技術手冊</h1>
       <p class="lead"><code>repo-template</code>（<code>Innoguard-Cyber-Arch/csarc-repo-template</code>）是架構組維護的 Repository 模板；<code>csarc</code> 是呼叫模板能力的 CLI 名稱。本手冊定義產品政策、使用者承諾、操作方式及限制。</p>
       <p class="compact"><strong>適用範圍：</strong>本手冊描述首個完整實作本文能力的 stable release；實際使用版本、來源與 full SHA 以該 Release 的 <code>release-prompt.txt</code> 為準。候選版本未通過手冊、SPEC、Repository 規則、程式與測試的一致性檢查前，不得宣稱已提供本文能力。</p>
-      <p class="compact"><strong>目前狀態：</strong>CLI、Ready、migration 與 Roadmap 自 v0.35.x 起提供；設定開啟的 single-writer 合併與新設定盤點自 v0.41.x 起提供；寫作指引與訊息句型檢查隨 Milestone 20 的 stable 提供。版本：2026-10-24；核准 SHA-256 見 manifest。</p>
+      <p class="compact"><strong>目前狀態：</strong>CLI、Ready、migration 與 Roadmap 自 v0.35.x 起提供；設定開啟的 single-writer 合併與新設定盤點自 v0.41.x 起提供；寫作指引與訊息句型檢查隨 Milestone 20 的 stable 提供。版本：2026-10-26；核准 SHA-256 見 manifest。</p>
       <h2>1. repo-template 的功能與使用方式</h2>
       <h3>1.1 repo-template 會替專案做什麼</h3>
       <figure class="diagram-frame">
@@ -416,7 +416,7 @@
       </table>
       <p class="compact mt-3"><strong>責任與邊界：</strong>AI 產生的程式碼由指派 agent、實際主導修改的人負責；合併者可以是同一人或 reviewer。repo-template 不承諾無人監督開發，也不取代產品測試、部署核准、法遵判斷或 GitHub 付費能力。</p>
     </div>
-    <footer class="page-footer"><span>第 1 章 · repo-template 的功能與使用方式</span><span>版本日期 261024 r5</span><span>1 / 10</span></footer>
+    <footer class="page-footer"><span>第 1 章 · repo-template 的功能與使用方式</span><span>版本日期 261026 r6</span><span>1 / 10</span></footer>
   </section>
   <section class="sheet" id="installation">
     <div class="page-content">
@@ -451,7 +451,7 @@ push 或建立 PR。</pre>
       <h3 class="mt-3">2.4 核心原則：先盤點、再動作</h3>
       <p class="compact">凡是要帶入或執行未經驗證內容的流程（下游 Release、candidate PR、外部 repository 的設定或程式碼），都先以不執行的方式產生唯讀、人看得懂的盤點，逐項列出內容、來源與是否符合預期。有一項不符就停止，說明原因與下一步；需要外部程式碼的資訊時，只解析字面值，不執行、不 import。adopt 的 dry-run、<code>update --check</code>、<code>prepare-candidate</code> 與 6.1 的新設定盤點都依此設計；新流程不符時，須在 PR 說明理由並取得擁有者確認。依據見 <a href="../adr/dry-run-inventory-before-action.md"><code>dry-run-inventory-before-action</code></a>。</p>
     </div>
-    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261024 r5</span><span>2 / 10</span></footer>
+    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261026 r6</span><span>2 / 10</span></footer>
   </section>
   <section class="sheet" id="adoption-lifecycle">
     <div class="page-content">
@@ -524,8 +524,19 @@ push 或建立 PR。</pre>
           <tr><td class="stage">套用</td><td>create：以相同 tag、SHA 與答案套用；adopt：<code>--apply-plan &lt;plan&gt;</code>；update：<code>--apply-plan &lt;final plan&gt;</code>。全部交易式寫入，成功後報告標為 applied，失敗維持原狀。</td><td>明確確認後才可寫入、push、建立 PR 或修改 GitHub。</td></tr>
         </tbody>
       </table>
+      <h3 class="mt-3">2.6 驗證模式與 self-hosted 登記</h3>
+      <table class="stage-table dense">
+        <thead><tr><th class="stage">模式</th><th>在哪裡驗證</th><th>適用</th></tr></thead>
+        <tbody>
+          <tr><td class="stage">self-hosted</td><td>csarc-devops 登記的 VM，結果由 GitHub 記錄；治理與 local 相同。</td><td>新建 private 專案的預設。登記前 PR 不能合併；只限 private。</td></tr>
+          <tr><td class="stage">local</td><td>操作者電腦，證據是自我證明。</td><td>private 或 public，不需要遠端證據時。</td></tr>
+          <tr><td class="stage">hosted</td><td>GitHub-hosted runner。</td><td>新建 public 專案的預設；需要 Ruleset、Pages 或 release provenance 時。</td></tr>
+        </tbody>
+      </table>
+      <p class="compact"><strong>設定與限制：</strong>模式依可見性分成 <code>verification_mode_private</code> 與 <code>verification_mode_public</code>，public 不能用 self-hosted。GitHub Free 的 private Repository 沒有 Ruleset，local 與 self-hosted 的合併只由 lifecycle 執行，在 UI 直接合併記為 untraced。啟用 container 時暫不能用 self-hosted。既有專案不自動切換，<code>csarc update</code> 只提出建議。</p>
+      <p class="compact"><strong>登記與使用：</strong>本 Repository 與 csarc-devops 各開一張互相連結的 Issue，雙方人工核准，並列出可觸發驗證的帳號；再以 governance-switch PR 設定 <code>self_hosted_runner</code>，Actions log 建議保存 7 天。管理員以 <code>csarc self-hosted open</code> 開 24 小時窗口，可 <code>extend</code>，再以 <code>verify --pr</code> 派工。90 天未開窗，登記到期；轉 public 前必須先執行 <code>retire</code>。</p>
     </div>
-    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261024 r5</span><span>3 / 10</span></footer>
+    <footer class="page-footer"><span>第 2 章 · 安裝與導入</span><span>版本日期 261026 r6</span><span>3 / 10</span></footer>
   </section>
   <section class="sheet" id="daily-workflow">
     <div class="page-content">
@@ -601,7 +612,7 @@ push 或建立 PR。</pre>
       <p class="compact"><strong>下游繼承：</strong>生成專案在 <code>.csarc/docs/</code> 收到英文指引，文件語言含繁體中文時另收中文指引；<code>AGENTS.md</code> 的 CSARC 區塊以連結交給 agent，不重抄規則。專案第一次收到指引或指引改版時，create／adopt／update 的報告列出專案擁有的 README 與 <code>docs/**/*.md</code>，建議 agent 依指引檢查（#1224）；工具不改寫這些文件，<code>documentation_mode: off</code> 時不提示。</p>
       <p class="compact"><strong>不用第三方工具：</strong>不安裝 Vale、LanguageTool、商業 STE 檢查器或社群 skill，因為它們增加供應鏈依賴與外部 binary、誤判多，下游也無法離線取得；只有訊息句型做成模板自有的檢查。</p>
     </div>
-    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261024 r5</span><span>4 / 10</span></footer>
+    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261026 r6</span><span>4 / 10</span></footer>
   </section>
   <section class="sheet" id="daily-operation">
     <div class="page-content">
@@ -643,13 +654,13 @@ push 或建立 PR。</pre>
       <h3 class="mt-3">3.6 交接</h3>
       <p class="compact">交接內容至少包含 Issue、目前 branch／head、已完成與未完成 AC、測試及證據、外部等待條件、下一個安全動作。不得只留下聊天摘要；以 <code>csarc risk suggest --open</code> 列出缺少或無效風險區塊的 open Issue 與建議，以 <code>csarc risk register --state all --json</code> 交接目前風險、控制與證據狀態。</p>
     </div>
-    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261024 r5</span><span>5 / 10</span></footer>
+    <footer class="page-footer"><span>第 3 章 · 日常使用</span><span>版本日期 261026 r6</span><span>5 / 10</span></footer>
   </section>
   <section class="sheet" id="test-inventory">
     <div class="page-content">
       <div class="eyebrow">第 4 章 · 測試、證據與交付控制</div>
       <h2>4. 測試、證據與交付控制</h2>
-      <p>實際檢查由 Repository 設定、變更路徑及可信 base 的政策自動選擇。新建的 solo 專案預設使用 local 證據；團隊可明確選擇 Hosted CI，由 GitHub Actions 在遠端 runner 驗證 PR 精確版本。使用者不必自行組合測試命令。</p>
+      <p>實際檢查由 Repository 設定、變更路徑及可信 base 的政策自動選擇。新建的 private 專案預設在登記的 VM 驗證（self-hosted，見 2.6）；團隊可明確選擇 Hosted CI，由 GitHub Actions 在遠端 runner 驗證 PR 精確版本。使用者不必自行組合測試命令。</p>
       <h3>4.1 到底會測試哪些內容</h3>
       <p class="compact">共同基線適用所有 Repository；語言品質與原生建置只適用於設定中已選擇的語言。這裡列出檢查內容，何時執行由 4.2 的 tier 與變更範圍決定。</p>
       <div class="table-scroll">
@@ -683,7 +694,7 @@ push 或建立 PR。</pre>
       <p><strong>使用原則：</strong>正式 tier 只有 Fast 與 Full；實際要求取發布通道下限（Milestone 為 Fast，standalone／hotfix 為 Full）與路徑風險中較強者。local 與 hosted 使用同一套判斷；沒有 Milestone 的工作每張 PR 都跑 Full。</p>
       </div>
     </div>
-    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261024 r5</span><span>6 / 10</span></footer>
+    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261026 r6</span><span>6 / 10</span></footer>
   </section>
   <section class="sheet" id="delivery-controls">
     <div class="page-content">
@@ -693,7 +704,7 @@ push 或建立 PR。</pre>
       <table class="stage-table dense">
         <thead><tr><th class="stage">來源</th><th>用途</th><th>何時可作為交付證據</th></tr></thead>
         <tbody>
-          <tr><td class="stage">本機</td><td>新建 solo 專案的預設。在已 commit、乾淨的 exact head 執行一次 <code>verify-fast</code>；工具依相同判斷升級為 Full，結果綁定 SHA／tree，24 小時內有效。</td><td>證據只存在執行者的 Git metadata；寫入者可同時改程式與證據，因此不能證明 GitHub event、權限或遠端 runner。</td></tr>
+          <tr><td class="stage">本機</td><td>選擇 local 時使用。在已 commit、乾淨的 exact head 執行一次 <code>verify-fast</code>；工具依相同判斷升級為 Full，結果綁定 SHA／tree，24 小時內有效。</td><td>證據只存在執行者的 Git metadata；寫入者可同時改程式與證據，因此不能證明 GitHub event、權限或遠端 runner。</td></tr>
           <tr><td class="stage">Hosted CI</td><td>明確選擇 hosted 時，由可信 base 選擇 gate，在遠端 runner 驗證 exact head／tree。</td><td>作為 hosted 模式的合併證據；預設 24 小時內有效，逾期或 head 改變即重跑。</td></tr>
         </tbody>
       </table>
@@ -723,7 +734,7 @@ push 或建立 PR。</pre>
         </tbody>
       </table>
     </div>
-    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261024 r5</span><span>7 / 10</span></footer>
+    <footer class="page-footer"><span>第 4 章 · 測試、證據與交付控制</span><span>版本日期 261026 r6</span><span>7 / 10</span></footer>
   </section>
   <section class="sheet" id="repository-map">
     <div class="page-content">
@@ -761,7 +772,7 @@ push 或建立 PR。</pre>
       <h3 class="mt-3">5.3 權威文件</h3>
       <p class="compact">本手冊是 repo-template 的產品政策與使用者承諾，隨 Release 放在模板 repository 的 <code>docs/handbook/</code>；生成專案不內含手冊，<code>.csarc/docs/csarc.md</code> 以 full SHA 連結所安裝版本。SPEC／ADR 保存精確契約與理由；<code>AGENTS.md</code>／CI policy 是 agent 的可執行規則。內容必須符合手冊，衝突即為 drift。</p>
     </div>
-    <footer class="page-footer"><span>第 5 章 · 導入後的 Repository</span><span>版本日期 261024 r5</span><span>8 / 10</span></footer>
+    <footer class="page-footer"><span>第 5 章 · 導入後的 Repository</span><span>版本日期 261026 r6</span><span>8 / 10</span></footer>
   </section>
   <section class="sheet" id="updates-and-limits">
     <div class="page-content">
@@ -803,7 +814,7 @@ push 或建立 PR。</pre>
       <h3 class="mt-3">6.4 已知限制</h3>
       <p class="compact">repo-template 不提供通用部署、registry publishing、正式環境憑證或所有產品的 E2E，也無法阻止具權限者繞過工具直接修改 GitHub。UI 或 <code>gh pr merge --admin</code> 合併會略過 lifecycle，記為 untraced，並擋下下一次 <code>csarc-owned</code> 發版；local 搭配 <code>beta-only</code>／<code>always</code> 時，非 admin 寫入者也可能在 UI 合併。durable summary 也可被編輯或刪除，只能由 default branch 的 digest 發現。local 證據信任程度低於 hosted；不可觀察狀態一律回報 unknown。</p>
     </div>
-    <footer class="page-footer"><span>第 6 章 · 更新、故障與限制</span><span>版本日期 261024 r5</span><span>9 / 10</span></footer>
+    <footer class="page-footer"><span>第 6 章 · 更新、故障與限制</span><span>版本日期 261026 r6</span><span>9 / 10</span></footer>
   </section>
   <section class="sheet" id="appendix">
     <div class="page-content">
@@ -857,7 +868,7 @@ push 或建立 PR。</pre>
       <p><strong>使用原則：</strong>本手冊定義「有哪些能力、如何使用、限制在哪裡」；Repository 內文件與工具提供目前版本的精確執行方式。兩者不一致就是 drift，不能自行選擇較寬鬆的說法。</p>
       </div>
     </div>
-    <footer class="page-footer"><span>附錄 · 快速參考</span><span>版本日期 261024 r5</span><span>10 / 10</span></footer>
+    <footer class="page-footer"><span>附錄 · 快速參考</span><span>版本日期 261026 r6</span><span>10 / 10</span></footer>
   </section>
   <section class="sheet annex" id="templates">
     <div class="page-content">
@@ -894,7 +905,7 @@ push 或建立 PR。</pre>
 | --- | --- | --- | --- | --- | --- | --- |
 | R1 | data | high | adopt 覆寫產品既有檔案 | adopt 預設試跑並保留產品檔 | 試跑 regression | @alice |</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 1 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261026 r6</span><span>附錄 1 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-issues">
     <div class="page-content">
@@ -939,7 +950,7 @@ push 或建立 PR。</pre>
 | --- | --- | --- | --- | --- | --- | --- |
 | R1 | TODO | TODO | TODO | TODO | TODO | TODO |</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 2 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261026 r6</span><span>附錄 2 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-issues-2">
     <div class="page-content">
@@ -995,7 +1006,7 @@ push 或建立 PR。</pre>
 - #N — 註明沿用、取代或駁回的既有決策與理由。
 - 連結來源 spec、使用者研究或導入盤點；若沒有候選，記錄 bounded search 範圍。</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 3 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261026 r6</span><span>附錄 3 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-milestone">
     <div class="page-content">
@@ -1037,7 +1048,7 @@ PR title: &lt;type&gt;(&lt;scope&gt;)!: &lt;summary&gt;
 Squash commit = PR title; feat → minor, fix/revert → patch,
 ! → major, other types → no release.</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 4 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261026 r6</span><span>附錄 4 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-develop">
     <div class="page-content">
@@ -1083,7 +1094,7 @@ Coverage: sha256:replace-with-the-value-from-the-ready-check
 &lt;!-- 選填：風險、回退，或本 PR 對其他專案的額外影響。 --&gt;
 &lt;!-- 若依 admin_bypass 使用自核，另加一行完全相同的：Admin bypass / 管理員略過審核 --&gt;</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 5 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261026 r6</span><span>附錄 5 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-evidence">
     <div class="page-content">
@@ -1122,7 +1133,7 @@ Coverage: sha256:&lt;64 hex&gt;
 
 已知限制、失敗時的 fallback，以及哪些情況要重新評估。</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 6 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261026 r6</span><span>附錄 6 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-spec">
     <div class="page-content">
@@ -1170,7 +1181,7 @@ List the command, test, or observable result a reviewer will use.
 
 Link the source request and preserved or superseded decisions.</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 7 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261026 r6</span><span>附錄 7 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-merge">
     <div class="page-content">
@@ -1189,7 +1200,7 @@ I authorize this exact pull request head for one merge attempt.</pre>
 CSARC-Evidence: &lt;url&gt;
 CSARC-Evidence-SHA256: &lt;digest&gt;
 CSARC-Evidence-Tree: &lt;sha&gt;
-CSARC-Trust: &lt;github-hosted | self-attested-local&gt;
+CSARC-Trust: &lt;github-hosted | self-attested-local | self-hosted-registered&gt;
 CSARC-Route: &lt;dependabot | hotfix | isolated | issue | milestone | release-follow-up | release-recovery | sync&gt;
 CSARC-Approval: &lt;comment | copilot | hotfix-emergency | review&gt;
 CSARC-Authorization: &lt;url&gt;</pre>
@@ -1205,7 +1216,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
 
 * fix(cli): reject an empty answer (dc22059)</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 8 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261026 r6</span><span>附錄 8 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-upgrade">
     <div class="page-content">
@@ -1258,7 +1269,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
 | 驗證證據 | &lt;full run 連結、rollback 說明，以及是否發版與 Release 讀回結果&gt; |
 | 後續 Issue | &lt;根因修正、測試補強或流程調整的 Issue 編號；沒有時寫明理由&gt; |</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 9 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261026 r6</span><span>附錄 9 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-security">
     <div class="page-content">
@@ -1275,7 +1286,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
 | 公開 | &lt;公開日期與 advisory 或 Release notes 連結；未公開寫 `not-yet`&gt; |
 | 結案 | &lt;`fixed`、`not-a-vulnerability` 或 `upstream`，以及回覆通報者的時間&gt; |</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 10 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261026 r6</span><span>附錄 10 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-records">
     <div class="page-content">
@@ -1310,7 +1321,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
 | 實作者協助 | &lt;`no`，或需要哪些協助；`yes` 表示這次 run 不成立&gt; |
 | 結果 | &lt;`pass` 或 `fail`；`fail` 寫出未符合下方哪一條&gt; |</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 11 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261026 r6</span><span>附錄 11 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-promotion">
     <div class="page-content">
@@ -1335,7 +1346,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
 
 只以 stub 驗證，未經 live ProjectV2 驗證。</pre>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 12 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261026 r6</span><span>附錄 12 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-index">
     <div class="page-content">
@@ -1360,7 +1371,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
         </tbody>
       </table>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 13 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261026 r6</span><span>附錄 13 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-index-2">
     <div class="page-content">
@@ -1383,7 +1394,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
         </tbody>
       </table>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 14 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261026 r6</span><span>附錄 14 / 15</span></footer>
   </section>
   <section class="sheet annex" id="templates-index-3">
     <div class="page-content">
@@ -1406,7 +1417,7 @@ CSARC-Authorization: &lt;url&gt;</pre>
         </tbody>
       </table>
     </div>
-    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261024 r5</span><span>附錄 15 / 15</span></footer>
+    <footer class="page-footer"><span>附錄 B · 範本格式</span><span>版本日期 261026 r6</span><span>附錄 15 / 15</span></footer>
   </section>
 </main>
 </body>

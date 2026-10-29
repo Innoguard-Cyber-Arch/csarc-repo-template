@@ -17,7 +17,7 @@
 
 | 項目 | 本專案 | 代表什麼 |
 | --- | --- | --- |
-| 驗證 | `{{ verification_mode }}` | {% if hosted %}required `title`、`verify`、`review` 由 GitHub-hosted runner 在 exact head 執行，作為合併證據{% else %}在已 commit、乾淨的 exact head 執行一次 `./.csarc/scripts/verify-fast`，結果是 `self-attested-local` 證據；不產生 hosted CI workflow{% endif %} |
+| 驗證 | `{{ verification_mode }}` | {% if hosted %}required `title`、`verify`、`review` 由 GitHub-hosted runner 在 exact head 執行，作為合併證據{% elif verification_mode == 'self-hosted' %}登記的 VM 以唯讀 `csarc-verify.yml` 驗證 exact head，GitHub 記錄的結果是 `self-hosted-registered` 證據；本機 `verify-fast` 只是自我證明{% else %}在已 commit、乾淨的 exact head 執行一次 `./.csarc/scripts/verify-fast`，結果是 `self-attested-local` 證據；不產生 hosted CI workflow{% endif %} |
 | 合併授權 | `admin_bypass: {{ admin_bypass }}`、`copilot_review: {{ copilot_review }}` | {% if admin_bypass == 'off' %}需要獨立 maintainer 對 exact head 核准{% elif admin_bypass == 'beta-only' %}beta 工作可由 admin 以 exact-head 授權取代核准；stable 需要獨立核准{% else %}beta 與 stable 工作都可由 admin 以 exact-head 授權取代核准{% endif %}{% if copilot_review == 'allowed' %}；Copilot 對 exact head 的乾淨審核也可滿足 review，但不是必要條件{% endif %} |
 | 發版 | `{{ release_ownership }}` | {% if release_ownership == 'csarc-owned' %}CSARC 在交付 PR 物化版本與 CHANGELOG，合併後由單一 writer 發布 Release{% elif release_ownership == 'product-owned' %}產品自己的 release 流程保留；CSARC 只回報 drift，不建立 tag 或 Release{% else %}CSARC 只負責驗證，不管理版本或 Release{% endif %} |
 | 工作項目自動化 | {% if lifecycle %}`{{ lifecycle | join('`、`') }}`{% else %}未啟用{% endif %} | {% if 'issues' in lifecycle %}Issue 分類與 standalone 核准{% if hosted %}由 workflow 自動維護{% else %}以本機 wrapper 維護{% endif %}；{% endif %}{% if 'milestones' in lifecycle %}Milestone tracker 核准、同步與結案（見 [`milestone-description.md`](milestone-description.md)）{% else %}不使用 Milestone tracker 自動化{% endif %} |
@@ -55,8 +55,10 @@
 
 {% if hosted -%}
 實作中只跑變更 owner 的 focused checks。required `verify` 由 trusted base 選出 fast 或 full，在 exact candidate 執行一次；本機不必為了證據重跑。合併只經 `.csarc/scripts/pr_lifecycle.py merge`：它取得 remote lease，重驗 exact-head 授權、required checks、head 包含 base 與驗證過的 tree，再以 squash 合併並寫入 durable summary 與 trailer。
+{%- elif verification_mode == 'self-hosted' -%}
+實作中只跑變更 owner 的 focused checks。候選 commit 乾淨後，在窗口內以 `csarc self-hosted verify --pr <N> --apply` 讓登記的 VM 驗證 exact head。合併只經 `.csarc/scripts/pr_lifecycle.py merge`：它取得 remote lease，從 trusted base 重驗 PR policy、exact-head 授權與 VM 證據，再以 squash 合併並寫入 durable summary 與 trailer。登記、開窗、到期與公開前的 `retire` 見 [`ci-policy.md`](ci-policy.md)。
 {%- else -%}
-實作中只跑變更 owner 的 focused checks；候選 commit 乾淨後執行一次 `./.csarc/scripts/verify-fast`，需要時它自動升級為 full。證據綁定 head、tree、base 與 tier，24 小時內有效；head 或 base 改變後重跑一次。合併只經 `.csarc/scripts/pr_lifecycle.py merge`：它取得 remote lease，從 trusted base 重驗 PR policy、exact-head 授權與本機證據，再以 squash 合併並寫入 durable summary 與 trailer。本機證據不能證明 GitHub event、遠端 runner 或 release provenance；需要這些保證時改用 `verification_mode: hosted`。
+實作中只跑變更 owner 的 focused checks；候選 commit 乾淨後執行一次 `./.csarc/scripts/verify-fast`，需要時它自動升級為 full。證據綁定 head、tree、base 與 tier，24 小時內有效；head 或 base 改變後重跑一次。合併只經 `.csarc/scripts/pr_lifecycle.py merge`：它取得 remote lease，從 trusted base 重驗 PR policy、exact-head 授權與本機證據，再以 squash 合併並寫入 durable summary 與 trailer。本機證據不能證明 GitHub event、遠端 runner 或 release provenance；需要這些保證時改用 `verification_mode_{{ 'public' if project_visibility == 'public' else 'private' }}: hosted`。
 {%- endif %}
 
 GitHub UI 或 `gh pr merge --admin` 合併會略過 lifecycle，`csarc status` 把它列為 `untraced`{% if release_ownership == 'csarc-owned' %}，並阻擋下一次 CSARC 發版{% endif %}。細節見 [`ci-policy.md`](ci-policy.md#審查與合併資格)。
@@ -73,15 +75,15 @@ I authorize this exact pull request head for one merge attempt.
 {% endif %}
 ## Requirement evidence
 
-PR body 的 `## Requirement evidence` 依 Issue「完成條件」順序為 AC1…ACn 與每個風險 ID 各列一項證據：exact head 上的測試路徑、`check:<name>`、附理由的 `manual:` 連結，或只限風險的 `accepted: <理由>`。缺項時 PR 不能離開 Draft；Issue 的 AC 或風險在 Ready 後改變，合併前要重新對應。`R0` 只用於沒有改到 `AGENTS.md`、安全政策或 CI policy 的文件變更。
+PR body 的 `## Requirement evidence` 為每個 AC 與風險 ID 列出 exact-head 證據，缺項時 PR 不能離開 Draft；證據格式、`R0` 與重新對應規則見 [`ci-policy.md`](ci-policy.md#requirement-evidence)。
 {% if release_ownership == 'csarc-owned' %}
 ## 發版
 
-release-worthy 的 PR 在仍是 Draft 時執行 `python3 .csarc/scripts/release_policy.py prepare-candidate --sha HEAD --phase <beta|stable>`，把版本與 CHANGELOG 作為同一張 PR 的最後一個 commit；{% if 'milestones' in lifecycle %}Milestone 工作用 `beta`，standalone、hotfix 與 promotion 用 `stable`{% else %}standalone 與 hotfix 用 `stable`{% endif %}。{% if hosted and (project_mode == 'new' or csarc_release_workflow | default(false)) %}合併後 `release.yml`{% if release_trigger == 'manual' %}（只接受手動 dispatch）{% endif %}呼叫 `.csarc/scripts/publish-release`；Actions 不健康時，維護者以自己的身分在本機執行同一支腳本。{% else %}合併後由維護者在本機執行 `.csarc/scripts/publish-release stage`／`publish`，不另建版本 PR 或手動建立 tag。{% endif %}發布前 writer 先以 merge trace 檢查 governance baseline 之後的每筆合併，失敗時 Release 保持 draft。
+release-worthy 的 PR 在仍是 Draft 時執行 `python3 .csarc/scripts/release_policy.py prepare-candidate --sha HEAD --phase <beta|stable>`，把版本與 CHANGELOG 作為同一張 PR 的最後一個 commit；{% if 'milestones' in lifecycle %}Milestone 工作用 `beta`，standalone、hotfix 與 promotion 用 `stable`{% else %}standalone 與 hotfix 用 `stable`{% endif %}。{% if hosted and (project_mode == 'new' or csarc_release_workflow | default(false)) %}合併後 `release.yml`{% if release_trigger == 'manual' %}（只接受手動 dispatch）{% endif %}呼叫 `.csarc/scripts/publish-release`；Actions 不健康時，維護者以自己的身分在本機執行同一支腳本。{% else %}合併後由維護者在本機執行 `.csarc/scripts/publish-release stage`／`publish`，不另建版本 PR 或手動建立 tag。{% endif %}writer 的發布前檢查見 [`ci-policy.md`](ci-policy.md#版本發版交付與部署矩陣)。
 {% endif %}
 ## 公版更新
 
-1. `csarc update --check --json` 驗證 provenance、列出候選 Release 與完整 SHA，並在 repository 外寫出 stage-1 plan（`csarc-update-plan.json`）。報告的 `Policy documentation` 會離線列出變更後 managed policy 與 project-owned README／`docs/` 的四態結果及 `file:line`；`drift`／`inconclusive` 必須先由擁有者修正或釐清，工具不會改寫產品文件。
+1. `csarc update --check --json` 驗證 provenance、列出候選 Release 與完整 SHA，並在 repository 外寫出 stage-1 plan（`csarc-update-plan.json`）。報告的 `Policy documentation` 列出受影響的 project-owned 文件 `file:line`，`drift`／`inconclusive` 由擁有者處理；工具不改寫產品文件。
 2. 有衝突時逐檔決定：`csarc update --finalize-plan --decision <path>=keep-current|take-new|custom:<file>`；有 Action pin 漂移時先提交產品修正並加上 `--pin-commit <full SHA>`。結果是不可變的 `csarc-update-final-plan.json`。
 3. `csarc update --apply-plan <final plan>` 只套用 plan 記錄的內容；repository、權限、工具版本或 target 狀態與 plan 不同時停止，不改任何檔案。
 
@@ -90,7 +92,6 @@ release-worthy 的 PR 在仍是 Draft 時執行 `python3 .csarc/scripts/release_
 ## 故障與恢復
 
 - 驗證失敗或證據過期：修正後在新的 exact head 重跑，不沿用舊結果。
-- 等待 review、CI、權限或外部服務時回報 `WAITING` 與確切條件；沒有安全下一步時回報 `BLOCKED`。
 - `csarc update` 失敗時 target 維持原狀；以同一份 final plan 重跑，已套用的 plan 不會重複修改。
 - `.csarc/provenance.json` 被手改時，`csarc status` 與 `csarc update` 在寫入前停止；設定只以 `csarc update --data KEY=VALUE` 變更。
 {%- if release_ownership == 'csarc-owned' %}

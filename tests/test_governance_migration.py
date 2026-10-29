@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 import csarc_cli.cli as cli
-from csarc_cli import governance_migration, lifecycle_report
+from csarc_cli import governance_migration, lifecycle_report, settings_schema
 from csarc_cli.cli import CliError
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -95,6 +95,9 @@ MISSING_ADMIN_BYPASS = {
 }
 
 
+MODE_KEYS = settings_schema.MODE_KEYS
+
+
 def migrate(
     saved: Mapping[str, object], explicit: Mapping[str, str] | None = None
 ) -> tuple[dict[str, object], dict[str, object], dict[str, dict[str, object]]]:
@@ -172,7 +175,8 @@ def test_v0_16_0_maps_governance_and_retires_legacy_keys() -> None:
         "lifecycle": ["issues", "milestones"],
         "project_maturity": "early",
         "release_trigger": "main",
-        "verification_mode": "hosted",
+        "verification_mode_private": "hosted",
+        "verification_mode_public": "hosted",
     }
     for key, value in expected.items():
         assert answers[key] == value, key
@@ -209,11 +213,15 @@ def test_saved_governance_values_are_unchanged(
     """AC1/AC2/AC6: saved values (including `off`) are never rewritten."""
     answers, update_data, rows = migrate(saved)
 
-    for key in governance_migration.GOVERNANCE_KEYS:
+    for key in governance_migration.GOVERNANCE_KEYS - set(MODE_KEYS):
         assert answers[key] == saved[key], key
         assert key not in update_data, key
         assert rows[key]["class"] == "unchanged", key
         assert rows[key]["source"] == "saved", key
+    # SPEC-011: the saved legacy mode moves unchanged to both settings.
+    for key in MODE_KEYS:
+        assert answers[key] == saved["verification_mode"], key
+        assert rows[key]["class"] == "exact", key
     assert_rows_cover_changes(saved, answers, rows)
 
 
@@ -223,8 +231,13 @@ def test_missing_admin_bypass_is_widened_to_always() -> None:
 
     assert answers["admin_bypass"] == "always"
     assert rows["admin_bypass"]["class"] == "widened"
-    for key in governance_migration.GOVERNANCE_KEYS - {"admin_bypass"}:
+    for key in governance_migration.GOVERNANCE_KEYS - {
+        "admin_bypass",
+        *MODE_KEYS,
+    }:
         assert rows[key]["class"] == "unchanged", key
+    for key in MODE_KEYS:
+        assert rows[key]["class"] == "exact", key
     assert_rows_cover_changes(MISSING_ADMIN_BYPASS, answers, rows)
 
 
@@ -380,7 +393,7 @@ def test_update_report_validates_the_migration_rows(tmp_path: Path) -> None:
     "row",
     [
         {
-            "key": "verification_mode",
+            "key": "verification_mode_private",
             "class": "widened",
             "before": "hosted",
             "after": "local",
@@ -426,7 +439,7 @@ def test_update_report_refuses_an_unapproved_governance_class(
         governance_migration,
         "setting_classes",
         lambda before, after, explicit: {
-            "verification_mode": ("widened", None)
+            "verification_mode_private": ("widened", None)
         },
     )
     with pytest.raises(CliError, match="approved migration mapping"):
@@ -436,7 +449,7 @@ def test_update_report_refuses_an_unapproved_governance_class(
                 target=tmp_path,
                 revision=cli.Revision("v1", "d" * 40, "https://x.invalid"),
                 repository=REPOSITORY,
-                answers={**V0_30_3, "verification_mode": "hosted"},
+                answers={**V0_30_3, "verification_mode_private": "hosted"},
                 capabilities={},
                 files=cli.Plan((), (), (), (), (), (), ()),
                 update={"update_available": True},

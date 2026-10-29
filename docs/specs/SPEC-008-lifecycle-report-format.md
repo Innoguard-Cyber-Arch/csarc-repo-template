@@ -16,7 +16,7 @@ tracking: none
 
 `adopt` 與 `update` 每次規劃都由同一個 report model 在 target 外寫出 machine plan、report JSON 與從 report JSON render 的 Markdown。report JSON 是唯一來源，詞彙封閉，未知值 fail closed；套用成功後同一份報告轉為 `applied` 並綁定被重播的 plan digest。
 
-格式版本：`2.4.0`（`LIFECYCLE_REPORT_FORMAT_VERSION`，`src/csarc_cli/lifecycle_report.py`）。`2.1.0` 由 Issue #1078 依 MINOR 規則提升，只新增 adopt 的 `setup` 紀錄並把 `setting-decision` 開放給 adopt；`2.2.0` 由 Issue #1083 依 MINOR 規則提升，只新增 `overwrite` 的 `compatibility-shim` 理由；`2.3.0` 由 Issue #1224 依 MINOR 規則提升，只新增唯讀的 `writing_guide` 提示；`2.4.0` 由 Issue #1297 新增離線的 `policy_documentation` 結果與 `documentation-review` required action；相容規則見 §7。
+格式版本：`2.5.0`（`LIFECYCLE_REPORT_FORMAT_VERSION`，`src/csarc_cli/lifecycle_report.py`）。`2.1.0` 由 Issue #1078 依 MINOR 規則提升，只新增 adopt 的 `setup` 紀錄並把 `setting-decision` 開放給 adopt；`2.2.0` 由 Issue #1083 依 MINOR 規則提升，只新增 `overwrite` 的 `compatibility-shim` 理由；`2.3.0` 由 Issue #1224 依 MINOR 規則提升，只新增唯讀的 `writing_guide` 提示；`2.4.0` 由 Issue #1297 新增離線的 `policy_documentation` 結果與 `documentation-review` required action；`2.5.0` 由 Issue #1272 依 MINOR 規則提升，只新增 `setup.work_mode` 的 `solo-self-hosted`；相容規則見 §7。
 
 ## Context
 
@@ -47,7 +47,7 @@ tracking: none
 
 每個鍵都一定存在，未知鍵被拒絕。`null` 表示這個 operation 不評估，或負責的 Issue 尚未實作；`[]` 表示評估過但沒有項目。輸出以 `sort_keys`、兩格縮排序列化；相同輸入產生相同位元組。
 
-- `report_format_version`：`2.4.0`。
+- `report_format_version`：`2.5.0`。
 - `operation`：`adopt`｜`update`。
 - `status`、`status_reason`、`applicable`（機器的 apply 閘門）。
 - `generated_at`、`applied_at`：`applied_at` 只在 `status` 為 `applied` 時是字串。
@@ -77,7 +77,7 @@ tracking: none
 | `verification.candidate.state` | `pending-authorization`、`deferred-manual-merge`、`passed`、`failed`、`not-run` |
 | `verification.render_parity.state` | `equal`、`diverged` |
 | `files[].decision` | `pending`、`keep-current`、`take-new`、`custom`、`null` |
-| `setup.work_mode` | `solo-local`、`solo-hosted`、`team`、`custom` |
+| `setup.work_mode` | `solo-self-hosted`（`2.5.0` 起）、`solo-local`、`solo-hosted`、`team`、`custom` |
 | `setup.approval_route.state` | `route-observed`、`none-observed`、`inconclusive` |
 | `setup.approval_route.confirmation` | `second-approver`、`copilot-entitlement`、`null` |
 
@@ -112,14 +112,15 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - update 的 operator-run 修正（Issue #1153）：保留的 product-owned Release writer（`release_workflow`）若以完整路徑使用本次 layout 搬移的來源檔（含 release-please `simple` config 隱含的版本檔），產生以該 writer 為 subject 的 blocking `release-writer`（沿用既有詞彙），訊息列出每個 `來源 -> 目的地`；`--finalize-plan` 拒絕寫入。`conflicts/new/<path>` 與 `take-new` 記錄的位元組已含 `product-pin-newer` 對齊後的 pin，與 apply 實際寫入相同。Markdown `Impact analysis` 的 required actions 列在 blocking／non-blocking 後依 kind 列出與 `Items requiring your decision` 相同的計數；設定 `class` 仍只描述值的變化，live facts 或 native manifests 要求決定但保留原值的鍵維持 `unchanged`。這些只改 `message` 文字與 Markdown 措辭，報告形狀與 `2.2.0` 不變。
 - update 的操作者決定（Issue #1154）：blocking `action-pin` 的 `message` 另寫出產品與模板 pin 的版本 tag（取自 pin 後的 `# vX.Y.Z` 註解）與 `major upgrade: yes|no|unknown`，任一側沒有 tag 或不是版本號時為 `unknown`；`.gitignore` 的 `update-conflict` 對應的 `file-conflict` 訊息最後列出新側有、current 沒有的忽略規則。`product.action_pins` 每列仍只有既有六個欄位，plan payload 也不新增欄位；報告形狀與 `2.2.0` 不變。
 - update 的 operator-run 修正（Issue #1157）：保留為 `retire-modified` 的可執行 script（有執行權限或以 `#!` 開頭）若仍以完整路徑呼叫或讀取同一份 plan 退役、刪除，或沒有 compatibility shim 而搬移的檔案，對應的 `retire-modified` 改為 blocking（沿用既有詞彙），訊息列出每個 `路徑 (removed)` 或 `來源 -> 目的地`；以 `$var/路徑` 寫成的路徑也算使用。`--finalize-plan --decision <path>=take-new` 照新版本退役該檔（`retire-modified` 只接受 `take-new`，列的 `decision` 記為 `take-new`，對應的 `retire-modified` 不再列出，套用時刪除該檔）；沒有這個決定時 `--finalize-plan` 拒絕寫入。計畫保留的其他檔案仍使用被退役的檔案時，`--finalize-plan` 拒絕；`update-conflict` 決定保留的 script 內容若使用沒有 shim 的搬移來源也一樣拒絕。舊設定的 `reviewers` 退役（或 plan 刪除、退役、保留 `.github/REVIEWERS`）時，該設定列仍為 `retired`，`note` 改寫出原本的 reviewer、新的指派方式與恢復方式，並另產生一列 subject 為 `reviewers` 的非 blocking `setting-decision`，與 `widened` 一樣要求擁有者在 `--finalize-plan` 前確認。擁有者的回答以一次性 `--data reviewers=accept|pending` 給出（Issue #1168，不寫入設定）：`accept` 讓這一列不再列出，`reviewers` 設定列的 `source` 記為 `explicit`；`pending` 保留這一列並在訊息寫明待擁有者決定；沒有回答時 `--finalize-plan` 拒絕寫入，plan 沒有退役 reviewer 時帶這個值也拒絕。這些只改 `blocking`、`message` 與 `note` 的值，報告形狀與 `2.2.0` 不變。
+- update 的公開警告（Issue #1287）：repository 是 public 而仍有 self-hosted 設定或 `csarc-verify.yml` 的 run 時（SPEC-011 §8），產生一列 subject 為 `self-hosted logs`、`command` 為 `csarc self-hosted retire` 的非 blocking `verification`；讀不到可見性或 run 清單時同一列的 `command` 為 `csarc self-hosted status`。沿用既有詞彙，報告形狀不變。
 
 設定分類（本 Issue 實作的通用規則；個別鍵的遷移分類由後續 Issue 補上）：adopt 的每列都是 `new`，`source` 與 `note` 取自 `setup`：問卷回答或明確 `--data` 為 `explicit`（回答的 `note` 為 `asked`），偵測、工作模式展開與建議值為 `derived`（`note` 寫出偵測來源、`work mode <name>` 或 `suggested default`）；update 前後相同為 `unchanged`、新出現為 `new`、消失為 `retired`、其他改變為 `decision`。來源不是 `explicit` 的 `decision` 產生非 blocking 的 `setting-decision`。
 
-**Fail closed**：writer 與 renderer 先驗證整份 report；缺鍵、未知鍵、未知詞彙、`report_format_version` 不是 `2.4.0`、`2.3.0`、`2.2.0`、`2.1.0` 或 `2.0.0`、計數不符或狀態規則不成立時拋出錯誤，三個檔案都不寫，CLI 以錯誤結束。
+**Fail closed**：writer 與 renderer 先驗證整份 report；缺鍵、未知鍵、未知詞彙、`report_format_version` 不是 `2.5.0`、`2.4.0`、`2.3.0`、`2.2.0`、`2.1.0` 或 `2.0.0`、計數不符或狀態規則不成立時拋出錯誤，三個檔案都不寫，CLI 以錯誤結束。
 
 ### 5. Markdown
 
-- H1 為 `# CSARC adoption report` 或 `# CSARC update report`，接著是 `> **Status: <banner>.** <status_reason>` 與 ``Report format version: `2.4.0` ``。
+- H1 為 `# CSARC adoption report` 或 `# CSARC update report`，接著是 `> **Status: <banner>.** <status_reason>` 與 ``Report format version: `2.5.0` ``。
 - banner：adopt 為 `Ready to adopt`、`Review required`、`Blocked`、`Adopted`；update 為 `Current`、`Ready to update`、`Review required`、`Blocked`、`Updated`。
 - 九個 H2 依序一律出現，沒有內容時印 `None.`：
   1. `## Items requiring your decision`：blocking 項目在前；沒有項目時印 "No known file conflicts. This does not guarantee semantic or runtime compatibility."
@@ -150,8 +151,9 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - MINOR：新增 JSON 欄位、詞彙值、required action kind 或 H3；在不改變既有順序的前提下新增 H2。
 - PATCH：只改措辭或跳脫。
 - 與上一個已發布 Release 相比，每個層級最多提升一次。1.1.0 是最後發布的格式；本規格定義 2.0.0。Milestone 18 中只有設定問卷的 Issue（#1078）可在 beta.2 前依 MINOR 提升一次到 2.1.0（並把 `setting-decision` 開放給 adopt）；其他 Issue 只填入已保留的欄位與詞彙。beta.2 之後，Pilot fixes 的 #1083 依擁有者 2026-10-15 決定提升一次到 `2.2.0`，只新增 `compatibility-shim`。
+- `2.5.0` 相容結果（#1272）：reader 以各自規則驗證 `2.0.0` 到 `2.4.0` 的報告，`solo-self-hosted` 只在 `2.5.0` 合法；writer 只寫 `2.5.0`。Milestone 21 的 #1272 把新專案的預設工作模式改為 `solo-self-hosted`，adopt 報告要記錄這個值，因此依 MINOR 規則提升一次。Milestone 21 的 beta 曾以 `2.4.0` 表示這個值；main 的 #1297 已在 v0.46.0 以 `2.4.0` 發布 `policy_documentation`，同步 main 時這項提升改為 `2.5.0`，beta 寫出的 `2.4.0` 報告缺少 `policy_documentation`，reader 以 fail closed 處理。
 - `2.3.0` 相容結果（#1224）：reader 以各自規則驗證 `2.0.0`、`2.1.0` 與 `2.2.0` 報告，`writing_guide` 只在 `2.3.0` 存在；writer 只寫 `2.3.0`。Milestone 20（#1217）的 #1224 完成條件要求報告新增這一段，因此依 MINOR 規則提升一次。
-- `2.4.0` 相容結果（#1297）：reader 以各自規則驗證 `2.0.0` 到 `2.3.0` 報告，`policy_documentation` 與 `documentation-review` 只在 `2.4.0` 存在；writer 只寫 `2.4.0`。
+- `2.4.0` 相容結果（#1297）：reader 以各自規則驗證 `2.0.0` 到 `2.3.0` 報告，`policy_documentation` 與 `documentation-review` 從 `2.4.0` 起存在；當時 writer 只寫 `2.4.0`。
 - `2.2.0` 相容結果（#1083）：reader 以各自規則驗證 `2.0.0` 與 `2.1.0` 報告，`compatibility-shim` 從 `2.2.0` 起合法；當時 writer 只寫 `2.2.0`。
 - `2.1.0` 相容結果（#1078 AC6）：`2.1.0` reader 以 `2.0.0` 規則驗證 `2.0.0` 報告（沒有 `setup`、`setting-decision` 只用於 update），例如舊 final plan 內嵌的報告；writer 只寫 `2.1.0`。已發布的 `2.0.0` reader 讀到 `2.1.0` 報告時以 `unsupported version '2.1.0'` fail closed，不寫任何檔案，也不部分解析；改用寫出該報告的 CLI 版本或更新的版本。
 - machine plan 的 `schema_version` 另外計算。
@@ -175,6 +177,7 @@ required action `kind`：`action-pin`、`code-owner`、`committed-resolution`、
 - [x] `2.2.0`（Issue #1083）：update 的 `overwrite`／`compatibility-shim` 列；`2.0.0` 與 `2.1.0` 報告依原規則可讀。
 - [x] `2.3.0`（Issue #1224）：create、adopt 與 update 在首次收到或收到新版本的寫作指引時提示檢查 project-owned 文件；同一版本不重複，`documentation_mode: off` 不提示，不改寫任何檔案；`2.0.0`、`2.1.0` 與 `2.2.0` 報告依原規則可讀。
 - [x] `2.4.0`（Issue #1297）：adopt 與 update 離線比對變更後 managed policy 與 project-owned README／docs，逐 key 記錄四態與 `file:line`；`drift`／`inconclusive` 阻擋套用與交付，不改寫產品文件，`2.0.0` 到 `2.3.0` 依原規則可讀。
+- [x] `2.5.0`（Issue #1272）：adopt 的 `setup.work_mode` 接受 `solo-self-hosted`；`2.0.0` 到 `2.4.0` 報告依原規則可讀，`2.4.0` 報告出現這個值時 fail closed。
 
 ## Out of scope
 

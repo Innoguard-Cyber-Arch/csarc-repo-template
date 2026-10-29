@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-09-21
-- **來源 Issues：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)、[#1070](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1070)（2026-10-14 補充 runtime 邊界與固定位置 allowlist）、[#1077](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1077)（2026-10-14 補充依選項 render 的 payload 規則）、[#1129](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1129)（2026-10-15 補充模板 repository 專用工具與精簡後的共用模組）、[#1177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1177)（2026-10-19 補充 hosted 專用 sibling 與 payload 餘裕提醒）、[#1208](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1208)（2026-10-21 補充只在 Milestone 或 hosted render 的 Milestone script）、[#1227](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1227)（2026-10-23 補充生成副本只保留 docstring 摘要行）、[#1230](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1230)（2026-10-23 補充 hosted 專用的 lifecycle 路徑）、[#1231](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1231)（2026-10-23 修訂 payload 度量：總閘加分項預算）；Milestone 18 對齊：[#1066](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1066)、[#1067](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1067)、[#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)、[#1081](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1081)、[#1146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1146)、[#1153](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1153)、[#1157](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1157)
+- **來源 Issues：**[#742](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/742)、[#1070](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1070)（2026-10-14 補充 runtime 邊界與固定位置 allowlist）、[#1077](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1077)（2026-10-14 補充依選項 render 的 payload 規則）、[#1129](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1129)（2026-10-15 補充模板 repository 專用工具與精簡後的共用模組）、[#1177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1177)（2026-10-19 補充 hosted 專用 sibling 與 payload 餘裕提醒）、[#1208](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1208)（2026-10-21 補充只在 Milestone 或 hosted render 的 Milestone script）、[#1227](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1227)（2026-10-23 補充生成副本只保留 docstring 摘要行）、[#1230](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1230)（2026-10-23 補充 hosted 專用的 lifecycle 路徑）、[#1231](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1231)（2026-10-23 修訂 payload 度量：總閘加分項預算）、[#1267](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1267)（2026-10-25 補充 hosted 不 render 本機證據工具，並調整 solo agent 文件 token 上限）；Milestone 18 對齊：[#1066](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1066)、[#1067](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1067)、[#1071](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1071)、[#1081](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1081)、[#1146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1146)、[#1153](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1153)、[#1157](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/1157)
 - **實作 PR：**[#860](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/860)
 
 ## 問題與限制
@@ -29,7 +29,7 @@ GitHub 與掃描工具只會從固定位置讀取部分檔案，例如 `.github/
 - 生成專案的 `.csarc/scripts/verify` 與 `verify-fast` 只驗證產品與自己的設定，不執行也不下發公版自測（`test-*`、`security-smoke` 與 `.csarc/tests/`）。同一批案例由公版 CI 安裝到代表性 render 執行，案例數不得減少；診斷改由 `csarc status` 提供。
 - 產品 lint、format、type check、test discovery 與 coverage 不收集 `.csarc/`。`.csarc/.ignore` 讓遵守 ignore 檔的工具（Ruff、ty 等）跳過控制層的 Python 檔，Git 照常追蹤這些檔案；pytest 預設不遞迴進入點開頭的目錄。產品 manifest（`pyproject.toml`、`package.json`、`Cargo.toml`、`go.mod`）不寫 `.csarc`，也不把它列入套件、workspace 或 coverage 來源，所以採用既有專案時不必修改產品 manifest。代價是 ripgrep 這類工具搜尋整個 repository 時也會略過 `.csarc` 的 Python 檔，需要時直接指定檔案路徑。
 - `.csarc/scripts` 的模組層 import 只載入入口必定需要的模組，其他 sibling 在命令第一次使用時才載入。合法 render 少了選用模組（例如 `documentation_mode` 不是 `template-and-content` 時的網站模組），其餘入口仍可獨立載入與執行。
-- 本機與 hosted 驗證證據使用同一個正規化 record（`local_verification.normalized_record`），欄位與驗證規則相同，只保留各自的 trust label：`self-attested-local` 或 `github-hosted`（與合併 evidence payload 同一個標籤）。
+- 本機與 hosted 驗證證據使用同一個正規化 record（`evidence_freshness.normalized_record`；`local_verification.py` 保留同名別名，#1267），欄位與驗證規則相同，只保留各自的 trust label：`self-attested-local` 或 `github-hosted`（與合併 evidence payload 同一個標籤）。
 
 ## 固定位置 allowlist
 
@@ -118,6 +118,7 @@ typescript/tests/index.test.ts
 .csarc/scripts/converge-release-tag | release_ownership == 'csarc-owned'
 .csarc/scripts/delivery_sync.py | verification_mode == 'hosted' or 'milestones' in lifecycle
 .csarc/scripts/detect-open-milestone | verification_mode == 'hosted'
+.csarc/scripts/local_verification.py | verification_mode != 'hosted'
 .csarc/scripts/pr_lifecycle_hosted.py | verification_mode == 'hosted'
 .csarc/scripts/promotion_gate.py | verification_mode == 'hosted' or 'milestones' in lifecycle
 .csarc/scripts/publish-release | release_ownership == 'csarc-owned'
@@ -127,6 +128,7 @@ typescript/tests/index.test.ts
 .csarc/scripts/render_site.py | documentation_mode == 'template-and-content'
 .csarc/scripts/repo_site_blocks.py | documentation_mode == 'template-and-content'
 .csarc/scripts/request-reviewer | verification_mode == 'hosted'
+.csarc/scripts/self_hosted_evidence.py | verification_mode == 'self-hosted'
 .csarc/scripts/spec_to_issue.py | verification_mode == 'hosted' or documentation_mode != 'off'
 .csarc/scripts/sync_milestone_state.py | verification_mode == 'hosted' or 'milestones' in lifecycle
 .csarc/scripts/sync_milestone_state_hosted.py | verification_mode == 'hosted'
@@ -141,6 +143,7 @@ typescript/tests/index.test.ts
 .github/ISSUE_TEMPLATE/milestone-tracker.yml | 'milestones' in lifecycle
 .github/workflows/ci.yml | verification_mode == 'hosted'
 .github/workflows/codeql.yml | verification_mode == 'hosted' and enable_codeql | default(false)
+.github/workflows/csarc-verify.yml | verification_mode == 'self-hosted'
 .github/workflows/dependabot-auto-merge.yml | verification_mode == 'hosted'
 .github/workflows/dependabot-merge.yml | verification_mode == 'hosted'
 .github/workflows/docker-build-scan.yml | verification_mode == 'hosted' and container
@@ -189,6 +192,11 @@ typescript/tests/index.test.ts
 - 關單條件與 hosted 相同，判斷不讀 `verification_mode`，所以任何非 hosted 模式都能使用；條件不符時 fail closed。local 專案的生成 `ci-policy.md` 說明合併後的指令。
 - 沒有新增或停止 render 的檔案，`copier.yml` 不變；local fixture 的 canonical bytes 增加，hosted fixture 不增加（PR 記錄 `scripts/generated_payload.py` 的 exact head 量測）。
 
+### hosted 不 render 本機證據工具（#1267）
+
+- `local_verification.py` 只有 local 會執行的部分（記錄、讀取與要求本機證據）留在原檔，只在 `verification_mode != 'hosted'` render。兩種模式共用的正規化 record（`normalized_record`、`TRUST_LOCAL`、`TRUST_HOSTED`、`RECORD_KEYS`、`RECORD_TIERS`）移到每個 render 都有的 `evidence_freshness.py`；`local_verification.py` 保留同名別名，`pr_lifecycle.py` 直接從 `evidence_freshness.py` 讀取。行為與文件文字都不變。
+- 這項條件只依 `verification_mode` 判斷，hosted 專案因此少 1 個檔案，canonical 總量與 verification 分項都騰出空間給 Milestone 21 的共用設定（`tests/test_local_verification_render.py`）。
+
 ### 生成副本只保留 docstring 摘要行（#1227）
 
 - 沒有與 root 逐位元組配對（`scripts/sync-paired-files.sh`）的生成 Python 副本，函式與類別的 docstring 只保留第一行摘要；完整說明只留在 root 模組一份，不再於每個生成專案重複付出 payload。模組 docstring 會成為 `--help` 說明，維持不變；註解與程式碼不變，因此行為不變，也不改變任何 render 的檔案清單。`tests/test_generated_module_pruning.py` 的 `test_generated_python_keeps_summary_docstrings` 防止多行 docstring 回到生成副本；`test_generated_copy_only_removes_root_code` 本來就忽略 docstring 比對定義。
@@ -216,7 +224,7 @@ canonical bytes 以 lock 的 Python 3.14 計算，因為 `ast.unparse` 的輸出
 
 **3. 攻擊面預算。** 每個 fixture 的 `.github/workflows` 中，(a) 頂層或任一 job 的 `permissions` 有 `write` 或為 `write-all` 的 workflow 數，(b) 觸發條件含 `pull_request_target` 的 workflow 數，上限等於實測值、沒有緩衝：hosted 10／5、consumer-a 9／5、consumer-b 7／5、solo 0／0。新增一個具寫入權限或 `pull_request_target` 的 workflow 必須修訂本節並由擁有者核准。
 
-**4. Agent 文件 token 預算。** 量 `AGENTS.md` 加 `.csarc/docs/*.md` 的估計 token：中日韓字與全形標點每字 1 token，其餘字元每 4 個 1 token（無條件進位）。上限＝實作 head 實測值×1.05，向上取整到 500：solo-default 13,500、solo-python 13,500、hosted 15,500、consumer-a 15,000、consumer-b 15,000。它取代 #1058 文件預算中 solo `.csarc/docs` 60 KB 與 `agent-workflow.md` 12 KB 兩個 bytes 上限；行數上限（600、300、360、90、90 行）保留。
+**4. Agent 文件 token 預算。** 量 `AGENTS.md` 加 `.csarc/docs/*.md` 的估計 token：中日韓字與全形標點每字 1 token，其餘字元每 4 個 1 token（無條件進位）。上限＝實作 head 實測值×1.05，向上取整到 500：solo-default 13,500、solo-python 13,500、hosted 15,500、consumer-a 15,000、consumer-b 15,000。它取代 #1058 文件預算中 solo `.csarc/docs` 60 KB 與 `agent-workflow.md` 12 KB 兩個 bytes 上限；行數上限（600、300、360、90、90 行）保留。solo-default 與 solo-python 之後經 #1267 調為 14,000：[self-hosted ADR](self-hosted-verification.md) 估計新預設 render 的 agent 文件 token 約 13,100–13,600（以 solo-default 12,829 加三種模式與登記指引的 +300–800），可能超過 13,500；solo-python 在 12,880 加上同樣增量時最多約 13,680。盤點後，條件 render 只剩約 137 token 可省，而且要改寫既有文字，擁有者決定不再精簡文字。擁有者 2026-10-25 依第 8 點「上調要修訂本節並由擁有者核准」核准這次上調；hosted、consumer-a、consumer-b 的 token 上限與其他預算都不變。
 
 **5. Runtime 能力分帳。** `scripts/generated_payload.py` 以封閉對照表把每支 `.csarc/scripts` 歸入一組：PR lifecycle 與 review、release、Milestone 與 Issue、verification、settings 與 drift、Dependabot。沒有歸組的 script 讓測試失敗，新功能因此必須記到某一組。每組上限＝實作 head 上該組在所有 fixture 中最大的 canonical code bytes ×1.03，向上取整到 1,000。以實作 base `096987b`（含 #1219、#1220、#1230）實測：PR lifecycle 257,000、release 166,000、Milestone 與 Issue 130,000、verification 101,000、settings 與 drift 87,000、Dependabot 18,000。PR lifecycle 之後經 #1248 調為 266,000：main 的 #1239（trusted base 以唯讀盤點判讀新設定，「先盤點、再動作」原則的第一個實作）在 `trusted_executor.py` 加入必要的新功能，它是 #1231 定案之後才加入的；第二次 main→delivery 同步（#1247）合併後，這組在 hosted、consumer-a、consumer-b 都是 257,655，超過原上限。新上限依同一算法計算：257,655×1.03＝265,384.65，向上取整到 266,000。擁有者 2026-10-24 核准這次上調；其他組與總閘都不變。只在 `documentation_mode: site` render 的網站引擎另記一組 docs-site；沒有任何 fixture 選這個模式，所以只量測、不設上限。組間不得自行挪用；調整任何一組的上限要修訂本節並由擁有者核准。分組加總可以略高於總閘，總量仍由總閘決定。
 

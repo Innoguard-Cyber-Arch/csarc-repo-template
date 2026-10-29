@@ -81,7 +81,11 @@ PAYLOAD_PREFIX = "payload: "
 # Arrays whose order carries no meaning; producers sort them first.
 SET_ARRAYS = frozenset({"labels", "runner_labels", "scopes", "toolchain"})
 TIME_FIELDS = frozenset({"completed_at", "started_at"})
-TRUST_VALUES = ("github-hosted", "self-attested-local")
+TRUST_VALUES = (
+    "github-hosted",
+    "self-attested-local",
+    "self-hosted-registered",
+)
 MERGE_FINDINGS = (
     "traced",
     "untraced",
@@ -104,6 +108,7 @@ class RecordUnavailableError(RuntimeError):
 
 # A tuple keeps the handler valid under the Python 3.12 grammar.
 CONTRACT_READ_ERRORS = (json.JSONDecodeError, EvidenceError)
+UNEXPECTED_ANSWER = (LookupError, TypeError)
 
 
 def _validate_string(value: str, where: str) -> None:
@@ -968,6 +973,51 @@ def local_context(root: Path) -> AuditContext:
         return Identity(name, number)
 
     return AuditContext(git, api, identity)
+
+
+def retire_warning(
+    repo: str,
+    private: object,
+    mode_private: object,
+    read: Callable[[str], Any],
+) -> str:
+    """Return the public self-hosted log WARNING text, or "" (#1287).
+
+    ADR self-hosted-verification D9: a public repository that keeps a
+    self-hosted private mode or any csarc-verify.yml run went public
+    without `csarc self-hosted retire`. `csarc self-hosted status`,
+    `csarc update`, and lifecycle `check` and `merge` share this one check.
+    `read` GETs one path below `repos/<repo>/`. An unknown visibility or
+    an unreadable answer is never silent: the text says it was not checked.
+    """
+    if private is True:
+        return ""
+    reason = "visibility is unknown"
+    try:
+        if private is False and mode_private != "self-hosted":
+            ids = [
+                flow["id"]
+                for flow in read("actions/workflows?per_page=100")["workflows"]
+                if flow["path"] == ".github/workflows/csarc-verify.yml"
+            ]
+            path = f"actions/workflows/{ids[0]}/runs?per_page=1" if ids else ""
+            if not path or not read(path)["total_count"]:
+                return ""
+    except UNEXPECTED_ANSWER:
+        reason = "GitHub answered unexpectedly"
+    except (RuntimeError, ValueError) as error:
+        reason = str(error).rstrip(".")
+    else:
+        if private is False:
+            return (
+                f"Self-hosted logs on '{repo}' are public: the repository is "
+                "public and still has self-hosted runs or settings. Run "
+                "'csarc self-hosted retire', then review its inventory."
+            )
+    return (
+        f"Self-hosted logs on '{repo}': not checked ({reason}). Run "
+        "'csarc self-hosted status' when GitHub answers."
+    )
 
 
 def main(arguments: list[str] | None = None) -> int:

@@ -530,7 +530,22 @@ def test_exact_merge_wakes_only_from_trusted_completed_workflows() -> None:
             ],
             "branches": ["dependabot/**"],
             "types": ["completed"],
-        }
+        },
+        # Issue #1264: `Dependabot reverify` wakes one exact PR and head.
+        "workflow_dispatch": {
+            "inputs": {
+                "pr_number": {
+                    "description": "Dependabot pull request number",
+                    "required": True,
+                    "type": "number",
+                },
+                "head_sha": {
+                    "description": "Exact Dependabot head SHA",
+                    "required": True,
+                    "type": "string",
+                },
+            }
+        },
     }
     assert workflow["permissions"] == {}
     resolve = workflow["jobs"]["resolve-pr"]

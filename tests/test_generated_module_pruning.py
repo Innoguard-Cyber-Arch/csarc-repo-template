@@ -38,6 +38,7 @@ SPLITS: dict[str, tuple[str, ...]] = {
         "sync_milestone_state_hosted.py",
     ),
     "verification_cost.py": ("verification_cost.py",),
+    "verification_evidence.py": ("verification_evidence.py",),
 }
 # Issue #1177: names the first generated file only forwards to the hosted
 # file that holds the root definition. Local renders omit that file.
@@ -66,6 +67,8 @@ HOSTED_FORWARDER = "loads the hosted-only sibling local renders omit (#1177)"
 # generated copy; each value records why.
 GENERATED_PATHS = "generated `.csarc/` layout paths"
 NO_TEMPLATE_ISSUE = "messages name no template-repository Issue"
+# Issue #1264 (ADR #1266 rev 5): Dependabot reverification never ships.
+ROOT_ONLY_REVERIFY = "Dependabot reverification is template-repository only"
 ADAPTED: dict[str, dict[str, str]] = {
     "authenticate_dependabot_head.py": {},
     "pr_lifecycle.py": {
@@ -73,6 +76,15 @@ ADAPTED: dict[str, dict[str, str]] = {
         "_hosted_only": HOSTED_FORWARDER,
         "_hosted_globals": HOSTED_FORWARDER,
         "__getattr__": HOSTED_FORWARDER,
+        "acquire": ROOT_ONLY_REVERIFY,
+        "merge": ROOT_ONLY_REVERIFY,
+        "merge_evidence": ROOT_ONLY_REVERIFY,
+        "merge_snapshot": ROOT_ONLY_REVERIFY,
+        "merge_trailers": ROOT_ONLY_REVERIFY,
+        "parser": ROOT_ONLY_REVERIFY,
+        "require_lease": ROOT_ONLY_REVERIFY,
+        "require_successful_checks": ROOT_ONLY_REVERIFY,
+        "trace_lines": ROOT_ONLY_REVERIFY,
         "require_trusted_verification": (
             "drops the template-repository toolchain check; no generated "
             "project renders verify-template.sh"
@@ -112,6 +124,12 @@ ADAPTED: dict[str, dict[str, str]] = {
         "_dispatch": "drops record-promotion-evidence (no generated caller)",
         "hosted_gates": HOSTED_FORWARDER,
         "_hosted_only": HOSTED_FORWARDER,
+    },
+    "verification_evidence.py": {
+        # Issue #1284: only root accepts a pre-validated Dependabot
+        # reverification as a clean-sync source; the generated copy also
+        # names its own `.csarc/scripts/verify` full entry point.
+        "validate_verification_job": ROOT_ONLY_REVERIFY,
     },
     "verification_cost.py": {
         "main": "drops the `report` command no generated caller runs",

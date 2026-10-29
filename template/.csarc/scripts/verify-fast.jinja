@@ -12,6 +12,7 @@ set -euo pipefail
 # the exact candidate.
 control_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$control_root/.csarc/scripts/verification-step"
+verification_require_python
 repo_root="$(verification_subject_root "$control_root")"
 # Pass the subject only to control-set children, never to nested fixtures.
 unset CSARC_VERIFICATION_SUBJECT_ROOT
@@ -22,6 +23,14 @@ else
   export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
 fi
 cd "$repo_root"
+# Issues #1318 and #1325: check scripts and the settings that select steps
+# come from the control root, never from the subject: the full base checkout
+# of a self-hosted exit, or the set that hosted CI and the VM stage from the
+# trusted base. A missing check script fails its step instead of falling
+# back to the subject's copy. Each check still reads the subject's files.
+check_root="$control_root"
+checks="$check_root/.csarc/scripts"
+subject=(env "CSARC_VERIFICATION_SUBJECT_ROOT=$repo_root")
 
 plan_root="$(mktemp -d)"
 trap 'rm -rf "$plan_root"' EXIT
@@ -57,9 +66,16 @@ if [[ -z "$base_ref" ]]; then
   echo "ERROR: Unknown base: '$base'. Fetch it or set CSARC_CI_BASE." >&2
   exit 2
 fi
-{% if verification_mode == "local" -%}
+{% if verification_mode != "hosted" -%}
 verification_head_sha="$(git rev-parse HEAD)"
 verification_base_sha="$(git rev-parse "$base_ref^{commit}")"
+# The record names a branch. For a commit given as the base, the recorder
+# uses the configured base branch and requires its tip to equal that
+# commit (#1318).
+verification_base="$base"
+if [[ "$verification_base" =~ ^[0-9a-f]{40}$ ]]; then
+  verification_base=""
+fi
 {% endif -%}
 if ! merge_base="$(git merge-base "$base_ref" HEAD)"; then
   echo "ERROR: No merge base: '$base_ref' and HEAD. Fetch more history." >&2
@@ -83,10 +99,12 @@ python3 "$control_root/.csarc/scripts/ci_tier.py" \
   --draft "${CSARC_CI_DRAFT:-false}" \
   --extra-scopes "$extra_scopes"
 
-plan_tier="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["tier"])' "$plan_json")"
-scope_csv="$(python3 -c 'import json, sys; print(",".join(json.load(open(sys.argv[1]))["scopes"]))' "$plan_json")"
+# Issue #1325: -I keeps the subject's files (for example a json.py in the
+# current directory) out of the trusted interpreter's import path.
+plan_tier="$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["tier"])' "$plan_json")"
+scope_csv="$(python3 -I -c 'import json, sys; print(",".join(json.load(open(sys.argv[1]))["scopes"]))' "$plan_json")"
 {% if has_python or has_typescript or has_rust or has_go -%}
-run_project="$(python3 -c 'import json, sys; print(str(json.load(open(sys.argv[1]))["run_project"]).lower())' "$plan_json")"
+run_project="$(python3 -I -c 'import json, sys; print(str(json.load(open(sys.argv[1]))["run_project"]).lower())' "$plan_json")"
 {% endif -%}
 scopes=",$scope_csv,"
 
@@ -119,7 +137,7 @@ floor_plan="$(python3 "$control_root/.csarc/scripts/trusted_executor.py" channel
 channel_floor="${floor_plan#*floor=}"
 channel_floor="${channel_floor%% *}"
 if [[ "$channel_floor" == "full" && "$suite" != "full" ]]; then
-{% if verification_mode == "local" -%}
+{% if verification_mode != "hosted" -%}
   if [[ -z "${CSARC_CI_TIER:-}" ]]; then
     suite=full
   fi
@@ -131,10 +149,16 @@ fi
 echo "Local verification plan: base=$base merge-base=$merge_base suite=$suite scopes=${scope_csv:-none}"
 {% if has_python %}export UV_PYTHON="${CSARC_PYTHON_VERSION:-{{ python_target }}}"
 {% endif -%}
+{% if verification_mode == "self-hosted" -%}
+[[ -n "${CSARC_CI_TIER:-}" ]] ||
+  echo "NOTICE: Self-hosted merge evidence comes only from the registered VM; this run is not VM evidence."
+{% endif -%}
 case "$suite" in
   fast) ;;
   full)
     CSARC_VERIFICATION_SUBJECT_ROOT="$repo_root" \
+      _CSARC_VERIFICATION_BASE="${verification_base:-}" \
+      _CSARC_VERIFICATION_BASE_SHA="${verification_base_sha:-}" \
       "$control_root/.csarc/scripts/verify"
     exit 0
     ;;
@@ -145,18 +169,20 @@ case "$suite" in
 esac
 
 verification_step "Changed-tree hygiene" git diff --check
-verification_step "Conflict-marker check" ./.csarc/scripts/check-update-conflicts
-verification_step "Secret scan" ./.csarc/scripts/scan-secrets
+verification_step "Conflict-marker check" \
+  "${subject[@]}" "$checks/check-update-conflicts"
+verification_step "Secret scan" "${subject[@]}" "$checks/scan-secrets"
 verification_step "Message pattern check" \
-  ./.csarc/scripts/check-message-style --base "$merge_base"
+  "$checks/check-message-style" --base "$merge_base"
 
 if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ||
   "$scopes" == *,template,* ]]; then
-  verification_step "Workflow and shell lint" ./.csarc/scripts/lint-workflows-shell
+  verification_step "Workflow and shell lint" \
+    "${subject[@]}" "$checks/lint-workflows-shell"
 fi
 if [[ "$scopes" == *,workflow,* || "$scopes" == *,template,* ]]; then
   verification_step "GitHub Actions pin check" \
-    python3 .csarc/scripts/check_action_pins.py --root .
+    python3 "$checks/check_action_pins.py" --root .
 fi
 
 {% if has_python or has_typescript or has_rust or has_go -%}
@@ -205,7 +231,8 @@ fi
 {% endif -%}
 
 if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
-  verification_step "Dependency scan" ./.csarc/scripts/verify-dependencies
+  verification_step "Dependency scan" \
+    "${subject[@]}" "$checks/verify-dependencies"
 fi
 {% if has_python -%}
 if $run_project_checks; then
@@ -232,15 +259,19 @@ fi
 {% if documentation_mode != 'off' -%}
 if [[ "$scopes" == *,docs,* ]]; then
   verification_step "Specification validation" \
-    python3 .csarc/scripts/spec_to_issue.py validate
+    python3 "$checks/spec_to_issue.py" validate
 {% if documentation_mode == 'template-and-content' -%}
-  verification_step "Repository site render" ./.csarc/scripts/build-repo-site --check
+  verification_step "Repository site render" \
+    "${subject[@]}" "$checks/build-repo-site" --check
 {% endif -%}
 fi
 {% endif -%}
 
-{% if verification_mode == "local" -%}
-python3 .csarc/scripts/local_verification.py record \
-  --tier fast --scopes "${scope_csv:-unknown}" --base "$base" \
+{% if verification_mode != "hosted" -%}
+# The recorder comes from check_root, so the trusted base can record a
+# candidate render that no longer ships it (#1318).
+python3 "$checks"/local_verification.py record \
+  --control-root "$check_root" --tier fast \
+  --scopes "${scope_csv:-unknown}" --base "$verification_base" \
   --head-sha "$verification_head_sha" --base-sha "$verification_base_sha"
 {% endif -%}

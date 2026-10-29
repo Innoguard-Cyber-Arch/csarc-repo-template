@@ -946,13 +946,55 @@ path 與允許事件；只借用可信 run 的 `details_url` 也無法拼接成�
 
 ### 本機與 hosted 驗證模式（#908）
 
-新專案預設 `verification_mode: local`；既有 repository 沒有此欄位時維持 `hosted`，避免更新時靜默降低保護。兩種模式共用同一個 `ci_tier.py` router，以及同一組 focused／fast／full 驗證入口；切換模式不增加第二套 runner、matrix 或測試清單。
+#1272 起，新專案的預設改為 private 用 `verification_mode_private: self-hosted`、public 用 `verification_mode_public: hosted`（見下節）；這部分取代 #908 的「新專案預設 `local`」。#908 的其餘內容保留：`local` 模式的行為，以及既有 repository 沒有此欄位時維持 `hosted`，避免更新時靜默降低保護。三種模式共用同一個 `ci_tier.py` router，以及同一組 focused／fast／full 驗證入口；切換模式不增加第二套 runner、matrix 或測試清單。
 
 `local` 模式不產生 `ci.yml`、`pr-policy.yml`、`pr-policy-writes.yml`、`pr-review.yml`、reviewer assignment、spec sync、work-item lifecycle、Pages、OSV、CodeQL、Docker scan、Dependabot auto-merge、release 或 release-drift workflow，required-checks Ruleset 與 Pages policy 也保持 disabled，因此不會建立永遠等不到的 check、在 `main` 重跑完整驗證或製造無意義告警。Issue／PR／Milestone 操作改用既有本機 wrapper；外部協作者若直接在 GitHub UI 修改 metadata，local mode 不會即時自動修正，只能由人工或可選的低頻 governance drift check 發現。repo-local 發版工具仍保留，需要可信 release provenance 或 Pages deployment 時先切換成 `hosted` 再更新模板。fast／full 成功後只做常數時間的 metadata 寫入：已 commit 且 clean 的候選會把 exact head/tree、base、tier、scopes、command、success 與 24 小時 freshness 綁到 Git metadata；尚未建立 commit 或仍有未提交修改時，測試結果維持成功但不產生可合併的證明。`pr_lifecycle.py` 在 merge 前重新讀取 GitHub metadata、review、lease 與這份證明，執行既有 PR policy checker，再使用受控 admin bypass，合併讀回後留下清楚標為 `self-attested-local` 的 trace（#1073）。
 
 hosted 模式仍保留 required `verify`／`title`／`review`。實作中與一般 push 前只跑變更 owner 的 focused checks；`verify-fast` 是可選的廣泛診斷，不因 trusted plan 選到 `full` 就再於本機跑一次 aggregate suite。required `verify` 在 exact candidate 執行所選 fast／full，並提供唯一的正常 merge evidence；本機 full 只留給本文件明定的 Actions／發布 fallback 或明確診斷，且不會在 fallback 邊界外取代 hosted evidence。Draft 的 CI、policy、review 與 reviewer assignment 都在 runner 前略過；`PR policy writes` 只接續上游 `success`／`failure`，不為 `skipped`／`cancelled` 開 runner。Pages 只在 `documentation_mode: template-and-content` 時產生，採 Actions deployment，僅回應 `docs/**` 變更或手動 dispatch。`policies/pages.json` 的 `enabled` 是維護者的 desired-state 選擇，不是能力判定：public repository 在 GitHub Free 可以發布 Pages，但不代表必須發布；`enabled=true` 時 `plan` 顯示 ENABLE／UPDATE／NO-OP，`enabled=false` 是明確 opt-out，live 仍已發布時顯示 DISABLE，`check` 雙向比對 desired 與 live，`apply` 依同一動作建立、更新或停用站台後再以 `check` 讀回（#985）。private repository 缺少 GitHub Enterprise Cloud 時仍回報 `DEGRADED`，無法判讀的 Pages API 錯誤一律失敗，不視為已發布或 compliant。`release_trigger: manual` 不註冊 push trigger；本模板 root 採此設定。
 
-這份本機證明能防止誤拿舊結果、錯誤 branch／base、測完又改檔或跑錯 tier，但不能防止有寫入權限的人偽造 JSON，也不能證明 GitHub event／權限、第三方服務、實際部署、遠端 runner 或 release provenance。local mode 不把這些項目標成成功；需要這些信任性質時，改成 `verification_mode: hosted`，更新模板並重新套用 repository settings。切換到 hosted 後，下節 #834／#835 的規則完整生效。
+這份本機證明能防止誤拿舊結果、錯誤 branch／base、測完又改檔或跑錯 tier，但不能防止有寫入權限的人偽造 JSON，也不能證明 GitHub event／權限、第三方服務、實際部署、遠端 runner 或 release provenance。local mode 不把這些項目標成成功；需要這些信任性質時，把生效的 `verification_mode_private` 或 `verification_mode_public` 改成 `hosted`，更新模板並重新套用 repository settings。切換到 hosted 後，下節 #834／#835 的規則完整生效。
+
+### 三種驗證模式與可見性設定（#1265、#1272）
+
+[self-hosted verification ADR](adr/self-hosted-verification.md) 新增第三種模式 `self-hosted`，並把模式依可見性拆成兩個設定。契約見 [SPEC-011](specs/SPEC-011-verification-mode-settings.md)。
+
+| 模式 | 驗證在哪裡執行 | 合併證據與 `CSARC-Trust` | 合併規則由誰執行 | 可用的可見性 |
+| --- | --- | --- | --- | --- |
+| `self-hosted` | csarc-devops 登記的 VM；操作者以 `workflow_dispatch` 觸發唯讀的 `csarc-verify.yml` | GitHub 記錄的 run 與 job，`self-hosted-registered` | lifecycle 指令，治理與 `local` 相同 | 只有 private |
+| `local` | 操作者自己的電腦 | Git metadata 中的本機證明，`self-attested-local` | lifecycle 指令 | private、public |
+| `hosted` | GitHub-hosted runner | required `verify` check，`github-hosted` | Ruleset（方案支援時）加上 lifecycle | private、public |
+
+| 設定 | 可用值 | 新專案預設 | 何時使用 |
+| --- | --- | --- | --- |
+| `verification_mode_private` | `self-hosted`、`local`、`hosted` | `self-hosted` | repository 是 private 或 internal |
+| `verification_mode_public` | `hosted`、`local` | `hosted` | repository 是 public；設成 `self-hosted` 時設定驗證失敗 |
+
+- **實際模式**依 repository 當下的可見性決定。render 只產生實際模式需要的檔案；合併時 lifecycle 以操作者的登入重新讀取可見性，與已 render 的模式不一致時 fail closed，要求重新 render。
+- **怎麼選。**private repository 預設 `self-hosted`：驗證不耗用本機資源，也不耗用 GitHub-hosted 額度，結果由 GitHub 記錄，比 `local` 的自我證明可信。尚未登記、VM 長期無法使用，或啟用 `container` 時選 `local`；需要 Ruleset 強制合併、Pages 或可信 release provenance 時選 `hosted`。public repository 預設 `hosted`；`local` 只在不需要遠端證據時使用。
+- **切換一律經 PR。**以 `csarc update --data verification_mode_<private|public>=<模式>` 在 governance-switch PR 修改；任何切換到或離開 `self-hosted` 的變更都視為放寬。既有專案不自動切換：`csarc update` 在 private repository 建議改用 `self-hosted` 並列出登記步驟；新專案尚未登記時，`csarc init` 印出 `W22-self-hosted-unregistered` 與同一份步驟。
+
+限制：
+
+- **GitHub Free 的 private repository 沒有 Ruleset。**rules API 回應方案不支援（#1210），所以 `local` 與 `self-hosted` 的合併規則只由 lifecycle 指令執行，不由 GitHub 強制。有寫入權限的人仍可以在 GitHub UI 直接合併；這種合併沒有 trailer，merge trace 稽核把它列為 `untraced`。
+- **`self-hosted` 在窗外一律 fail closed。**沒有登記、沒有窗口或證據不符時拒絕合併，不改用 `local` 或 `hosted` 的證據。唯一的例外是只改模式設定、方向是離開 `self-hosted` 的 governance-switch PR，它以 `local` 的本機證明合併（SPEC-011 §7）。
+- **登記撤銷不讓已完成的證據失效。**模板不讀取 csarc-devops；撤銷前完成的 VM 證據仍依 24 小時期限有效。
+- **`container: true` 不能搭配 `self-hosted`。**VM 的 job 容器不提供 Docker daemon，設定階段直接拒絕（#1281，SPEC-011 §9）；csarc-devops 確認 job 內隔離的 Docker daemon 可行後，以後續 Issue 解除。
+
+### Self-hosted 導入與登記指南（#1272）
+
+下游 repository 依下列順序導入。模板不替下游修改設定，也不讀取 csarc-devops；登記是否有效由 VM 依允許清單強制（ADR D7）。
+
+1. **確認條件。**repository 是 private，`container` 沒有啟用，而且有一位 repository 管理員負責開窗。public repository 不能使用 `self-hosted`。
+2. **開雙邊 Issue。**在下游 repository 與 csarc-devops 各開一張 Issue，互相引用完整 URL。csarc-devops 的 Issue 列出 repository 全名、VM ID、環境（`dev`、`uat`；不使用 Milestone 的 repository 可以只登記 `uat`）與觸發者允許清單。
+3. **雙方核准。**兩邊各自依自己的規則核准，這是人工流程：下游沿用 Milestone tracker 或 standalone Issue 的核准，csarc-devops 由它的核准者決定。
+4. **觸發者允許清單。**清單列出可以觸發 `csarc-verify.yml` 的 GitHub 帳號，只存在 VM 端，不寫進 repository。VM 的 job-started hook 拒絕 `actor` 或 `triggering_actor` 不在清單上的 job，所以清單外的寫入者即使能推分支，也不能在 VM 上執行程式碼。修改清單要再走一次雙邊 Issue。
+5. **登記 PR。**csarc-devops 更新允許清單後，下游以 governance-switch PR 執行 `csarc update --data verification_mode_private=self-hosted --data 'self_hosted_runner={id: <vm-id>, registration: <csarc-devops Issue URL>}'`。lifecycle 只檢查 `registration` 指向 csarc-devops 的 Issue，不讀取它的內容。新專案已是 `self-hosted`，只需要設定 `self_hosted_runner`。這時 trusted base 還沒登記，VM 不能驗證這張 PR，所以只改 `self_hosted_runner`（與 `self_hosted_environments`），其他變更只有 `.csarc/provenance.json`（`final_plan_sha256` 只能保留或移除）與逐 byte 符合 render 結果的 `.github/workflows/csarc-verify.yml`、三個檔案都是 mode `100644` 一般檔案的登記 PR，以本機 `verify-fast` 的證據經 `pr_lifecycle.py merge` 合併，trace 記為 `self-attested-local` 並多一行 `self-hosted-registration-trace`（ADR Q12，#1317）；同時改了其他設定、其他檔案（包含 `AGENTS.md`、`.csarc/scripts/` 與搬移進允許目錄的檔案）或升級模板版本就被擋，這些變更在登記合併後另開 PR，以 VM 證據驗證。從 `local` 或 `hosted` 切換的既有專案，登記 PR 由原模式驗證。`csarc adopt` 導入既有 repository 時預設 `solo-local`，不會自動改成 `self-hosted`。
+6. **縮短 log 保存期限。**管理員把 repository 的 Actions log 保存期限設為 7 天。repository 轉成 public 後，過去的 job log 會一起公開。
+7. **開窗與延長。**`csarc self-hosted open --env dev|uat` 先印出唯讀盤點，加 `--apply` 才以管理員自己的 `gh` 登入取得一小時內有效的註冊 token 交給 VM，開啟 24 小時窗口。`csarc self-hosted status` 顯示剩餘時間；剩不到 2 小時會印出 `WARNING:`，這時以 `csarc self-hosted extend --env <環境> --apply` 把結束時間改為現在＋24 小時，不累加、不註冊第二個 runner。`close` 提前關窗。
+8. **驗證。**`csarc self-hosted verify --pr <N> --apply` 在 PR 的目標分支觸發 `csarc-verify.yml`：進 `dev/m*`、`dev/i*` 的 PR 用 `dev`，進 `main` 的 PR 用 `uat`。外部 fork 的 PR、public repository、沒有窗口或剩不到 30 分鐘時拒絕派工。之後照常以 `pr_lifecycle.py merge` 合併。
+9. **90 天到期。**連續 90 天沒有開窗，VM 從允許清單移除這個 repository 並刪除它的快取與資料；之後 `open` 回應 registration expired，要從第 2 步重新登記。
+10. **公開前必須 `retire`。**repository 要轉成 public 之前，先執行 `csarc self-hosted retire` 檢視盤點，再加 `--apply` 刪除 `csarc-verify.yml` 的 run 與 artifact、repository 的**全部** Actions cache 與**全部** repository runner（不只 VM 的），並建立把模式改離 `self-hosted` 的 governance-switch draft PR。這張 PR 的本機證據要用 trusted base 的驗證器產生：`git worktree add --detach <dir> origin/<base>`，再於 PR 的 checkout 執行 `CSARC_VERIFICATION_SUBJECT_ROOT="$PWD" <dir>/.csarc/scripts/verify-fast`，因為 public render 不帶記錄器；這時檢查腳本、記錄器與選擇步驟的設定都來自 base，只檢查 PR 的檔案。base 提供檢查腳本與設定，只能防止 candidate 直接改掉自己的檢查；這不是隔離邊界：candidate 的測試與程式碼在同一台機器、以同一個使用者執行，可能改寫 base 的 worktree，所以證據仍是 `self-attested-local`。合併這張 PR 之後才改變可見性。已經先公開時，lifecycle 拒絕所有 PR；先轉回 private，再依上述步驟執行 `retire` 並合併，最後公開。轉回 private 時，依 [GitHub 文件](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/managing-repository-settings/setting-repository-visibility)，star 與 watcher 會被移除；不能接受時只能不經 lifecycle 合併，這是 `untraced` 合併，要在 PR 與 Issue 記錄原因（ADR D9、Q13，#1318）。沒有先 `retire` 就公開時，VM 會停止 runner 並刪除資料，合併時 VM 證據失效；repository 已是 public，但 `verification_mode_private` 仍是 `self-hosted` 或仍有 `csarc-verify.yml` 的 run 時，`csarc self-hosted status`、`csarc update`（含報告）與 lifecycle 的 `check`、`merge` 都印出 `WARNING:` 要求執行 `retire`，這個警告不改變合併判斷（ADR D9、#1287）。已公開的 log 無法收回。
+11. **退出。**不再使用 `self-hosted` 時，以 governance-switch PR 改離 `self-hosted`，並在 csarc-devops 的 Issue 通知對方更新允許清單；只需要下游核准。
 
 ### `verify` 的可信 hosted execution evidence（#834）
 
@@ -974,6 +1016,21 @@ step 先比對 manifest，再以 `CSARC_VERIFICATION_SUBJECT_ROOT` 指向 exact 
 自己的測試、lint 與 scan 照常在 candidate tree 執行，但「要跑哪些檢查、怎麼彙總結果」只由 base 決定。入口解析完
 subject 後立即 unset 這個變數，nested fixture 不會繼承。candidate 改了 control set 時，trusted router 會把變更歸入
 shell／workflow scope 並升到對應 tier，新版 gate 要等合併進 base 後才生效。
+
+#1325 把生成專案的 control set 擴大到檢查腳本與設定：`ci.yml` 與 `csarc-verify.yml` 的 `prepare` 從 trusted base
+複製 `.csarc/scripts/` 的每個檔案與 `.csarc/config.yml`，入口以這份副本執行衝突標記、secret 掃描、訊息格式、
+workflow 與 shell lint、Action pin、相依掃描、規格驗證、站台、metadata、語言設定與 PR 寫入者檢查，缺少腳本時那一步
+失敗，不改用 candidate 的副本。三種執行的來源如下：
+
+| 執行 | 入口與檢查腳本 | 決定要跑哪些步驟的設定 | 測試、lint 設定、相依與 verification hook |
+| --- | --- | --- | --- |
+| 本機，candidate 檢查自己 | candidate | candidate | candidate |
+| 本機，base 的驗證器檢查 candidate（self-hosted 出口，#1318） | base 的 worktree | base 的 `.csarc/config.yml` | candidate |
+| hosted CI 與 VM | trusted base 搬入的 control set | trusted base 的 `.csarc/config.yml` | candidate |
+
+仍屬於 candidate、照常執行的是：測試、lint 設定（例如 `pyproject.toml` 的 ruff 設定、`uv.toml` 對專案指令的設定）、相依與 lockfile，以及 project verification hook（`project_verification_hook` 或可執行的 `scripts/verify-product`，路徑檢查之後執行 candidate 的程式）。它們就是驗證對象；candidate 放寬自己的 lint 設定、測試或 hook，要靠審查發現。trusted 的 Python helper 以 `python3 -I` 執行，candidate 目錄裡的 `json.py`、`json/` 之類的同名模組、它的 virtual environment 與 uv 設定都不會被載入；wheel 匯入檢查以 `python -P` 執行並要求模組來自 site-packages，twine 與 wheel 的 `uv run` 帶 `--no-config`；站台建置的設定 reader 與設定也來自檢查腳本所在的 checkout。要跑哪些範圍由 trusted router 依 candidate 的變更路徑決定，這是被檢查的資料。hosted `ci.yml` 的「Read release ownership」先確認 trusted reader 讀得懂 candidate 的設定，再從保存的 base `.csarc/config.yml` 讀 `release_ownership`，決定是否執行 release 檢查。這個 workflow 是 `pull_request_target`，由 main 讀取，所以要等這個變更進入 main 才生效；在那之前與之後，任何 `release_ownership` 變更都走 governance-switch route（#1325）。trusted helper 以 `python3 -I` 執行，入口一開始就要求 Python 3.12 以上，較舊時以 `ERROR: Python is too old` 結束；VM 不安裝 Python，靠 image 的 `python3_minimum`。lifecycle 的 route 判斷從 lease 的 base commit 讀 base 設定，不從執行中的 checkout 讀。
+一般本機執行時 candidate 就是 base，行為不變。這個 template repository 自己的 root `verify-fast` 與
+`verify-template.sh` 仍以 candidate 的 `scripts/` 執行檢查腳本，control set 只有上段列的入口與 stage gate。
 
 這些 trusted step 用 `python3` 執行 base 的 scripts，所以 `verify` 在第一個 trusted step 之前就以固定版本的
 `actions/setup-python` 裝好 Python 3.14，不用 runner 內建的舊版直譯器（#1111）。其他 workflow 不一定先裝
@@ -1056,9 +1113,9 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
   `runs from trusted base <sha>`。啟動程式本身仍是操作者執行的 entry point；要完全不經 candidate 程式碼，
   可先 `git worktree add --detach <path> <base_sha>`，再從 candidate worktree 以
   `CSARC_TRUSTED_BASE_SHA=<base_sha> python3 <path>/scripts/pr_lifecycle.py merge ...` 執行。
-- **Governance-switch route**：改動 `.csarc/scripts/`、放寬治理值（`admin_bypass`、`verification_mode`、
+- **Governance-switch route**：改動 `.csarc/scripts/`、放寬治理值（`admin_bypass`、`verification_mode_private`、`verification_mode_public`、
   `governance_mode`、`copilot_review` 往寬鬆方向，關閉 `enable_codeql`，移除 `lifecycle` 或
-  `scheduled_checks` 項目，調低 `coverage_threshold`）、變更設定 schema，或無法
+  `scheduled_checks` 項目，調低 `coverage_threshold`）、改變 `release_ownership`（#1325）、變更設定 schema，或無法
   取得完整變更清單時，PR 必須帶 `governance-switch` label。hosted 由 trusted base 的 `validate-pr-policy`
   經 API 讀取 candidate 設定與檔案清單判定，local 由 lifecycle 對 exact head 判定；兩者共用同一個
   `route` 規則。這條 route 不放寬任何控制：required checks、exact-head 授權與 remote lease 照常要求，
@@ -1079,7 +1136,7 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
   設計依據見 [`dry-run-inventory-before-action.md`](adr/dry-run-inventory-before-action.md)。
 - **Release channel floor**：delivery branch（`dev/m*`、`dev/i*`）是 beta，floor 為 fast；其他 base
   （standalone、hotfix、release recovery 指向 `main`）是 stable，floor 為 full；`hotfix`、`release-recovery`、
-  `promotion` label 也要求 full。`verify-fast` 取 floor 與 path tier 中較強者；`verification_mode: local`
+  `promotion` label 也要求 full。`verify-fast` 取 floor 與 path tier 中較強者；local 模式
   時直接升級成 full，hosted mode 的本機執行只提示 floor，正式證據仍由 hosted `verify` 提供。local merge
   要求的證據 tier 同樣是 release level 與 trusted router path tier 中較強者。
 
@@ -1103,7 +1160,7 @@ workflow 的可信 base 定義固定 entry command 與 setup steps；被驗的 s
    CSARC-Evidence: https://github.com/<owner>/<repo>/pull/<N>#issuecomment-<id>
    CSARC-Evidence-SHA256: sha256:<64 hex>
    CSARC-Evidence-Tree: <verified tree>
-   CSARC-Trust: github-hosted | self-attested-local
+   CSARC-Trust: github-hosted | self-attested-local | self-hosted-registered
    CSARC-Route: issue | sync | dependabot | release-recovery | hotfix | release-follow-up | milestone | isolated
    CSARC-Approval: review | comment | copilot | hotfix-emergency
    CSARC-Authorization: <approval URL>
@@ -1380,6 +1437,90 @@ PR 內自動同步；選擇後者，理由記錄於本 Issue 討論（維護者 
    `check` 對被拒的 snapshot 仍以 0 結束，所以 workflow 的 `check` 步驟只在 `merge_mode` 是 `agent` 時成功；
    否則失敗並由同一次 run 釋放自己取得的 lease，重跑不會再被舊 lease 擋 15 分鐘。
 
+   **#1264 修正：落後 main 時以重新驗證代替 rebase（只在模板 repository）**：Dependabot 只在 PR 與 base
+   衝突時才自動 rebase，只是落後 main 時不會動；lifecycle 又要求 PR 的 base 等於目前的 main，所以 main 每前進
+   一次，已核准、檢查全過的 Dependabot PR 就卡住。root 的 `.github/workflows/dependabot-reverify.yml`（不下發到
+   `template/`）在 main 前進（`push`）、上述四個 workflow 對 `dependabot/**` 完成，或手動 dispatch 時執行：
+
+   - `inventory` job 只讀。它先確認觸發的 commit 仍是目前的 main，再由 `scripts/dependabot_reverify.py
+     inventory` 列出每張 open、同 repo 的 Dependabot PR 與狀態（`current`、`conflict`、`pending`、`waiting`、
+     `reverified`、`reverify`），寫進 step summary 之後才採取動作。只有同時符合以下條件的 PR 列為 `reverify`：
+     落後 main、GitHub 回報 mergeable、最新 review 核准 exact head、有 `dependabot-merge-eligible`、只有一個
+     commit，而且這個 main 上還沒有通過的重新驗證。
+   - `reverify` job 每張 PR 產生一個 check（`dependabot-reverify (#N)`），`max-parallel: 1`，權限只有
+     `contents: read` 與 `pull-requests: read`。它先保留這個 main 的可信驗證程式，再 checkout GitHub 的 test
+     merge `refs/pull/<N>/merge`，要求 parents 正好是「目前的 main、未改動的 head」，然後用可信 base 的
+     `verify-template.sh` 跑 full。step 名稱寫明 `pr`、`head`、`main`、`merge`、`tree`、`scopes`。這個
+     workflow 不 push、不改 Dependabot 的分支或 commit，也不使用 GitHub 的 Update branch。這個 job 在 main
+     ref 的事件上執行候選程式，所以所有工具設定都關閉快取（`setup-uv` 的 `enable-cache: false`、`setup-node`
+     的 `package-manager-cache: false`、`setup-go` 的 `cache: false`），不留下之後 main workflow 會還原的快取。
+   - `dispatch` job 只對通過的 PR 以 `workflow_dispatch` 喚醒 `dependabot-merge.yml`，輸入 PR 編號與 exact
+     head；`notice` job 在有衝突的 PR 留一則帶隱藏標記的提示，同一張 PR 不重複留言。整個 workflow 以
+     concurrency 串行、不取消進行中的 run，較新的 pending run 會取代較舊的。
+
+   lifecycle 只在 `--require-dependabot-head` 路徑（`acquire`、`check`、`merge`）接受落後 main 的 base。
+   PR head 未變、maintainer 對該 head 的核准、eligibility 與 required checks 照舊重新驗證；另外必須有
+   `dependabot-reverify (#N)` 在**目前** main 的 commit 上通過，producer 是 `dependabot-reverify.yml` 在
+   `main` 上的 `push`／`workflow_run`／`workflow_dispatch` run，跑在 GitHub-hosted runner，24 小時內完成，且
+   step 名稱綁定同一個 PR、head 與 main。main 再前進、head 改變、核准失效、驗證失敗或跑在 self-hosted
+   runner，都 fail closed。只接受直接建在 base 上的 Dependabot commit；#1052 的 sync child 帶有對舊 base
+   物化的 stable 版本，仍需要 Dependabot rebase。PR 標題與每個 commit 的 release intent（用
+   `release_policy.py` 的 `release_intent` 與 BREAKING CHANGE 判斷）都必須是 no-release；`fix(deps)` 這類會
+   發版的 head 在 inventory 標為 `rebase`，`bind` 與 lifecycle 也都拒絕，訊息要求等 Dependabot rebase。這條路徑只用於 `hosted` 模式，local／self-hosted 的下游專案
+   照舊由操作者處理。一般 PR 仍要求 base 等於目前的 main。
+
+   合併時 head 自己的 hosted `verify` 仍要存在並通過，但 merge evidence 改用重新驗證的結果：`tree_sha` 是
+   test merge 的 tree，`base_sha` 是驗證時的 main，原本的 head tree 與 PR base 一併記錄。合併前要求 main 仍是
+   那個 SHA；合併後讀回 merge commit，parent 必須是那個 main、tree 必須等於驗證過的 tree，summary 另寫
+   `dependabot-reverify-trace`。這種合併的 tree 與 head 不同，所以 `dependabot-merge.yml` 不在它之後
+   dispatch `release.yml`：上述 no-release 檢查保證這條路只有不發版的 head，下一次 release run 會從 history
+   規劃。
+
+   **接受的風險（只能事後偵測）**：GitHub 的 merge API 只能綁定 head SHA，不能綁定 base。lifecycle 在 merge
+   前一刻確認 main 仍是驗證過的 SHA，但如果 main 在這之後、squash 之前前進，GitHub 會把 head 合到較新的 main，
+   產生沒驗證過的 tree。這個空窗無法用 API 關閉，所以只做響亮的事後偵測：讀回的 parent 或 tree 不符時，
+   `pr_lifecycle.py merge` 以非零結束，輸出 `ERROR: Reverified Dependabot merge <sha>: unverified tree ...`，
+   並要求在 main 上驗證該 commit 或 revert；workflow 的 merge step 因此失敗，不再 dispatch 任何後續流程。
+
+   **信任轉移**：在這條路徑上，head 自己 `verify` 的深度證據檢查（`require_trusted_verification`：exact
+   tree、新鮮度、executor）不再執行，改由重新驗證證據取代，merge evidence 也改為重新驗證的 payload。這是安全
+   的，因為 head 的 `verify` 只證明舊 base 上的 head tree，而實際合併的是 test merge 的 tree；重新驗證以同一套
+   可信 main 程式、GitHub-hosted runner 跑 full，綁定這個 head 與目前的 main，比 head 的證據更接近合併結果。
+   head 的 required contexts 仍必須存在並通過，producer 身分仍照舊驗證。
+
+   **clean sync 與發版沿用重新驗證（#1284）**：這種合併的 tree 與 head 不同，`check-trusted-verification` 的
+   `--resolve-merge-source`／`--resolve-release-source` 改用 `dependabot_reverify.py` 的 `merged()` 找它的重新驗證，
+   條件全部成立才接受：merge commit 只有一個 parent、來源是 Dependabot 合併到 main 的 PR、head 有可信的
+   `dependabot-merge-eligible` 通過與 Dependabot 座標（與一般 Dependabot release source 同一道檢查，admin
+   bypass 合併而沒有 eligibility 的 head 不算）、那個 parent 上有
+   通過的 `dependabot-reverify (#N)`（上面列的 producer、runner 與 24 小時規則照舊），而且 merge commit 的
+   tree 等於驗證過的 tree，GitHub 讀回的 test merge 的 tree 也相同、parents 正好是「驗證時的 main、未改動的
+   head」。GitHub 把 head 合到較新 main 產生的 tree（上面接受的風險）不符合這些條件，照樣 fail closed。
+   `sync/main-to-*` 的 clean sync 因此可以引用這次重新驗證作為 full 證據，sync PR 合併時 lifecycle 會用同樣
+   的條件再驗一次。在這種 commit 上 dispatch `release.yml` 時，發版改從 merge commit 自己的 history 規劃，
+   不再改用 head。這個模組不下發，產生的專案找不到它，tree 不同時照舊 fail closed。
+
+   生效時間：重新驗證的 producer 必須是 `main` 上的 `dependabot-reverify.yml`。這個 workflow 隨 Milestone 21
+   promotion 進入 main 之後，上述接受路徑才會生效；在那之前 main 上不會有重新驗證的合併，任何 tree 不同的
+   squash 都照舊 fail closed。
+
+   **Dependabot 不回應 `@dependabot rebase`／`recreate` 的盤點（#1264）**：#1215 上，2026-10-24 07:25 的
+   `rebase` 與 08:16 的 `recreate` 都被 Dependabot 以 👍 接受，各跑了一次 update job（Actions run
+   40074062990、40077368888），也都 force-push 了新的 head（08:17 的 `a72617` 建在當時的 main `fd5f9ac`）。
+   main 隨後又前進兩次，PR 再次落後。之後 09:51、10:07、14:09 的三次指令沒有任何 reaction，也沒有新的 update
+   job。job 紀錄顯示 Dependabot 記得的 group PR 是 ty 0.0.89，PR 實際是 0.0.90，所以每次都判定「目標版本已變、
+   應取代舊 PR」，再建立同樣的內容。設定（`.github/dependabot.yml`）、權限（下指令的是 admin）與 PR 狀態都正常；
+   後續指令為何沒被受理，GitHub 沒有可查的 API 或日誌，repository 端無法消除。重新驗證上線後，只是落後 main
+   的 Dependabot PR 不再需要 rebase。
+
+   人工處理步驟（有衝突，或 Dependabot 不回應時）：
+
+   1. 留言 `@dependabot rebase`，確認 Dependabot 以 👍 回應，並在 Actions 看到新的 Dependabot update job。
+   2. 沒有回應時，關閉這張 PR，到 repository 的 Insights → Dependency graph → Dependabot，對該 ecosystem 按
+      「Check for updates」（或等下一次排程），讓 Dependabot 開新的 PR。
+   3. 仍無法自動合併時，由維護者依 Journey 08 人工合併。不要自己修改 Dependabot 的分支，也不要用 Update
+      branch：Dependabot 路徑會驗證 commit 由 Dependabot 簽章（#1052）。
+
    同步 commit 的訊息固定用 `fix(deps): ...`，不是 `chore:`：完成條件第五項要求「會改變 template/ 內容的
    依賴更新，合併後要進入下一次發版」，`release-please`（`release-type: simple`）只認 `fix`／`feat` 升版號；
    這裡只在 `sync-paired-files.sh` 找到 drift（代表這次 bump 改到 `copier update` 會下發的內容）時
@@ -1442,7 +1583,7 @@ CLI fail closed 五個案例，root 與 `template/tests/test_check_action_pins.p
 | Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**：本檔尚未進入 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待進入 main＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |
 | Work item lifecycle | `.github/workflows/work-item-lifecycle.yml` | #400／#401／#574（合併）／#886（runner guard） | `issues`、`issue_comment`、`milestone`、`pull_request.closed` 事件；job guard 在 runner 前排除 PR comment、非 delivery-branch PR close 與沒有任何 owner step 的 Issue 事件 | 單一 job 內所有 step 共用的最小權限集合：`checks: write`、`contents: read`、`issues: write`、`pull-requests: read`；5 分鐘 | label／milestone routing、lifecycle gate 狀態與 closure 同步、對應 Issue 關閉 | `scripts/test-issue-triage`、`tests/test_journey06_workflows.py`、`tests/test_milestone_approval.py`、`tests/test_milestone_closure.py`、`tests/test_work_pr_closure.py` | #574 單一 job 已實作；#886 job guard 待 live evidence | candidate |
 | Spec to Issue | `.github/workflows/spec-to-issue.yml` | Spec 轉換 | spec 檔案變更事件／manual dispatch | 最小 Issue metadata write | 可審查 Issue 草稿 | `tests/test_spec_to_issue.py` | run [33490382161](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33490382161)，2026-09-01，success | active |
-| Dependabot | `.github/dependabot.yml`、`.github/workflows/dependabot-auto-merge.yml`、`.github/workflows/dependabot-merge.yml` | GitHub 原生＋依賴安全；與一般 PR 共用可信 hosted verification（#834）；template 同步、Actions pin 一致性（#755）與 exact-head merge（#830／#886） | schedule／manifest 變更；`pull_request_target`；只有 `dependabot/**` branch 的 trusted workflow completions | authentication 只讀；sync 精確 branch write；merge 透過 lifecycle lease 使用必要 PR／contents write | dependency PR；同張 PR 補齊 paired template 副本；minor／patch 在 required checks 後重新驗證並 atomic merge，major 保留人工審核；一般 PR 不建立 exact-merge workflow run | `tests/test_authenticate_dependabot_head.py`；`tests/test_dependabot_auto_merge.py`；`tests/test_sync_template_action_pins.py`；`tests/test_pr_lifecycle.py`；`scripts/sync-paired-files.sh --check` | GitHub 原生 Dependabot active；`dependabot/**` pre-trigger filter 待 live evidence | candidate |
+| Dependabot | `.github/dependabot.yml`、`.github/workflows/dependabot-auto-merge.yml`、`.github/workflows/dependabot-merge.yml`、`.github/workflows/dependabot-reverify.yml`（root only，#1264） | GitHub 原生＋依賴安全；與一般 PR 共用可信 hosted verification（#834）；template 同步、Actions pin 一致性（#755）與 exact-head merge（#830／#886） | schedule／manifest 變更；`pull_request_target`；只有 `dependabot/**` branch 的 trusted workflow completions；main `push` 與 reverify 的 `workflow_dispatch`（#1264） | authentication 只讀；sync 精確 branch write；merge 透過 lifecycle lease 使用必要 PR／contents write | dependency PR；同張 PR 補齊 paired template 副本；minor／patch 在 required checks 後重新驗證並 atomic merge，major 保留人工審核；一般 PR 不建立 exact-merge workflow run | `tests/test_authenticate_dependabot_head.py`；`tests/test_dependabot_auto_merge.py`；`tests/test_sync_template_action_pins.py`；`tests/test_pr_lifecycle.py`；`tests/test_dependabot_reverify.py`；`scripts/sync-paired-files.sh --check` | GitHub 原生 Dependabot active；`dependabot/**` pre-trigger filter 待 live evidence | candidate |
 | Version／Release | `.github/workflows/release.yml` | #369／#430／#588／#591／#598／#699／#834／#900 | `release_trigger=main` 時接 main push；`manual` 時只接受明確 dispatch／本機入口 | top-level read；release job 另有 `actions: read`、`checks: read`、`contents`／PR／Issue／status write；60 分鐘 | 固定以 Conventional Commits 判定 major／minor／patch／no-release；no-release 不建候選，只有 materialized 且驗證完成的候選才發布 GitHub Release、checksum 與 SBOM | `tests/test_release_policy.py`、`tests/test_release_bundle.py`、`tests/test_journey07_release.py`、`tests/test_verification_evidence.py` | #900 trigger candidate；Immutable Release post-hoc 驗證沿用 #770 |
 | Pages | `.github/workflows/pages.yml` | #926 路徑限定的靜態文件部署 | hosted＋`documentation_mode=template-and-content` 才產生；`docs/**` push 或手動 dispatch | `contents: read`、`pages: write`、`id-token: write`；10 分鐘 | 上傳已 commit 的 `docs/` 並部署，不在 hosted runner 重建網站 | `tests/test_language_profiles.py`、`tests/test_root_config.py`、`tests/test_apply_repository_settings.py` | 合併後須由管理員套用 `build_type=workflow` policy 並觀察首次部署 | candidate |
 | Release publish drift alert | `.github/workflows/release-drift.yml` | #605／#933（源自 #589 item 4） | daily schedule＋`workflow_dispatch`（`hours` input） | `actions: read`、`contents: read`、`issues: write`；5 分鐘 | 偵測到 drift 時開立或更新追蹤 Issue 後成功；未偵測到時只印出證據；偵測或通知寫入失敗才讓 run 失敗 | `scripts/test-check-release-drift` | 尚未 merge 進 `main`，故無排程或手動觸發的 live run 證據 | candidate（待進入 main＋首次排程／手動觸發） |

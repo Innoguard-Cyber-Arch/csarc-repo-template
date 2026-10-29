@@ -12,11 +12,17 @@ check runs.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+# Issue #1318: a trusted check root names the tree it checks; a direct
+# run checks this checkout.
+ROOT = Path(
+    os.environ.get("CSARC_VERIFICATION_SUBJECT_ROOT")
+    or Path(__file__).resolve().parents[2]
+).resolve()
 VERSION_FILE = ROOT / ".csarc/site/version.json"
 _VERSION = re.compile(r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)$")
 _RANGE = re.compile(r"^>=(?P<min>\d+\.\d+\.\d+) <(?P<max>\d+\.\d+\.\d+)$")

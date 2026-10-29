@@ -86,6 +86,7 @@ def test_raw_targets_do_not_move() -> None:
     """The #1058 raw-bytes Targets stay frozen as the conversion source."""
     assert generated_payload.RAW_TARGETS == {
         "solo-default": 1_000_000,
+        "solo-local": 1_000_000,
         "solo-python": 1_010_000,
         "hosted-csarc-owned-python": 1_200_000,
         "consumer-a": 1_050_000,

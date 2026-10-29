@@ -47,6 +47,7 @@ from csarc_cli import (
     release_phase,
     repository_facts,
     risk_tools,
+    self_hosted,
     settings_schema,
     setup_plan,
     update_plan,
@@ -1436,11 +1437,9 @@ def copier_copy(
     if skip_tasks:
         command.append("--skip-tasks")
     data_file = stage.parent / f".{stage.name}-copier-data.yml"
-    render_data = dict(data)
-    if persist_answers:
-        render_data[settings_schema.RENDER_CONTEXT_FLAG] = True
     data_file.write_text(
-        yaml.safe_dump(render_data, sort_keys=True), encoding="utf-8"
+        copier_data_text(data, persist_answers=persist_answers),
+        encoding="utf-8",
     )
     command.extend(["--data-file", str(data_file)])
     command.extend([source, str(stage)])
@@ -1471,6 +1470,58 @@ def copier_copy(
             "Fix the cause, then run the csarc command again."
         ) from error
     return context
+
+
+def copier_data_text(
+    data: Mapping[str, object], *, persist_answers: bool
+) -> str:
+    """Return the Copier data file text one render passes to Copier."""
+    render_data = dict(data)
+    if persist_answers:
+        render_data[settings_schema.RENDER_CONTEXT_FLAG] = True
+    return yaml.safe_dump(render_data, sort_keys=True)
+
+
+def copier_validation_errors(
+    source: str, revision: Revision, data: Mapping[str, object]
+) -> list[tuple[str, str]]:
+    """Run Copier's questionnaire and collect every validator failure.
+
+    The render in `copier_copy` stops at the first rejected answer. This
+    asks the same questions with the same data file contents, in Copier's
+    own order, and records each rejection instead, so one preflight can
+    list every setting to change.
+    """
+    from copier._main import Worker
+    from copier._user_data import Question
+
+    failures: list[tuple[str, str]] = []
+    validate = Question.validate_answer
+
+    def collect(self: Question, answer: object) -> None:
+        try:
+            validate(self, answer)
+        except ValueError as error:
+            prefix = f"Validation error for question '{self.var_name}': "
+            failures.append((self.var_name, str(error).removeprefix(prefix)))
+
+    data_text = copier_data_text(data, persist_answers=True)
+    with tempfile.TemporaryDirectory(prefix="csarc-preflight-") as temporary:
+        Question.validate_answer = collect  # type: ignore[method-assign]
+        try:
+            with Worker(
+                src_path=source,
+                dst_path=Path(temporary),
+                vcs_ref=revision.sha,
+                data=yaml.safe_load(data_text),
+                defaults=True,
+                unsafe=True,
+                quiet=True,
+            ) as worker:
+                worker._ask()
+        finally:
+            Question.validate_answer = validate  # type: ignore[method-assign]
+    return failures
 
 
 def take_render_context(stage: Path) -> dict[str, object]:
@@ -3912,6 +3963,7 @@ def lifecycle_report_model(  # noqa: C901
     ignore_gaps: Mapping[str, Sequence[str]] = MappingProxyType({}),
     conflict_uses: Mapping[str, Sequence[str]] = MappingProxyType({}),
     reviewer_answer: str | None = None,
+    retire_warning: str = "",
 ) -> dict[str, object]:
     """Build the single SPEC-008 report object for one adopt or update plan.
 
@@ -3977,6 +4029,19 @@ def lifecycle_report_model(  # noqa: C901
             ),
             reviewer_answer=reviewer_answer,
         )
+        if retire_warning:
+            # ADR self-hosted D9 (#1287): non-blocking, so no plan changes.
+            actions.append(
+                {
+                    "blocking": False,
+                    "command": "csarc self-hosted retire"
+                    if " are public:" in retire_warning
+                    else "csarc self-hosted status",
+                    "kind": "verification",
+                    "message": retire_warning,
+                    "subject": "self-hosted logs",
+                }
+            )
     actions.extend(policy_documentation_actions(policy_rows))
     if adoption is not None:
         applicable = adoption.get("applicable") is True
@@ -4872,10 +4937,14 @@ def print_update_recommendation(update: dict[str, object] | None) -> None:
     """Print an optional update recommendation."""
     if update is None:
         return
-    recommendation = update.get("governance_drift_recommendation")
-    if isinstance(recommendation, str):
-        # message-pattern: allow X5 recommendation line of the plan report
-        print(f"Recommendation: {recommendation}")
+    for key in (
+        "governance_drift_recommendation",
+        "self_hosted_recommendation",
+    ):
+        recommendation = update.get(key)
+        if isinstance(recommendation, str):
+            # message-pattern: allow X5 recommendation line of the plan report
+            print(f"Recommendation: {recommendation}")
 
 
 def print_plan(plan: ResolvedPlan) -> None:
@@ -6540,6 +6609,7 @@ def repository_context(
     explicit_visibility: str | None,
     *,
     saved_visibility: str | None = None,
+    visibility_transition: str | None = None,
 ) -> RepositoryContext:
     """Resolve repository owner and visibility before template rendering.
 
@@ -6610,9 +6680,15 @@ def repository_context(
     ):
         value = cast(Mapping[str, object], identity["value"])
         actual_visibility = str(visibility_fact["value"])
+        planned_transition = (
+            visibility_transition == "private-to-public"
+            and actual_visibility == "private"
+            and explicit_visibility == "public"
+        )
         if (
             explicit_visibility is not None
             and explicit_visibility != actual_visibility
+            and not planned_transition
         ):
             raise CliError(
                 "Explicit project_visibility does not match GitHub: "
@@ -6624,9 +6700,19 @@ def repository_context(
             repository=str(value["repository"]),
             owner=str(value["owner"]),
             owner_type=str(value["owner_type"]),
-            visibility=actual_visibility,
-            source="github",
+            visibility=(
+                str(explicit_visibility)
+                if planned_transition
+                else actual_visibility
+            ),
+            source="retire-transition" if planned_transition else "github",
             verified=True,
+            reason=(
+                "GitHub is private until the reviewed retire pull request "
+                "is merged and the repository visibility changes."
+                if planned_transition
+                else None
+            ),
             facts=facts,
         )
     failure = (
@@ -6927,12 +7013,14 @@ def validate_repository_context(
     explicit_visibility: str | None,
     *,
     saved_visibility: str | None = None,
+    visibility_transition: str | None = None,
 ) -> None:
     """Reject repository context drift after a plan was confirmed."""
     current = repository_context(
         target,
         explicit_visibility,
         saved_visibility=saved_visibility,
+        visibility_transition=visibility_transition,
     )
     if current.as_dict() != expected.as_dict():
         raise CliError(
@@ -9929,6 +10017,78 @@ def governance_drift_update_recommendation(
     return None
 
 
+def self_hosted_update_recommendation(
+    answers: Mapping[str, object], explicit_data: Mapping[str, str]
+) -> str | None:
+    """Recommend self-hosted verification for a private repository (#1272).
+
+    ADR self-hosted-verification D2: an existing project never switches
+    automatically; the update keeps the saved mode and lists the
+    registration steps. A container project is skipped, because the VM has
+    no Docker daemon yet (SPEC-011 section 9).
+    """
+    if (
+        "verification_mode_private" in explicit_data
+        or answers.get("project_visibility") == "public"
+        or answers.get("verification_mode_private") not in {"local", "hosted"}
+        or answers.get("container") is True
+    ):
+        return None
+    return (
+        "new private projects verify on a registered csarc-devops VM "
+        "(verification_mode_private: self-hosted); this update keeps the "
+        "saved mode. To switch, open linked Issues here and in csarc-devops "
+        "and get both approvals. Then pass --data "
+        "verification_mode_private=self-hosted and --data "
+        "self_hosted_runner=... in a governance-switch pull request."
+    )
+
+
+# SPEC-011 transition (#1069 decision 8): the template writes the one legacy
+# mode key while the target's trusted-base reader predates both settings.
+LEGACY_MODE_FLAG = "csarc_legacy_verification_mode"
+
+
+def legacy_mode_writer(
+    target: Path, answers: Mapping[str, object]
+) -> dict[str, object]:
+    """Return the render flag that keeps the legacy mode key, if needed."""
+    reader = managed_script(target, "csarc_config.py")
+    try:
+        current = settings_schema.MODE_KEYS[0] in reader.read_text("utf-8")
+    except OSError:
+        current = False
+    if current:
+        return {}
+    modes = {answers.get(key) for key in settings_schema.MODE_KEYS}
+    if modes == {None}:
+        return {}
+    if len(modes) != 1 or not modes <= {"local", "hosted"}:
+        raise CliError(
+            "Verification modes cannot change in this update: the "
+            "repository's reader predates verification_mode_private and "
+            "verification_mode_public. Merge this update without changing "
+            "them, then run 'csarc update --data ...' again."
+        )
+    return {LEGACY_MODE_FLAG: True}
+
+
+def effective_mode_data(answers: Mapping[str, object]) -> dict[str, object]:
+    """Pass the render-derived mode as update data (SPEC-011).
+
+    Copier evaluates the new template's `_exclude` rules on both sides of
+    an update, and neither render computes `verification_mode` from the two
+    visibility settings. Each side must receive the value derived from its
+    own settings so a reviewed mode change does not contaminate the old
+    baseline.
+    """
+    side = (
+        "public" if answers.get("project_visibility") == "public" else "private"
+    )
+    mode = answers.get(f"verification_mode_{side}")
+    return {} if mode is None else {"verification_mode": mode}
+
+
 def migrate_simplified_settings(
     answers: Mapping[str, object], explicit_data: Mapping[str, str]
 ) -> dict[str, object]:
@@ -10717,7 +10877,9 @@ def render_old_side(
         new_data = update_plan.new_side_data(
             saved, reconstructed, update_data, settings_schema.HIDDEN_SETTINGS
         )
-        old = reconstructed.with_context(new_data)
+        old = reconstructed.with_context(
+            {**new_data, **effective_mode_data(saved)}
+        )
         baseline = workdir / "old-baseline"
         render(baseline, old.copier_answers())
         return old, new_data, baseline
@@ -10728,7 +10890,7 @@ def render_old_side(
     new_data = update_plan.new_side_data(
         saved, reconstructed, update_data, settings_schema.HIDDEN_SETTINGS
     )
-    old = reconstructed.with_context(new_data)
+    old = reconstructed.with_context({**new_data, **effective_mode_data(saved)})
     baseline = workdir / "old-baseline"
     try:
         update_plan.require_stable_old_inputs(
@@ -13150,9 +13312,100 @@ def command_update_apply_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def update_retire_warning(
+    repository: RepositoryContext, saved: Mapping[str, object]
+) -> str:
+    """Print and return the public self-hosted log WARNING (#1287).
+
+    `csarc self-hosted status` and lifecycle share the check (ADR
+    self-hosted-verification D9). A target without a GitHub origin has no
+    Actions logs to check.
+    """
+    if repository.repository is None:
+        return ""
+    text = self_hosted.retire_warning(
+        self_hosted.GhApi(),
+        repository.repository,
+        repository.visibility != "public" if repository.verified else None,
+        settings_schema.verification_modes(saved).get(
+            "verification_mode_private"
+        ),
+    )
+    if text:
+        print(f"WARNING: {text}", file=sys.stderr)
+    return text
+
+
+def retire_visibility_transition(
+    args: argparse.Namespace,
+    target: Path,
+    saved: Mapping[str, object],
+    explicit: Mapping[str, str],
+) -> str | None:
+    """Allow only the retire branch to plan the future public render."""
+    preflight = args.retire_preflight is not None
+    if not args.retire_public_transition:
+        if preflight:
+            raise CliError(
+                "Retire public preflight failed: it needs "
+                "'--retire-public-transition'. Run 'csarc self-hosted "
+                "retire' instead."
+            )
+        return None
+    unsupported_mode = any(
+        (
+            args.check,
+            args.dry_run,
+            args.finalize_plan,
+            args.apply_plan is not None,
+            bool(args.decision),
+            args.pin_commit is not None,
+        )
+    )
+    branch = run_git(
+        ["git", "-C", str(target), "branch", "--show-current"],
+        capture=True,
+        check=False,
+    )
+    if (
+        unsupported_mode
+        or branch.returncode != 0
+        # The read-only preflight renders a detached tree and writes
+        # nothing; only the retire branch may write the transition.
+        or (
+            branch.stdout.strip() != ""
+            if preflight
+            else not self_hosted.RETIRE_BRANCH_PATTERN.fullmatch(
+                branch.stdout.strip()
+            )
+        )
+        or saved.get("project_visibility") != "private"
+        or saved.get("verification_mode_private") != "self-hosted"
+        or explicit.get("project_visibility") != "public"
+        or explicit.get("verification_mode_private") not in {"hosted", "local"}
+        or set(explicit)
+        != {
+            "project_visibility",
+            "verification_mode_private",
+        }
+    ):
+        raise CliError(
+            "Retire visibility transition failed: the option is reserved for "
+            "the retire branch's direct private self-hosted to public render. "
+            "Run 'csarc self-hosted retire --apply' instead."
+        )
+    return "private-to-public"
+
+
 def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     """Check, finalize, or apply a Copier smart update."""
     if args.apply_plan is not None:
+        if args.retire_public_transition:
+            raise CliError(
+                "Retire visibility transition failed: a saved plan cannot "
+                "replay the transition. Run 'csarc self-hosted retire "
+                "--apply' instead."
+            )
         return command_update_apply_plan(args)
     if (args.decision or args.pin_commit is not None) and not (
         args.finalize_plan
@@ -13183,6 +13436,9 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     saved_settings = load_saved_settings(target)
     saved_answers = dict(saved_settings.answers)
     explicit_data = parse_settings_data(args.data)
+    visibility_transition = retire_visibility_transition(
+        args, target, saved_answers, explicit_data
+    )
     reviewer_answer = reviewers_answer(explicit_data)
     decisions = {
         **saved_settings.decisions,
@@ -13195,13 +13451,17 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         saved_visibility=(
             saved_visibility if isinstance(saved_visibility, str) else None
         ),
+        visibility_transition=visibility_transition,
     )
     # A target whose origin names another repository stops before any
     # render or write (Issue #1072 AC5).
     require_repository_identity(saved_answers, explicit_data, repository)
+    retire = update_retire_warning(repository, saved_answers)
     candidate_answers, update_data = update_plan_answers(
         saved_answers, explicit_data, repository
     )
+    update_data.update(legacy_mode_writer(target, candidate_answers))
+    update_data.update(effective_mode_data(candidate_answers))
     observed = observed_setting_differences(
         saved_answers, explicit_data, repository
     )
@@ -13282,6 +13542,14 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     )
     if pins.blocking and not (args.check or args.dry_run or args.finalize_plan):
         raise CliError(action_pin_preflight.drift_error(pins))
+    if args.retire_preflight is not None:
+        # The retire inventory asks Copier's own validators about the exact
+        # answers this render would use, before anything is deleted (#1315).
+        problems = copier_validation_errors(
+            source, target_revision, candidate_answers
+        )
+        args.retire_preflight.write_text(json.dumps(problems), encoding="utf-8")
+        return 0
     raw_answers = read_raw_answers(answers_path)
     with tempfile.TemporaryDirectory(prefix="csarc-update-plan-") as temporary:
         workdir = Path(temporary).resolve()
@@ -13538,6 +13806,11 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         status["governance_drift_recommendation"] = (
             governance_drift_recommendation
         )
+    self_hosted_recommendation = self_hosted_update_recommendation(
+        answers, explicit_data
+    )
+    if self_hosted_recommendation is not None:
+        status["self_hosted_recommendation"] = self_hosted_recommendation
     target_snapshot: dict[str, object] = {}
     if not args.check:
         require_clean_repository(target)
@@ -13603,6 +13876,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             ),
         ),
         reviewer_answer=reviewer_answer,
+        retire_warning=retire,
     )
     check_reviewers_answer(
         files,
@@ -13681,6 +13955,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         saved_visibility=(
             saved_visibility if isinstance(saved_visibility, str) else None
         ),
+        visibility_transition=visibility_transition,
     )
     validate_target_snapshot(target, target_snapshot)
     with tempfile.TemporaryDirectory(prefix="csarc-update-") as temporary:
@@ -13785,7 +14060,12 @@ def parser() -> argparse.ArgumentParser:
             choices=setup_plan.WORK_MODES,
             help=(
                 "work mode to expand into saved settings (default "
-                f"{setup_plan.DEFAULT_WORK_MODE}); explicit --data wins"
+                + (
+                    setup_plan.DEFAULT_ADOPT_WORK_MODE
+                    if name == "adopt"
+                    else setup_plan.DEFAULT_WORK_MODE
+                )
+                + "); explicit --data wins"
             ),
         )
         subparser.add_argument(
@@ -13882,6 +14162,17 @@ def parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="apply one unchanged final plan from --finalize-plan",
     )
+    update.add_argument(
+        "--retire-public-transition",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    update.add_argument(
+        "--retire-preflight",
+        type=Path,
+        metavar="PATH",
+        help=argparse.SUPPRESS,
+    )
     add_write_options(update)
 
     status = subparsers.add_parser(
@@ -13966,6 +14257,8 @@ def parser() -> argparse.ArgumentParser:
     for command in (risk_suggest, risk_register, risk_backfill):
         command.add_argument("--repo", default="", metavar="OWNER/NAME")
         command.add_argument("--json", action="store_true")
+    # Issue #1271: self-hosted verification windows (ADR D7, D9).
+    self_hosted.add_parser(subparsers)
     return result
 
 
@@ -14068,6 +14361,8 @@ def main(arguments: list[str] | None = None) -> int:
             return command_status(args)
         if args.command in {"issue", "risk"}:
             return command_risk(args)
+        if args.command == "self-hosted":
+            return self_hosted.command(args)
         if args.json and not args.check:
             raise CliError(
                 "--json is only valid with update --check: other modes print "
@@ -14079,6 +14374,7 @@ def main(arguments: list[str] | None = None) -> int:
         CliError,
         risk_tools.RiskToolError,
         project_roadmap.ProjectSyncError,
+        self_hosted.SelfHostedError,
         OSError,
         subprocess.SubprocessError,
     ) as error:

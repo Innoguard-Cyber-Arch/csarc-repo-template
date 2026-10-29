@@ -5,6 +5,7 @@ set -euo pipefail
 # repo_root is the tree under verification (see verify-fast).
 control_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$control_root/.csarc/scripts/verification-step"
+verification_require_python
 repo_root="$(verification_subject_root "$control_root")"
 unset CSARC_VERIFICATION_SUBJECT_ROOT
 cache_root="$("$control_root/.csarc/scripts/resolve-cache-root")"
@@ -15,6 +16,14 @@ else
 fi
 pnpm_store_dir="$cache_root/pnpm/store"
 cd "$repo_root"
+# Issues #1318 and #1325: check scripts and the settings that select steps
+# come from the control root, never from the subject: the full base checkout
+# of a self-hosted exit, or the set that hosted CI and the VM stage from the
+# trusted base. A missing check script fails its step instead of falling
+# back to the subject's copy. Each check still reads the subject's files.
+check_root="$control_root"
+checks="$check_root/.csarc/scripts"
+subject=(env "CSARC_VERIFICATION_SUBJECT_ROOT=$repo_root")
 
 if [[ -n "${_CSARC_PROJECT_VERIFICATION_ACTIVE:-}" ]]; then
   echo "ERROR: Hook loop: the hook runs .csarc/scripts/verify. Remove that call." >&2
@@ -40,9 +49,14 @@ if [[ "$mode" != "full" && "$mode" != "go" && "$mode" != "python" &&
   echo "ERROR: Unknown mode: '$mode'. Use full|go|python|python-compatibility|typescript|rust." >&2
   exit 2
 fi
-{% if verification_mode == "local" -%}
+{% if verification_mode != "hosted" -%}
 verification_head_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+# verify-fast passes the base it planned against; a direct run has none
+# and records against the configured base (#1318).
+verification_base="${_CSARC_VERIFICATION_BASE:-}"
+verification_base_sha="${_CSARC_VERIFICATION_BASE_SHA:-}"
 {% endif -%}
+unset _CSARC_VERIFICATION_BASE _CSARC_VERIFICATION_BASE_SHA
 
 for workflow in .github/workflows/{pr-policy,ci}.yml; do
   [[ -f "$workflow" ]] || continue
@@ -137,7 +151,7 @@ verify_go_module() {
   verification_step "Go build" go build ./...
 }
 
-{% if verification_mode == "local" and container -%}
+{% if verification_mode != "hosted" and container -%}
 verify_container() {
   verification_step "Docker availability" command -v docker
   verification_step "Trivy availability" command -v trivy
@@ -150,6 +164,14 @@ verify_container() {
 }
 {% endif -%}
 
+# Issue #1325: the import check must load the installed wheel, not a
+# same-named source tree in the current directory.
+wheel_import_check='import pathlib, sys
+import {{ package_name }} as package
+origin = pathlib.Path(package.__file__).resolve()
+if "site-packages" not in origin.parts:
+    sys.exit(f"ERROR: Package import is not from the wheel: {origin}. Install the built wheel.")'
+
 verify_python_module() {
   python_version="${CSARC_PYTHON_VERSION:-3.14}"
   export UV_PYTHON="$python_version"
@@ -158,7 +180,9 @@ verify_python_module() {
   verification_step "Python formatting" uv run ruff format --check .
   verification_step "Python lint" uv run ruff check .
   verification_step "Python type check" uv run ty check
-  verification_step "Python version contract" uv run python - <<'PY'
+  # -P: the package must come from the environment, not the current
+  # directory (#1325).
+  verification_step "Python version contract" uv run python -P - <<'PY'
 from importlib import import_module
 from importlib.metadata import version
 
@@ -194,10 +218,10 @@ PY
     exit 1
   fi
   verification_step "Python package import" \
-    uv run --isolated --no-project --with ./dist/*.whl \
-    python -c "import {{ package_name }}"
+    uv run --isolated --no-project --no-config --with ./dist/*.whl \
+    python -P -c "$wheel_import_check"
   verification_step "Python package metadata" \
-    uv run --isolated --no-project --with twine twine check dist/*
+    uv run --isolated --no-project --no-config --with twine twine check dist/*
 }
 
 if [[ "$mode" == "python" ]]; then
@@ -222,10 +246,10 @@ if [[ "$mode" == "python-compatibility" ]]; then
     uv run pytest -m "runtime and not large"
   verification_step "Python compatibility package build" uv build --clear
   verification_step "Python compatibility package import" \
-    uv run --isolated --no-project --with ./dist/*.whl \
-    python -c "import {{ package_name }}"
+    uv run --isolated --no-project --no-config --with ./dist/*.whl \
+    python -P -c "$wheel_import_check"
   verification_step "Python compatibility package metadata" \
-    uv run --isolated --no-project --with twine twine check dist/*
+    uv run --isolated --no-project --no-config --with twine twine check dist/*
   exit 0
 fi
 
@@ -256,19 +280,19 @@ if [[ "$mode" == "rust" ]]; then
   exit 0
 fi
 
-./.csarc/scripts/check-update-conflicts
-verification_step "Message pattern check" ./.csarc/scripts/check-message-style
-./.csarc/scripts/verify-dependencies
-./.csarc/scripts/check-project-metadata
+"${subject[@]}" "$checks/check-update-conflicts"
+verification_step "Message pattern check" "$checks/check-message-style"
+"${subject[@]}" "$checks/verify-dependencies"
+"${subject[@]}" "$checks/check-project-metadata"
 {% if documentation_mode == 'template-and-content' -%}
-./.csarc/scripts/build-repo-site --check
+"${subject[@]}" "$checks/build-repo-site" --check
 {% endif -%}
-./.csarc/scripts/detect-language-profile
+"${subject[@]}" "$checks/detect-language-profile"
 # Repository-template self-tests run in the template's own CI, never in a
 # generated project's verification.
-./.csarc/scripts/lint-workflows-shell
+"${subject[@]}" "$checks/lint-workflows-shell"
 verification_step "GitHub Actions pin check" \
-  python3 .csarc/scripts/check_action_pins.py --root .
+  python3 "$checks/check_action_pins.py" --root .
 
 if $verify_python; then
   verify_python_module
@@ -285,18 +309,17 @@ fi
 if $verify_go; then
   verify_go_module
 fi
-{% if verification_mode == "local" and container %}
+{% if verification_mode != "hosted" and container %}
 verify_container
 {% endif %}
 
-if $verify_python; then
-  platform_python=(uv run python)
-else
-  platform_python=(uv run --no-project python)
-fi
+# Issue #1325: trusted helpers run in an isolated interpreter (-I), so
+# neither the subject's files in the current directory nor its virtual
+# environment or uv settings can replace a standard-library module.
+platform_python=(python3 -I)
 {% if documentation_mode != 'off' -%}
 verification_step "Specification validation" \
-  "${platform_python[@]}" .csarc/scripts/spec_to_issue.py validate
+  "${platform_python[@]}" "$checks/spec_to_issue.py" validate
 test -f docs/adr/README.md
 # The Durable Project Memory map lives in a CSARC-owned document; the
 # project-owned docs/README.md is never checked (Issue #1146 AC4).
@@ -309,10 +332,12 @@ grep -q 'Behavior-Driven Development' "$memory_map"
 grep -q 'docs/decisions/' "$memory_map"
 {% endif -%}
 verification_step "Generated configuration contract" \
-  "${platform_python[@]}" - <<'PY'
+  "${platform_python[@]}" - "$checks/csarc_config.py" <<'PY'
 import runpy
+import sys
 
-load_config = runpy.run_path(".csarc/scripts/csarc_config.py")["load_config"]
+# The reader comes from check_root; the subject's settings are checked.
+load_config = runpy.run_path(sys.argv[1])["load_config"]
 
 config = load_config()
 expected_languages = set({{ languages | tojson }})
@@ -339,9 +364,10 @@ for json_file in \
     "${platform_python[@]}" -m json.tool "$json_file"
 done
 verification_step "Release version consistency" \
-  "${platform_python[@]}" - <<'PY'
+  "${platform_python[@]}" - "$checks/release_phase.py" <<'PY'
 import json
 import runpy
+import sys
 import tomllib
 from pathlib import Path
 
@@ -350,7 +376,7 @@ from pathlib import Path
 # compares equal to every other surface's canonical value (e.g. the release
 # manifest's "0.16.0-beta.1") -- they are the same
 # version, just written differently, not a real mismatch.
-release_phase = runpy.run_path(".csarc/scripts/release_phase.py")
+release_phase = runpy.run_path(sys.argv[1])
 normalize = release_phase["normalize"]
 
 versions = {
@@ -386,13 +412,15 @@ grep -q '.csarc/scripts/pr_lifecycle.py' .csarc/docs/agent-workflow.md
 grep -q '^## PR lifecycle single-writer$' .csarc/docs/ci-policy.md
 grep -q '^## 版本、發版、交付與部署矩陣$' .csarc/docs/ci-policy.md
 verification_step "PR writer ownership" \
-  "${platform_python[@]}" .csarc/scripts/pr_lifecycle.py scan-writers --root .
+  "${platform_python[@]}" "$checks/pr_lifecycle.py" scan-writers --root .
 
 test -f AGENTS.md
 test "$(cat .claude/CLAUDE.md)" = "@../AGENTS.md"
 # project_mode is immutable provenance, rendered once (SPEC-009).
 template_mode="{{ project_mode }}"
-documentation_mode="$("${platform_python[@]}" "$control_root/.csarc/scripts/csarc_config.py" documentation_mode)"
+# The step selection reads check_root's settings (#1318).
+documentation_mode="$("${platform_python[@]}" "$control_root/.csarc/scripts/csarc_config.py" \
+  --config "$check_root/.csarc/config.yml" documentation_mode)"
 if [[ "$template_mode" == "new" && "$documentation_mode" != "off" ]]; then
   test "$(wc -l < AGENTS.md)" -le 200
   required_readme_headings=(
@@ -432,7 +460,7 @@ for unsupported_path in "${unsupported_instruction_paths[@]}"; do
   test ! -e "$unsupported_path"
 done
 
-verification_step "Final secret scan" ./.csarc/scripts/scan-secrets
+verification_step "Final secret scan" "${subject[@]}" "$checks/scan-secrets"
 
 if $verify_python; then
   lower_bounds_root="$(mktemp -d)"
@@ -466,7 +494,7 @@ if $verify_python; then
   rm -f .coverage .coverage.* coverage.xml
 {% if coverage_mode == "global" %}
   if ! verification_step "Test Python dependency lower bounds" \
-    "$lower_bounds_root/.venv/bin/python" -m pytest \
+    "$lower_bounds_root/.venv/bin/python" -P -m pytest \
     --cov \
     --cov-report=term-missing \
     --cov-fail-under={{ coverage_threshold }}; then
@@ -475,7 +503,7 @@ if $verify_python; then
   fi
 {% else %}
   if ! verification_step "Test Python dependency lower bounds" \
-    "$lower_bounds_root/.venv/bin/python" -m pytest \
+    "$lower_bounds_root/.venv/bin/python" -P -m pytest \
     --cov \
     --cov-report=term-missing \
     --cov-report=xml; then
@@ -554,7 +582,10 @@ fi
 # This is the generated project's full-verification path. Scoped modes exit
 # earlier; reaching this point means every selected check and any optional
 # project verification hook passed.
-{% if verification_mode == "local" -%}
-python3 .csarc/scripts/local_verification.py record \
-  --tier full --scopes all --head-sha "$verification_head_sha"
+{% if verification_mode != "hosted" -%}
+# The recorder comes from check_root (#1318).
+python3 "$checks"/local_verification.py record \
+  --control-root "$check_root" --tier full --scopes all \
+  --base "$verification_base" --head-sha "$verification_head_sha" \
+  --base-sha "$verification_base_sha"
 {% endif -%}

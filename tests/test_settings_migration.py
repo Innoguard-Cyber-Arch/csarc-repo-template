@@ -120,7 +120,8 @@ EXPECTED = {
         "languages": ["python"],
         "python_floor": "latest",
         "scheduled_checks": [],
-        "verification_mode": "hosted",
+        "verification_mode_private": "hosted",
+        "verification_mode_public": "hosted",
     },
     "v0.16.0": {
         "admin_bypass": "always",
@@ -137,7 +138,8 @@ EXPECTED = {
         "documentation_languages": "zh-tw+en",
         "documentation_mode": "template-and-content",
         "scheduled_checks": ["governance-drift"],
-        "verification_mode": "local",
+        "verification_mode_private": "local",
+        "verification_mode_public": "local",
     },
     "v0.30.3": {
         "admin_bypass": "off",
@@ -221,7 +223,7 @@ def test_root_settings_are_schema_2() -> None:
     settings_schema.validate_current(raw)
     for runtime in RUNTIME.values():
         assert runtime["load_config"](path)["release_trigger"] == "manual"
-    assert EXECUTOR["read_config"](path)["verification_mode"] == "hosted"
+    assert EXECUTOR["read_config"](path)["verification_mode_public"] == "hosted"
     facts = RUNTIME["root"]["project_facts"](ROOT)
     assert facts["project_license"] == "proprietary"
     assert facts["copyright_holder"] == "Innoguard Cyber Arch"

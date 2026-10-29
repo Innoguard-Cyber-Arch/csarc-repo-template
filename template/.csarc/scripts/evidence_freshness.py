@@ -17,10 +17,38 @@ scopes, command, toolchain, runner, and result) and check those separately.
 from __future__ import annotations
 
 import math
+import re
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 DEFAULT_MAX_AGE_HOURS = 24.0
 MAX_CLOCK_SKEW = timedelta(minutes=5)
+# One normalized verification record serves both trust modes. Only the trust
+# label differs, so a reader can compare candidates without ever treating
+# self-attested local evidence as trusted hosted evidence. It lives here,
+# rendered in every verification mode, so a hosted render does not need
+# `local_verification.py` (Issue #1267).
+RECORD_SCHEMA_VERSION = 1
+SHA = re.compile(r"[0-9a-f]{40}")
+TRUST_LOCAL = "self-attested-local"
+TRUST_HOSTED = "github-hosted"
+TRUST_SELF_HOSTED = "self-hosted-registered"
+RECORD_KEYS = frozenset(
+    {
+        "schema_version",
+        "trust",
+        "success",
+        "head_sha",
+        "tree_sha",
+        "base_ref",
+        "base_sha",
+        "tier",
+        "scopes",
+        "command",
+        "completed_at",
+    }
+)
+RECORD_TIERS = {"docs", "fast", "full"}
 
 
 def policy_max_age_hours(requested: object = None) -> float:
@@ -109,3 +137,72 @@ def require_fresh(
             f"{subject} evidence is stale: too old. Re-verify the exact head."
         )
     return completed
+
+
+def normalized_record(evidence: dict[str, Any], trust: str) -> dict[str, Any]:
+    """Project local or hosted evidence onto the shared record contract.
+
+    Local evidence names its base `base_ref`; hosted evidence names it `base`
+    and may omit it for legacy execution claims. Every other field and its
+    validation are identical, and the trust label is kept as given.
+    """
+    if trust not in {TRUST_LOCAL, TRUST_HOSTED, TRUST_SELF_HOSTED}:
+        raise RuntimeError(
+            f"Bad trust label: '{trust}' is unknown. Use a known trust label."
+        )
+    declared = evidence.get("trust")
+    if declared is not None and declared != trust:
+        raise RuntimeError(
+            "Bad trust label: evidence differs. Run verify again."
+        )
+    base_ref = evidence.get("base_ref", evidence.get("base"))
+    base_sha = evidence.get("base_sha")
+    scopes = evidence.get("scopes")
+    record: dict[str, Any] = {
+        "schema_version": RECORD_SCHEMA_VERSION,
+        "trust": trust,
+        "success": True,
+        "head_sha": evidence.get("head_sha"),
+        "tree_sha": evidence.get("tree_sha"),
+        "base_ref": base_ref,
+        "base_sha": base_sha,
+        "tier": evidence.get("tier"),
+        "scopes": sorted(set(scopes)) if isinstance(scopes, list) else scopes,
+        "command": evidence.get("command"),
+        "completed_at": evidence.get("completed_at"),
+    }
+    legacy_hosted_base = trust == TRUST_HOSTED and not base_ref and not base_sha
+    exact_base = (
+        isinstance(base_ref, str)
+        and bool(base_ref)
+        and isinstance(base_sha, str)
+        and SHA.fullmatch(base_sha) is not None
+    )
+    if (
+        evidence.get("success", True) is not True
+        or not isinstance(record["head_sha"], str)
+        or SHA.fullmatch(record["head_sha"]) is None
+        or not isinstance(record["tree_sha"], str)
+        or SHA.fullmatch(record["tree_sha"]) is None
+        or not (legacy_hosted_base or exact_base)
+        or record["tier"] not in RECORD_TIERS
+        or not isinstance(record["scopes"], list)
+        or not record["scopes"]
+        or not all(isinstance(scope, str) for scope in record["scopes"])
+        or not isinstance(record["command"], str)
+        or not record["command"]
+        or not isinstance(record["completed_at"], str)
+    ):
+        raise RuntimeError(
+            "Bad evidence: a field is invalid. Run verify again."
+        )
+    try:
+        completed_at = datetime.fromisoformat(record["completed_at"])
+    except ValueError as error:
+        raise RuntimeError(
+            "Record completion time is malformed: not ISO 8601. "
+            "Run verify again."
+        ) from error
+    if completed_at.tzinfo is None:
+        raise RuntimeError("Bad completion time: no zone. Run verify again.")
+    return record

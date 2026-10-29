@@ -41,6 +41,7 @@ KIND_MULTI = "multi"
 KIND_BOOL = "bool"
 KIND_INT = "int"
 KIND_TEXT = "text"
+KIND_MAP = "map"
 
 # Persistent intent (SPEC-009). Every key is required in schema 2.
 INTENT_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -54,7 +55,11 @@ INTENT_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
         KIND_CHOICE,
         ("zh-tw", "en", "zh-tw+en", "en+zh-tw"),
     ),
-    "verification_mode": (KIND_CHOICE, ("local", "hosted")),
+    "verification_mode_private": (
+        KIND_CHOICE,
+        ("self-hosted", "hosted", "local"),
+    ),
+    "verification_mode_public": (KIND_CHOICE, ("hosted", "local")),
     "admin_bypass": (KIND_CHOICE, ("off", "beta-only", "always")),
     "copilot_review": (KIND_CHOICE, ("allowed", "off")),
     "governance_mode": (KIND_CHOICE, ("managed", "observe")),
@@ -75,11 +80,21 @@ INTENT_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
     "project_verification_hook": (KIND_TEXT, ()),
     "github_project_url": (KIND_TEXT, ()),
     "single_writer_merger": (KIND_TEXT, ()),
+    "self_hosted_runner": (KIND_MAP, ("id", "registration")),
+    "self_hosted_environments": (KIND_MULTI, ("dev", "uat")),
 }
 OPTIONAL_DEFAULTS: dict[str, object] = {
     "github_project_url": "",
     "single_writer_merger": "",
 }
+# SPEC-011: the registration keys exist exactly when the private mode is
+# self-hosted; an empty runner mapping means "not yet registered".
+SELF_HOSTED_KEYS = ("self_hosted_runner", "self_hosted_environments")
+# SPEC-011 transition (#1069 decision 8): until the trusted base reads the
+# two visibility settings, the writer keeps this one legacy key, and the
+# reader reads it as the same mode for both visibilities.
+LEGACY_MODE = "verification_mode"
+MODES = frozenset({"verification_mode_private", "verification_mode_public"})
 # Derived context that is saved only as a one-time user decision when no
 # native manifest resolves it uniquely (SPEC-009); otherwise it is absent.
 DECISION_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -88,7 +103,13 @@ DECISION_SETTINGS: dict[str, tuple[str, tuple[str, ...]]] = {
 }
 RELEASE_OWNERSHIPS = frozenset(INTENT_SETTINGS["release_ownership"][1])
 ALLOWED_KEYS = frozenset(
-    {SCHEMA_KEY, *COPIER_METADATA_KEYS, *INTENT_SETTINGS, *DECISION_SETTINGS}
+    {
+        SCHEMA_KEY,
+        LEGACY_MODE,
+        *COPIER_METADATA_KEYS,
+        *INTENT_SETTINGS,
+        *DECISION_SETTINGS,
+    }
 )
 
 CODE_OWNER = re.compile(
@@ -100,6 +121,11 @@ GITHUB_LOGIN = re.compile(r"^(?=.{1,39}$)[A-Za-z0-9](?:-?[A-Za-z0-9])*$")
 PACKAGE_NAME = re.compile(r"^[a-z_][a-z0-9_]*$")
 HOOK_PATH = re.compile(r"^[A-Za-z0-9._/-]+$")
 PLACEHOLDERS = frozenset({"todo", "tbd", "placeholder"})
+# SPEC-011: "<vm id> <csarc-devops registration Issue URL>".
+RUNNER = re.compile(
+    r"[a-z0-9][a-z0-9-]{0,31} "
+    r"https://github\.com/[A-Za-z0-9-]+/csarc-devops/issues/[1-9][0-9]*"
+)
 
 
 class SettingsError(ValueError):
@@ -120,7 +146,7 @@ def _scalar(value: str) -> object:
         return value == "true"
     if value in {"null", "~"}:
         return None
-    if value.startswith(("'", '"', "[")):
+    if value.startswith(("'", '"', "[", "{")):
         try:
             return ast.literal_eval(value)
         except (SyntaxError, ValueError):
@@ -131,7 +157,9 @@ def _scalar(value: str) -> object:
         return value
 
 
-def parse_settings_text(text: str, path: Path) -> dict[str, object]:
+def parse_settings_text(  # noqa: C901
+    text: str, path: Path
+) -> dict[str, object]:
     """Parse the flat scalar/list YAML subset without validating it.
 
     This is the shared tokenizer, not a settings reader: callers that need
@@ -155,6 +183,14 @@ def parse_settings_text(text: str, path: Path) -> dict[str, object]:
             active_list.append(_scalar(raw_line[2:].strip()))
             continue
         if raw_line[0].isspace():
+            # SPEC-011: one nested mapping level, e.g. self_hosted_runner.
+            item, colon, item_value = raw_line.strip().partition(":")
+            nested = None if active_key is None else result[active_key]
+            if colon and (nested == [] or isinstance(nested, dict)):
+                if not isinstance(nested, dict):
+                    nested = result[str(active_key)] = {}
+                nested[item] = _scalar(item_value.strip())
+                continue
             if active_key is None or not isinstance(result[active_key], str):
                 raise ValueError(
                     f"Bad indentation in {path}: '{raw_line}'. "
@@ -229,6 +265,45 @@ def _validate_text(key: str, value: str, path: Path) -> None:
         )
 
 
+def _validate_modes(config: dict[str, object], path: Path) -> None:
+    """Fail closed on a mixed or incomplete verification mode (SPEC-011)."""
+    legacy = config.get(LEGACY_MODE)
+    if legacy is not None:
+        if legacy not in ("local", "hosted") or MODES & set(config):
+            raise settings_error(
+                path, f"{LEGACY_MODE} is {legacy!r}; use local or hosted, alone"
+            )
+        config.update(dict.fromkeys(MODES, config.pop(LEGACY_MODE)))
+    self_hosted = config.get("verification_mode_private") == "self-hosted"
+    if self_hosted and config.get("container") is True:
+        # The VM gives jobs no Docker daemon yet (ADR D8, #1281).
+        raise settings_error(
+            path,
+            "container needs Docker, which self-hosted verification lacks "
+            "(ADR D8); set verification_mode_private to local or hosted",
+        )
+    runner = config.get(SELF_HOSTED_KEYS[0], {})
+    if (
+        [key in config for key in SELF_HOSTED_KEYS] != [self_hosted] * 2
+        or not (
+            runner == {}
+            or (
+                isinstance(runner, dict)
+                and len(runner) == 2
+                and RUNNER.fullmatch(
+                    f"{runner.get('id')} {runner.get('registration')}"
+                )
+            )
+        )
+        or config.get(SELF_HOSTED_KEYS[1]) == []
+    ):
+        raise settings_error(
+            path,
+            "a self-hosted private mode needs self_hosted_environments and "
+            "self_hosted_runner: {} or its id and csarc-devops Issue URL",
+        )
+
+
 def _validate_value(  # noqa: C901
     key: str, spec: tuple[str, tuple[str, ...]], value: object, path: Path
 ) -> None:
@@ -258,6 +333,8 @@ def _validate_value(  # noqa: C901
             raise settings_error(
                 path, f"{key} must be an integer from 1 to 100"
             )
+    elif kind == KIND_MAP:
+        pass
     elif not isinstance(value, str):
         raise settings_error(path, f"{key} must be a string")
     elif key == "single_writer_merger":
@@ -275,6 +352,8 @@ def validate_config(
     """Fail closed unless `config` is exactly a valid schema 2 file."""
     declared_schema(config, path)
     unknown = sorted(key for key in config if key not in ALLOWED_KEYS)
+    if not unknown:
+        _validate_modes(config, path)
     if unknown:
         raise settings_error(
             path,
@@ -282,7 +361,9 @@ def validate_config(
             + ", ".join(unknown)
             + f" are not part of schema {SCHEMA_VERSION}",
         )
-    missing = sorted(set(INTENT_SETTINGS) - {*config, *OPTIONAL_DEFAULTS})
+    missing = sorted(
+        set(INTENT_SETTINGS) - {*config, *OPTIONAL_DEFAULTS, *SELF_HOSTED_KEYS}
+    )
     if missing:
         raise settings_error(
             path, "missing persistent settings " + ", ".join(missing)
@@ -346,13 +427,6 @@ def renders_release_workflow(
 ) -> bool:
     """Return whether CSARC is the one Release writer for this project."""
     return resolve_release_ownership(config, path) == "csarc-owned"
-
-
-def documentation_language_pair(config: dict[str, object]) -> tuple[str, str]:
-    """Return the primary and optional secondary documentation language."""
-    value = str(config["documentation_languages"])
-    primary, _, secondary = value.partition("+")
-    return primary, secondary
 
 
 # ---------------------------------------------------------------------------
@@ -502,14 +576,20 @@ def project_facts(root: Path) -> dict[str, object]:
 
 def main(argv: list[str] | None = None) -> int:
     """Print one configuration value for shell callers."""
-    arguments = sys.argv[1:] if argv is None else argv
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    # Issue #1318: a trusted check root reads its own settings, not the
+    # settings of the tree it checks.
+    path = CONFIG_FILE
+    if len(arguments) == 3 and arguments[0] == "--config":
+        path = Path(arguments[1])
+        arguments = arguments[2:]
     if len(arguments) != 1:
         # message-pattern: allow X3 usage
-        sys.stderr.write("Usage: csarc_config.py <key>\n")
+        sys.stderr.write("Usage: csarc_config.py [--config PATH] <key>\n")
         return 2
     key = arguments[0]
     try:
-        config = load_config()
+        config = load_config(path)
         if key == "release_ownership":
             value: object = resolve_release_ownership(config)
         elif key not in INTENT_SETTINGS and key not in DECISION_SETTINGS:

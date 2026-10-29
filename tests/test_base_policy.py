@@ -35,7 +35,8 @@ COPIES = {
 }
 GIT = shutil.which("git") or "git"
 LOCAL_ESCALATION = (
-    '{% if verification_mode == "local" -%}\n  if [[ -z "${CSARC_CI_TIER:-}" ]]'
+    '{% if verification_mode != "hosted" -%}\n'
+    '  if [[ -z "${CSARC_CI_TIER:-}" ]]'
 )
 MERGE_DOCSTRING = (
     '    """Merge only when the lease and exact-head controls are '
@@ -319,7 +320,9 @@ def test_root_schema_two_settings_pass_the_trusted_base_reader(
         "verification_mode: hosted\n",
     )
     values = executor["read_config"](path)
-    assert values["verification_mode"] == "hosted"
+    # SPEC-011: the legacy key reads as the same mode for both visibilities.
+    assert values["verification_mode_private"] == "hosted"
+    assert values["verification_mode_public"] == "hosted"
     assert values["admin_bypass"] == "always"
 
 
@@ -330,7 +333,14 @@ def test_root_schema_two_settings_pass_the_trusted_base_reader(
     ("override", "reason"),
     [
         ({"admin_bypass": "always"}, "admin_bypass: off -> always"),
-        ({"verification_mode": "local"}, "verification_mode: hosted -> local"),
+        (
+            {
+                "verification_mode": None,
+                "verification_mode_private": "hosted",
+                "verification_mode_public": "local",
+            },
+            "verification_mode_public: hosted -> local",
+        ),
         ({"governance_mode": "observe"}, "governance_mode: managed -> observe"),
         (
             {"scheduled_checks": []},
@@ -340,6 +350,11 @@ def test_root_schema_two_settings_pass_the_trusted_base_reader(
         ({"enable_codeql": False}, "enable_codeql: true -> False"),
         ({"lifecycle": ["issues"]}, "lifecycle: removes milestones"),
         ({"coverage_threshold": 60}, "coverage_threshold: 80 -> 60"),
+        # Issue #1325: hosted CI selects release checks from this value.
+        (
+            {"release_ownership": "verification-only"},
+            "release_ownership: csarc-owned -> verification-only",
+        ),
     ],
 )
 def test_relaxed_governance_value_needs_the_switch(
@@ -819,9 +834,18 @@ def test_generated_prepare_ignores_a_tampered_candidate_gate(
     scripts.mkdir(parents=True)
     for relative in executor["GENERATED_CONTROL_FILES"]:
         (base / relative).write_text(f"trusted {relative}\n", "utf-8")
+    (base / ".csarc/config.yml").write_text("trusted settings\n", "utf-8")
+    (scripts / "scan-secrets").write_text("trusted check\n", "utf-8")
     staged = tmp_path / "staged"
     files = executor["prepare"](base, staged)
-    assert sorted(files) == sorted(executor["GENERATED_CONTROL_FILES"])
+    # Issue #1325: every check script and the step settings are staged.
+    assert sorted(files) == sorted(
+        {
+            *executor["GENERATED_CONTROL_FILES"],
+            ".csarc/config.yml",
+            ".csarc/scripts/scan-secrets",
+        }
+    )
     (scripts / "verify-fast").write_text("exit 0  # tampered\n", "utf-8")
     executor["verify_manifest"](staged)
     assert (staged / ".csarc/scripts/verify-fast").read_text(

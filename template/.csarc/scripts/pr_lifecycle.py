@@ -97,12 +97,14 @@ class SiblingModule:
 # selected command first needs it.
 ci_tier: Any = SiblingModule("ci_tier")
 dependabot_auth: Any = SiblingModule("authenticate_dependabot_head")
+evidence_freshness: Any = SiblingModule("evidence_freshness")
 local_verification: Any = SiblingModule("local_verification")
 merge_trace: Any = SiblingModule("merge_trace")
 promotion_gate: Any = SiblingModule("promotion_gate")
 release_level: Any = SiblingModule("release_level")
 review_gate: Any = SiblingModule("review_gate")
 risk_controls: Any = SiblingModule("risk_controls")
+self_hosted_evidence: Any = SiblingModule("self_hosted_evidence")
 verification_evidence: Any = SiblingModule("verification_evidence")
 
 
@@ -182,6 +184,16 @@ require_trusted_dependabot_head = _hosted_only(
 
 # Shared next steps of raised messages (#1253).
 GH_RETRY = "Run 'gh auth status' and rerun"
+# ADR self-hosted-verification Q1 (#1318): the exit candidate is checked by
+# the trusted base's verifier, whose recorder the candidate may not ship.
+EXIT_EVIDENCE_HINT = (
+    "To record it, run the base verifier, which checks this checkout "
+    "with the base's scripts and settings: 'git worktree "
+    "add --detach <dir> origin/<base>', then 'CSARC_VERIFICATION_SUBJECT_ROOT"
+    '="$PWD" <dir>/.csarc/scripts/verify-fast\'. This stops a candidate '
+    "from editing its own checks; it is not isolation, so the evidence "
+    "stays self-attested."
+)
 LS_LEASES = "Run 'git ls-remote origin csarc/leases'"
 LEASE_SCHEMA = 2
 MAX_TTL_SECONDS = 7200
@@ -2496,13 +2508,44 @@ def repository_root() -> Path:
     return parent.parent if parent.name == ".csarc" else parent
 
 
-def configured_verification_mode() -> str:
-    """Return the normalized local-or-hosted verification choice."""
-    return str(
-        csarc_config.load_config(repository_root() / ".csarc/config.yml")[
-            "verification_mode"
-        ]
+def configured_verification_mode(github: GitHub, repo: str) -> str:
+    """Return the live-visibility mode; fail closed on drift (SPEC-011)."""
+    config = csarc_config.load_config(repository_root() / ".csarc/config.yml")
+    repository = github.get(repo, "")
+    private = repository.get("private") if isinstance(repository, dict) else 0
+    if not isinstance(private, bool):
+        raise RuntimeError(f"Repository visibility: unavailable. {GH_RETRY}.")
+    # ADR self-hosted D9 (#1287): warn only; the merge decision is unchanged.
+    if text := merge_trace.retire_warning(
+        repo,
+        private,
+        config.get("verification_mode_private"),
+        lambda path: github.get(repo, path),
+    ):
+        sys.stderr.write(f"WARNING: {text}\n")
+    mode = str(
+        config[f"verification_mode_{'private' if private else 'public'}"]
     )
+    flows = repository_root() / ".github/workflows"
+    if (mode == "hosted", mode == "self-hosted") != (
+        (flows / "pr-policy.yml").is_file(),
+        (flows / "csarc-verify.yml").is_file(),
+    ):
+        if not private and (flows / "csarc-verify.yml").is_file():
+            # ADR self-hosted-verification D9 (#1318): only the message
+            # differs. This still fails closed like any stale render; the
+            # settings reader already rejects a public self-hosted mode.
+            raise RuntimeError(
+                "Verification mode self-hosted: the repository turned public "
+                "before 'csarc self-hosted retire', so no pull request can "
+                "merge. Make it private again, run 'csarc self-hosted retire "
+                "--apply', merge its pull request, then make it public."
+            )
+        raise RuntimeError(
+            f"Verification mode {mode}: the rendered files do not match the "
+            "current visibility. Run 'csarc update' to render again."
+        )
+    return mode
 
 
 def trusted_executor_module() -> ModuleType:
@@ -2587,9 +2630,16 @@ def base_policy_decision(
     )
     if listing.returncode:
         raise RuntimeError(f"Changed paths: cannot list them. {GH_RETRY}.")
-    base_config = repository_root() / ".csarc/config.yml"
     labels_csv = ",".join(sorted(labels))
     with tempfile.TemporaryDirectory(prefix="csarc-base-policy-") as scratch:
+        # Issue #1325: read the base settings from the lease's base commit,
+        # so the route never compares the candidate with itself, even when
+        # this entry point is not running from the trusted base checkout.
+        base_config = Path(scratch) / "base-config.yml"
+        base_config.write_text(
+            run([*git, "show", f"{base_sha}:.csarc/config.yml"]) + "\n",
+            encoding="utf-8",
+        )
         candidate_config = Path(scratch) / "candidate-config.yml"
         candidate_config.write_text(
             run([*git, "show", f"{head_sha}:.csarc/config.yml"]) + "\n",
@@ -2604,13 +2654,14 @@ def base_policy_decision(
             candidate, schema_source = executor.read_candidate_config(
                 candidate_config, labels, provenance
             )
+            base_values = executor.read_config(base_config)
             decision = executor.classify_route(
                 [
                     item.decode("utf-8", "surrogateescape")
                     for item in listing.stdout.split(b"\0")
                     if item
                 ],
-                executor.read_config(base_config),
+                base_values,
                 candidate,
             )
         except (OSError, ValueError) as error:
@@ -2619,6 +2670,12 @@ def base_policy_decision(
                 "'.csarc/config.yml'."
             ) from error
         executor.require_route(decision, labels)
+        # Issue #1270: the repository side of the registration is the
+        # Issue this pull request closes.
+        issues = CLOSING_ISSUE.findall(str(pull.get("body") or ""))
+        executor.require_registration(
+            base_values, candidate, ", ".join(f"#{n}" for n in issues) or "-"
+        )
         changed_files = Path(scratch) / "changed-files"
         changed_files.write_bytes(listing.stdout)
         plan = Path(scratch) / "ci-plan.json"
@@ -2918,7 +2975,11 @@ def merge_snapshot(  # noqa: C901
     head_sha = lease["head_sha"]
     require_lease(github, lease, repo, pr_number, head_sha)
     pull = live_pull(github, repo, pr_number, head_sha)
-    verification_mode = configured_verification_mode()
+    verification_mode = configured_verification_mode(github, repo)
+    # Self-hosted keeps the local governance; only its evidence differs.
+    self_hosted = verification_mode == "self-hosted"
+    if self_hosted:
+        verification_mode = "local"
     dependabot_head = ""
     dependabot_scope: list[str] = []
     if require_dependabot_head and verification_mode == "local":
@@ -3229,21 +3290,61 @@ def merge_snapshot(  # noqa: C901
     # label differs.
     verification_record: dict[str, Any] | None = None
     hosted_evidence: dict[str, Any] = {}
-    if verification_mode == "local":
+    vm_evidence: dict[str, Any] | None = None
+    config_path = repository_root() / ".csarc/config.yml"
+    exit_reason = (
+        self_hosted_evidence.exit_reason(
+            subject_repository_root(), config_path, lease
+        )
+        if self_hosted
+        else ""
+    )
+    # Q12 (#1317): the first registration of an unregistered self-hosted
+    # base cannot have VM evidence yet; it merges on local evidence.
+    registration_reason = (
+        self_hosted_evidence.registration_reason(
+            subject_repository_root(), config_path, lease
+        )
+        if self_hosted and not exit_reason
+        else ""
+    )
+    if (
+        self_hosted
+        and not exit_reason
+        and not registration_reason
+        and not quota_run_urls
+    ):
+        vm_evidence = self_hosted_evidence.require(
+            github, repo, lease, pull, config_path, required_tier
+        )
+        check_evidence = "self-hosted-registered"
+        verification_record = evidence_freshness.normalized_record(
+            vm_evidence, evidence_freshness.TRUST_SELF_HOSTED
+        )
+    elif verification_mode == "local":
         if quota_run_urls:
             raise RuntimeError(
                 "Quota fallback: not for local verification. Run it."
             )
-        local_evidence = local_verification.require(
-            head_sha=str(head_sha),
-            tree_sha=str(lease["head_tree"]),
-            base_ref=str(lease["base_ref"]),
-            base_sha=str(lease["base_sha"]),
-            required_tier=required_tier,
-        )
+        try:
+            local_evidence = local_verification.require(
+                head_sha=str(head_sha),
+                tree_sha=str(lease["head_tree"]),
+                base_ref=str(lease["base_ref"]),
+                base_sha=str(lease["base_sha"]),
+                required_tier=required_tier,
+            )
+        except RuntimeError as error:
+            if not exit_reason:
+                raise
+            # #1318: a public or hosted exit render ships no recorder, so
+            # the trusted base's verifier checks the candidate instead.
+            raise RuntimeError(
+                f"{str(error).rstrip('.')}. {EXIT_EVIDENCE_HINT}"
+            ) from error
         check_evidence = "local-self-attested"
-        verification_record = local_verification.normalized_record(
-            local_evidence, local_verification.TRUST_LOCAL
+        verification_record = evidence_freshness.normalized_record(
+            local_evidence, evidence_freshness.TRUST_LOCAL
         )
     elif protection in AGENT_PROTECTIONS or quota_run_urls:
         check_evidence = require_successful_checks(
@@ -3255,11 +3356,11 @@ def merge_snapshot(  # noqa: C901
             hosted_evidence,
         )
         if hosted_evidence:
-            verification_record = local_verification.normalized_record(
-                hosted_evidence, local_verification.TRUST_HOSTED
+            verification_record = evidence_freshness.normalized_record(
+                hosted_evidence, evidence_freshness.TRUST_HOSTED
             )
     trace = requirement_trace(
-        github, repo, pull, str(head_sha), local_evidence is not None
+        github, repo, pull, str(head_sha), verification_mode == "local"
     )
     require_lease(github, lease, repo, pr_number, head_sha)
     head_ref = str((pull.get("head") or {}).get("ref") or "")
@@ -3294,6 +3395,9 @@ def merge_snapshot(  # noqa: C901
         "local_verification": local_evidence,
         "verification_record": verification_record,
         "hosted_verification": hosted_evidence or None,
+        "self_hosted_verification": vm_evidence,
+        "self_hosted_exit": exit_reason,
+        "self_hosted_registration": registration_reason,
         "trailer_route": trailer_route(
             str(lease["base_ref"]),
             head_ref,
@@ -3762,6 +3866,8 @@ def merge_evidence(
         payload, trust = local, "self-attested-local"
     elif isinstance(hosted, dict):
         payload, trust = hosted, "github-hosted"
+    elif isinstance(vm := snapshot.get("self_hosted_verification"), dict):
+        payload, trust = vm, "self-hosted-registered"
     else:
         raise RuntimeError(
             "evidence-missing: no exact-head verification evidence. "
@@ -3946,6 +4052,15 @@ def trace_lines(
             f"scopes={','.join(local_evidence['scopes'])} {suffix} "
             "trust=self-attested-local; this is not trusted hosted evidence"
         )
+    if any(
+        snapshot.get(key)
+        for key in (
+            "self_hosted_verification",
+            "self_hosted_exit",
+            "self_hosted_registration",
+        )
+    ):
+        lines += self_hosted_evidence.trace_lines(snapshot, suffix)
     return lines
 
 

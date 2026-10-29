@@ -37,7 +37,7 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 
 ### 2. 設定表
 
-`values` 欄是允許值；`kind` 為 `choice`、`multi`、`bool`、`int` 或 `text`。表格由 conformance 測試解析，與 `copier.yml`、CLI（`src/csarc_cli/settings_schema.py`）及 root／generated parser（`csarc_config.py`）逐列比對。
+`values` 欄是允許值；`kind` 為 `choice`、`multi`、`bool`、`int`、`text` 或 `map`（SPEC-011）。表格由 conformance 測試解析，與 `copier.yml`、CLI（`src/csarc_cli/settings_schema.py`）及 root／generated parser（`csarc_config.py`）逐列比對。
 
 <!-- csarc-settings-table:start -->
 
@@ -47,7 +47,8 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 | `python_floor` | `persistent-intent` | `choice` | `latest`, `3.12`, `3.13`, `3.14` | Python 支援意圖，不由 manifest 反推 |
 | `documentation_mode` | `persistent-intent` | `choice` | `template-and-content`, `content-only`, `off` | `csarc update --data documentation_mode=...` |
 | `documentation_languages` | `persistent-intent` | `choice` | `zh-tw`, `en`, `zh-tw+en`, `en+zh-tw` | 只管 project-owned 文件；第一個是主要語言 |
-| `verification_mode` | `persistent-intent` | `choice` | `local`, `hosted` | 放寬只走 governance-switch |
+| `verification_mode_private` | `persistent-intent` | `choice` | `self-hosted`, `hosted`, `local` | private 時的模式；`self-hosted` 尚未提供為選項；放寬只走 governance-switch（SPEC-011） |
+| `verification_mode_public` | `persistent-intent` | `choice` | `hosted`, `local` | public 時的模式；`self-hosted` 被拒絕（SPEC-011） |
 | `admin_bypass` | `persistent-intent` | `choice` | `off`, `beta-only`, `always` | 缺值遷移為 `always`（`widened`） |
 | `copilot_review` | `persistent-intent` | `choice` | `allowed`, `off` | review provider 意圖 |
 | `governance_mode` | `persistent-intent` | `choice` | `managed`, `observe` | 舊 `policy_*` 遷移 |
@@ -65,6 +66,8 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 | `project_verification_hook` | `persistent-intent` | `text` | `''` 或安全的 repository 相對路徑 | 空值停用 |
 | `github_project_url` | `persistent-intent` | `text` | `''` 或完整 organization／user ProjectV2 URL | 空值停用；不提問，以 `--data` 設定（§10） |
 | `single_writer_merger` | `persistent-intent` | `text` | `''` 或一個 GitHub 帳號 | 空值維持寫入者自動偵測；不提問，以 `--data` 設定（#1233，見 `docs/ci-policy.md`） |
+| `self_hosted_runner` | `persistent-intent` | `map` | `{}` 或 `id`、`registration` | 只在 private 模式為 `self-hosted` 時保存；`{}` 表示尚未登記（SPEC-011） |
+| `self_hosted_environments` | `persistent-intent` | `multi` | `dev`, `uat` | 只在 private 模式為 `self-hosted` 時保存；不可為空（SPEC-011） |
 | `package_name` | `derived-decision` | `text` | 小寫 Python identifier | native manifest；無法唯一推導時才保存一次決定 |
 | `project_run_command` | `derived-decision` | `text` | 可執行指令 | native manifest；無法唯一推導時才保存一次決定 |
 | `project_slug` | `derived-context` | `text` | repository／distribution 名稱 | repository 名稱或 manifest `name` |
@@ -80,6 +83,7 @@ v0.30.x 的 `.csarc/config.yml` 同時保存使用者意圖、一次性 seed（�
 | `_commit` | `machine-metadata` | `text` | 完整 commit SHA | Copier 必要 |
 | `documentation_primary_language` | `render-derived` | `text` | `documentation_languages` 的第一個語言 | render 時計算 |
 | `documentation_secondary_language` | `render-derived` | `text` | `documentation_languages` 的第二個語言或空字串 | render 時計算 |
+| `verification_mode` | `render-derived` | `text` | `self-hosted`、`hosted` 或 `local` | render 時依 `project_visibility` 取 `verification_mode_public` 或 `verification_mode_private`（SPEC-011）；舊版保存的同名鍵只在過渡期由 reader 讀成兩個設定 |
 
 <!-- csarc-settings-table:end -->
 
@@ -205,14 +209,15 @@ CLI（`src/csarc_cli/repository_facts.py`）、本 repository（`scripts/reposit
 
 #### 工作模式（preset）
 
-一題決定工作模式；也可用 `--preset` 指定。preset 只展開成下表的 persistent intent，展開值可被明確 `--data` 逐鍵覆寫並照常保存；preset 名稱不寫入 `.csarc/config.yml` 或 provenance，只出現在 plan 與 adopt 報告的 `setup.work_mode`。non-interactive 採用 `solo-local`。preset 只在 init 與 adopt 展開，update 保留已存值。
+一題決定工作模式；也可用 `--preset` 指定。preset 只展開成下表的 persistent intent，展開值可被明確 `--data` 逐鍵覆寫並照常保存；preset 名稱不寫入 `.csarc/config.yml` 或 provenance，只出現在 plan 與 adopt 報告的 `setup.work_mode`。non-interactive 時 init 採用 `solo-self-hosted`（#1272，self-hosted verification ADR D2），adopt 採用 `solo-local`：adopt 導入既有 repository，依 ADR D2、Q12「既有專案不自動切換」不預設 `self-hosted`（#1317）。preset 只在 init 與 adopt 展開，update 保留已存值。
 
-| preset | `verification_mode` | `admin_bypass` | `copilot_review` | 另外展開 |
+| preset | `verification_mode_private`／`verification_mode_public` | `admin_bypass` | `copilot_review` | 另外展開 |
 | --- | --- | --- | --- | --- |
-| `solo-local`（預設） | `local` | `always` | `allowed` | `lifecycle: []`、`scheduled_checks: []` |
-| `solo-hosted` | `hosted` | `always` | `allowed` | — |
-| `team` | `hosted` | `off` | 追加一題（建議 `allowed`） | — |
-| `custom` | 詢問（建議 `local`） | 詢問（建議 `always`） | 詢問（建議 `allowed`） | — |
+| `solo-self-hosted`（init 預設） | `self-hosted`／`hosted` | `always` | `allowed` | `lifecycle: []`、`scheduled_checks: []` |
+| `solo-local`（adopt 預設） | `local`／`local` | `always` | `allowed` | `lifecycle: []`、`scheduled_checks: []` |
+| `solo-hosted` | `hosted`／`hosted` | `always` | `allowed` | — |
+| `team` | `hosted`／`hosted` | `off` | 追加一題（建議 `allowed`） | — |
+| `custom` | 各詢問一題（建議 `self-hosted`／`hosted`；public 不提供 `self-hosted`，SPEC-011） | 詢問（建議 `always`） | 詢問（建議 `allowed`） | — |
 
 #### 題數（以 transcript 測試斷言，`tests/test_setup_questions.py`）
 
@@ -220,11 +225,11 @@ init 的 6 題依序為 `project_description`、`languages`、`project_license`�
 
 | 情境 | 題數 |
 | --- | --- |
-| init，private、local（`solo-local`），授權不是 `custom` | 6 |
+| init，private、self-hosted（`solo-self-hosted`）或 local（`solo-local`），授權不是 `custom` | 6 |
 | public | ＋1（`security_reporting_channel`） |
 | hosted 且 `csarc-owned` | ＋1（`release_trigger`） |
 | `team` | ＋1（`copilot_review`） |
-| `custom` | ＋3（`verification_mode`、`admin_bypass`、`copilot_review`） |
+| `custom` | ＋4（`verification_mode_private`、`verification_mode_public`、`admin_bypass`、`copilot_review`） |
 | repository 無法解析 | 最多＋2（`repository_url`、`project_visibility`） |
 | 授權選 `custom` | －1（略過 `copyright_holder`） |
 | adopt | 3；每個無法唯一偵測的值（沒有 manifest description、沒有 `LICENSE`、`ambiguous` package）＋1；public 而揭露政策沒有唯一的私密管道＋1；偵測到 `Dockerfile`＋1（`container`）；工作模式、`release_trigger` 與 repository 的追加題同 init |
@@ -249,7 +254,7 @@ WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup
 | code | 條件 |
 | --- | --- |
 | `W01-admin-bypass-always` | `admin_bypass: always`：沒有第二個人審查，以證據與稽核補償 |
-| `W02-local-verification` | `verification_mode: local`：證據是自我聲明 |
+| `W02-local-verification` | 實際模式是 `local`：證據是自我聲明 |
 | `W03-second-approver-confirmed` | approval route `inconclusive`，使用者確認另有核准者 |
 | `W04-copilot-entitlement-confirmed` | 使用者確認 Copilot 授權，Copilot 可能是唯一合併路徑 |
 | `W05-copilot-reference-only` | local＋`off`＋`allowed`：原生核准仍必要，Copilot 只供參考 |
@@ -264,10 +269,11 @@ WARNING 在 plan 輸出（`Apply this plan?` 之前）與 adopt 報告的 `setup
 | `W15-local-actions-minutes` | local 而 `scheduled_checks` 不是空的或 `enable_codeql: true` |
 | `W20-ui-merge-without-approval` | local＋`beta-only`／`always`：0 個原生必要核准，任何寫入者都能在 UI 合併 |
 | `W21-single-writer-unobserved` | private、GitHub Free、`csarc-owned`，讀取沒有觀察到執行者是唯一寫入者（#1058 決定 27） |
+| `W22-self-hosted-unregistered` | 實際模式是 `self-hosted` 而 `self_hosted_runner` 是空的：登記前 PR 不能合併，訊息列出登記步驟（#1272） |
 
 #### 不合法組合
 
-在 render 前以一行修復指令結束：new＋`rust`＋`container: true`（`--data container=false`）；`enable_codeql: true` 而沒有 `go`、`python` 或 `typescript`（`--data enable_codeql=false`）；明確 `release_trigger` 而不是 hosted＋`csarc-owned`（移除該 `--data`）；未知的 `--preset`。
+在 render 前以一行修復指令結束：new＋`rust`＋`container: true`（`--data container=false`）；`container: true`＋`verification_mode_private: self-hosted`（`--preset solo-local`、`--data verification_mode_private=hosted` 或 `--data container=false`，SPEC-011 §9）；`enable_codeql: true` 而沒有 `go`、`python` 或 `typescript`（`--data enable_codeql=false`）；明確 `release_trigger` 而不是 hosted＋`csarc-owned`（移除該 `--data`）；未知的 `--preset`。
 
 ### 10. GitHub Project Roadmap（#1080）
 

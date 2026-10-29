@@ -1,11 +1,7 @@
 name: Release publish drift check
 
-# Independent, read-only, separately scheduled check for Issue #605: a
-# stuck or broken release.yml cannot reliably alert on its own breakage, so
-# this never runs as a step inside release.yml itself. See
-# .csarc/scripts/check-release-drift for the detection condition and
-# .csarc/docs/ci-policy.md's "版本、發版、交付與部署矩陣"
-# section for the local-publish fallback this watches for.
+# Separate read-only schedule: a broken release.yml cannot report its own
+# breakage. .csarc/scripts/check-release-drift owns the detection condition.
 
 on:
   schedule:

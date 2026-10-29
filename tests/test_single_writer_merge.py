@@ -268,7 +268,7 @@ class SingleWriterGitHub(FakeGitHub):
 def use_local_mode(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
     """Select local verification with exact-head local evidence."""
     for name, value in (
-        ("configured_verification_mode", lambda: "local"),
+        ("configured_verification_mode", lambda *_: "local"),
         ("configured_admin_bypass", lambda: "always"),
         ("require_local_pull_policy", lambda *_: None),
     ):
@@ -376,7 +376,7 @@ def test_hosted_single_writer_still_requires_declared_checks(
     monkeypatch.setitem(
         merge_snapshot.__globals__,
         "configured_verification_mode",
-        lambda: "hosted",
+        lambda *_: "hosted",
     )
     monkeypatch.setitem(
         merge_snapshot.__globals__,

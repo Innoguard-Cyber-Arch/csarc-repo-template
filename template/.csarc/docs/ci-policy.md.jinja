@@ -2,7 +2,7 @@
 {%- set owned = release_ownership == 'csarc-owned' -%}
 # CI/CD 設定與交付邊界
 
-本文件依這個 repository 的設定產生（`verification_mode: {{ verification_mode }}`、`release_ownership: {{ release_ownership }}`、`lifecycle: {{ lifecycle | join(', ') if lifecycle else '[]' }}`），只描述目前啟用的檢查、合併與發版規則。設定改變後由 `csarc update` 重新產生；沒有列在這裡的 workflow 或路線不屬於本專案。操作總覽見 [`csarc.md`](csarc.md)。
+本文件依這個 repository 的設定產生（`verification_mode_{{ 'public' if project_visibility == 'public' else 'private' }}: {{ verification_mode }}`、`release_ownership: {{ release_ownership }}`、`lifecycle: {{ lifecycle | join(', ') if lifecycle else '[]' }}`），只描述目前啟用的檢查、合併與發版規則。設定改變後由 `csarc update` 重新產生；沒有列在這裡的 workflow 或路線不屬於本專案。操作總覽見 [`csarc.md`](csarc.md)。
 
 ## 審查與合併資格
 
@@ -39,7 +39,7 @@ Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─→ main
 - **Hotfix**：只用於必須立即修正 `main` 的缺陷。沒有 Milestone 的 Bug Issue 標 `hotfix`，分支 `fix/<Issue>-<slug>`，PR 標題 `fix(scope): summary`，一律 full 驗證與正常 review。
 - **Release recovery**：`main` 缺少一次應有的發版時，以 `fix/<Issue>-<slug>`、`release-recovery` label 直接對 `main` 提出修正，比照 hotfix 一律 full。
 - **Dependabot**：minor／patch 更新在 exact head 重新驗證後經 lifecycle 合併，major 保留人工審核。
-- **模板更新**：`csarc update` 產生的 PR 帶 `governance-switch` label；改動 `.csarc/scripts/` 或放寬治理設定（例如 `admin_bypass`、`verification_mode`、關閉 CodeQL、移除 `lifecycle` 項目、降低 coverage 門檻）的 PR 也一樣。
+- **模板更新**：`csarc update` 產生的 PR 帶 `governance-switch` label；改動 `.csarc/scripts/` 或放寬治理設定（例如 `admin_bypass`、`verification_mode_private`、關閉 CodeQL、移除 `lifecycle` 項目、降低 coverage 門檻）的 PR 也一樣。
 - **升級帶來的新設定**：PR 帶 `governance-switch` label，且 `.csarc/provenance.json` 記錄的 tag 是指向 `_commit` 的已發布 immutable 正式版時，以 `ast` 盤點該版設定表（不執行）。全部相符才放行，並記錄 `schema_source=release:<tag>`；否則 fail closed 並列出盤點。
 
 ## Milestone 掛勾與持續同步
@@ -68,13 +68,13 @@ Milestone promotion PR 的 body 必須有獨立的 `## ADR 與文件對齊` 段�
 {%- endif %}
 ## PR lifecycle single-writer
 
-Agent 以 `.csarc/scripts/pr_lifecycle.py create` 從已 push、乾淨的 exact head 直接建立 Draft PR。之後的 Ready／Draft、授權、metadata 與合併寫入，都先取得 remote lease，再經 `.csarc/scripts/pr_lifecycle.py`；`.csarc/scripts/verify` 會拒絕另一套寫入者。Issue body 改用 `.csarc/scripts/gh-issue-edit` 編輯，它會在既有核可將失效時先提醒；它無法攔截 GitHub UI 或直接 API 編輯。
+Agent 以 `.csarc/scripts/pr_lifecycle.py create` 從已 push、乾淨的 exact head 直接建立 Draft PR。之後的 Ready／Draft、授權、metadata 與合併寫入，都先取得 remote lease，再經 `.csarc/scripts/pr_lifecycle.py`；`.csarc/scripts/verify` 會拒絕另一套寫入者。Issue body 改用 `.csarc/scripts/gh-issue-edit` 編輯；它只在核可將失效時提醒，攔不到 GitHub UI 或 API 編輯。
 
-- **Exact-head 授權**：獨立 maintainer 對目前 head 的最新 `APPROVED` 直接視為授權；`review` check、`status` 與 lifecycle 共用同一判定，即時確認 reviewer 的 `role_name` 為 `maintain`／`admin` 與 review 的 `commit_id`。PR 作者與被核准 head 的最後 push 者（head commit 的 committer 與最新一筆 push 的 actor）不算獨立；讀不到最後 push 者時任何 approval 都不算數。執行合併的帳號不再被排除，維護者可以合併自己核准的協作者 PR；有 Ruleset 時合併者須為 `write`，或就是具 `maintain`／`admin` 的核准者本人。admin 專用檢查只接受即時 `role_name: admin`，讀不到角色時判為 `unknown` 並 fail closed。
+- **Exact-head 授權**：獨立 maintainer 對目前 head 的最新 `APPROVED` 直接視為授權；`review` check、`status` 與 lifecycle 共用同一判定，即時確認 reviewer 的 `role_name` 為 `maintain`／`admin` 與 review 的 `commit_id`。PR 作者與被核准 head 的最後 push 者（head commit 的 committer 與最新一筆 push 的 actor）不算獨立；讀不到最後 push 者時任何 approval 都不算數。維護者可以合併自己核准的協作者 PR；有 Ruleset 時合併者須為 `write`，或就是具 `maintain`／`admin` 的核准者。admin 專用檢查只接受即時 `role_name: admin`，讀不到角色時判為 `unknown` 並 fail closed。
 - **Lease 續租**：lease 最多兩小時。要保住既有授權時以 `acquire --renew <lease.json>` 續租；先 release 再 acquire 會讓舊授權失效。遺失證據檔時，同一個 owner 以 `recover` 先盤點，再加 `--apply` 刪除自己的 lease ref；owner、actor、PR 或 head 不符時拒絕。
 - **Admin bypass marker**：自核時以 `pr_lifecycle.py edit --admin-bypass-marker add` 在 PR body 加入唯一一行 `Admin bypass / 管理員略過審核`。
 {%- if copilot_review == 'allowed' %}
-- **Copilot 審核**：`python3 .csarc/scripts/review_gate.py status --repo <owner/repo> --pr <N>` 列出 Copilot 對目前 head 的意見與未解決 thread；修正、push、resolve，直到狀態為 `clean`。有有效 admin bypass marker，或 Ruleset 不是 0 個原生 approval 的形狀時，不採用 Copilot 證據；沒有授權或額度時 Copilot 不會審核，改走 maintainer approval。Copilot 沒有意見不代表沒有缺陷。
+- **Copilot 審核**：依 `review_gate.py status` 列出的意見修正、push、resolve，直到狀態為 `clean`。有有效 admin bypass marker，或 Ruleset 不是 0 個原生 approval 的形狀時，不採用 Copilot 證據；沒有授權或額度時 Copilot 不會審核，改走 maintainer approval。Copilot 沒有意見不代表沒有缺陷。
 {%- endif %}
 
 合併時 lifecycle 依序：確認 lease 的 base 是 head 的祖先（head 落後時先合併最新 base 並重新取得證據）、讀回 head tree 必須等於證據綁定的 tree、把 canonical 證據寫進 PR 唯一的 summary 留言（`csarc-merge-evidence: v1`）、以 squash 合併、保留 commits 的完整 `BREAKING CHANGE:` footer 並加上 `CSARC-Evidence`、`CSARC-Evidence-SHA256`、`CSARC-Trust` 等 trailer，最後讀回 merge commit。tree 或 trailer 不符時 summary 標成 mismatch 並以非 0 結束。
@@ -95,23 +95,44 @@ GitHub UI 合併與 `gh pr merge --admin` 不是合法 route，沒有 trailer；
 
 ## 本機與 hosted 驗證模式
 
+模式依可見性分兩個設定：private 用 `verification_mode_private`（`self-hosted`、`local`、`hosted`），public 用 `verification_mode_public`（`hosted`、`local`）。`self-hosted` 在 csarc-devops 登記的 VM 上驗證，只限 private；`local` 在操作者電腦上自我證明；`hosted` 由 GitHub-hosted runner 驗證。GitHub Free 的 private repository 沒有 Ruleset，`local` 與 `self-hosted` 的合併規則只由 lifecycle 執行。改模式以 `csarc update --data` 走 governance-switch PR。
+
 {% if hosted -%}
 本專案使用 `hosted`。required `verify` 由 `ci.yml` 以 `pull_request_target` 啟動：先從 trusted base 準備 router 與 verifier，再對 exact candidate 執行一次 fast 或 full，證據綁定 repository、head／tree、base、tier、scopes、command、toolchain、runner 與結果，預設 24 小時內有效。Draft 活動在 runner 前略過；`ready_for_review` 與之後的新 head 都重新判斷。`title` 由 `pr-policy.yml` 驗證 Issue、route、label、Milestone 與 checklist，`review` 由 `pr-review.yml` 發布。reviewer assignment 由 `governance-comment.yml` 處理。
 
 實作中只跑 focused checks；`./.csarc/scripts/verify-fast` 是可選診斷，不因 trusted plan 選到 full 就在本機重跑。`./.csarc/scripts/check-trusted-verification <head-sha> --github-repo <owner/repo>` 讀回 hosted 證據。Workflow YAML 只負責事件、權限與呼叫；所有第三方 Actions 固定在完整 commit SHA。
+{%- elif verification_mode == 'self-hosted' -%}
+本專案使用 `self-hosted`，治理與 `local` 相同：不產生 hosted workflow，required-checks Ruleset 保持停用。合併證據來自登記的 VM：在 PR 的目標分支以 `workflow_dispatch` 觸發唯讀的 `csarc-verify.yml`，`pr_lifecycle.py merge` 讀回 GitHub 記錄的執行，綁定 exact head／tree、runner、環境與 24 小時期限，合併後留下 `self-hosted-registered` trace。本機 `./.csarc/scripts/verify-fast` 只是自我證明，只有離開 self-hosted 與第一次登記的 governance-switch PR 能以它合併。
 {%- else -%}
 本專案使用 `local`，因此不產生 `ci.yml`、`pr-policy.yml`、`pr-review.yml`、reviewer assignment 或 Dependabot 自動合併 workflow，required-checks Ruleset 保持停用。候選 commit 乾淨後執行一次 `./.csarc/scripts/verify-fast`；成功時把 head／tree、base、tier、scopes、command 與結果寫進 Git metadata，24 小時內有效。尚未 commit 或仍有未提交修改時，測試照常回報，但不產生可合併的證據。`pr_lifecycle.py merge` 在合併前重讀 GitHub metadata、review、lease 與這份證據，從 trusted base 執行 PR policy，合併讀回後留下 `self-attested-local` trace。
 
-這份證據能防止拿錯舊結果、錯 branch 或測完又改檔，但不能防止有寫入權限的人偽造，也不能證明 GitHub event、權限、遠端 runner 或 release provenance。外部協作者在 GitHub UI 改的 metadata 不會即時修正。需要這些保證時，以 `csarc update --data verification_mode=hosted` 切換並重新套用 repository settings。
+這份證據能防止拿錯舊結果、錯 branch 或測完又改檔，但不能防止有寫入權限的人偽造，也不能證明 GitHub event、權限、遠端 runner 或 release provenance。外部協作者在 GitHub UI 改的 metadata 不會即時修正。需要這些保證時，以 `csarc update --data verification_mode_{{ 'public' if project_visibility == 'public' else 'private' }}=hosted` 切換並重新套用 repository settings。
 {%- endif %}
 
-合併與驗證在兩種模式都只依 trusted base 的政策決定：gate、router、設定 reader 與 PR policy 都取自 base，candidate 只是被驗證的 exact head；candidate 自己的 gate 只做不影響結果的自我測試。
+合併與驗證在每種模式都只依 trusted base 的政策決定：gate、router、設定 reader 與 PR policy 都取自 base，candidate 只是被驗證的 exact head；candidate 自己的 gate 只做不影響結果的自我測試。{% if hosted or verification_mode == 'self-hosted' %}{{ 'hosted CI' if hosted else 'VM' }} 先從 trusted base 複製整個 `.csarc/scripts/` 與 `.csarc/config.yml`，candidate 只提供被檢查的檔案；candidate 的測試、lint 設定、相依與 project verification hook 是驗證對象，仍會執行，放寬它們要靠審查發現；改變 `release_ownership` 一律走 governance-switch route。{% endif %}本機 `./.csarc/scripts/verify-fast` 由 candidate 檢查自己。
+{%- if verification_mode == 'self-hosted' %}
+
+### Self-hosted 登記與使用
+
+登記完成前，只有登記 PR 能合併。登記一次：
+
+1. 在本 repository 與 csarc-devops 各開一張 Issue，互相連結完整 URL，雙方人工核准。csarc-devops 的 Issue 列出 VM、環境（`dev`、`uat`）與可觸發 `csarc-verify.yml` 的 GitHub 帳號允許清單；清單存在 VM 端，清單外帳號的 job 不會在 VM 上執行。
+2. csarc-devops 更新允許清單後，在 governance-switch PR 執行 `csarc update --data 'self_hosted_runner={id: <vm-id>, registration: <csarc-devops Issue URL>}'`。lifecycle 只檢查 URL 格式，不讀取 csarc-devops。這張 PR 沒有 VM 證據，只改 `self_hosted_runner`（與 `self_hosted_environments`）、`.csarc/provenance.json` 與逐字符合 render 結果的 `csarc-verify.yml` 時，以本機 `./.csarc/scripts/verify-fast` 的證據經 `pr_lifecycle.py merge` 合併，trace 記為 `self-hosted-registration-trace`；改了其他檔案或升級模板就會被擋，請登記後另開 PR。
+3. 管理員把 repository 的 Actions log 保存期限設為 7 天：repository 公開後，過去的 log 也會公開。
+
+每次使用時，所有指令都先印出唯讀盤點，加 `--apply` 才動作：
+
+- `csarc self-hosted open --env dev|uat` 以管理員自己的登入開 24 小時窗口。`dev` 驗證進 `dev/m*`、`dev/i*` 的 PR，`uat` 驗證進 `main` 的 PR。
+- `csarc self-hosted verify --pr <N>` 觸發上述驗證；外部 fork 的 PR 一律拒絕。
+- `csarc self-hosted status` 顯示剩餘時間。剩不到 2 小時以 `extend` 延長為現在＋24 小時；剩不到 30 分鐘 `verify` 不再派工。`close` 提前關窗。
+
+限制：連續 90 天沒有開窗，VM 端的登記就到期，要重新登記。轉成 public 前先執行 `csarc self-hosted retire --apply`，合併它建立的 PR 後才改可見性。盤點先用 public 模式驗證設定，列出 public 不接受的設定（例如寫成說明文字的 `security_reporting_channel`）並以非 0 結束，先用 governance-switch PR 改好。`--apply` 刪除 `csarc-verify.yml` 的 run 與 artifact，以及 repository 的**全部** Actions cache 與**全部** repository runner（不只 VM 的），再開一張 Issue（或使用 `--issue N`），從 `chore/<N>-leave-self-hosted` 建立以 `Closes #N` 連結的 PR。這張 PR 的本機證據用 trusted base 的驗證器產生：`git worktree add --detach <dir> origin/<base>`，再於 PR 的 checkout 執行 `CSARC_VERIFICATION_SUBJECT_ROOT="$PWD" <dir>/.csarc/scripts/verify-fast`。這只防止 candidate 改掉自己的檢查，不是隔離邊界（candidate 以同一個使用者在同一台機器執行，可能改寫 base 的 worktree），證據仍是 `self-attested-local`。沒執行就公開時，`status`、`csarc update` 與 lifecycle 印出 `WARNING:`，lifecycle 也拒絕所有 PR：先轉回 private（GitHub 會移除 star 與 watcher），執行 `retire` 並合併它的 PR，再公開。`container: true` 不能搭配 `self-hosted`（VM 不提供 Docker daemon），請改用 `local` 或 `hosted`。
+{%- endif %}
 
 ## 驗證分級
 
-正式組合只有 `fast` 與 `full`；開發中的 focused check 是本機回饋，不是第三種 tier。最後要求取發布通道下限與 `.csarc/scripts/ci_tier.py` 路徑分類中較強者：{% if 'milestones' in lifecycle %}`dev/m*` 的工作 PR 下限為 fast，{% endif %}指向 `main` 的 standalone、hotfix 與 release recovery 下限為 full；分類器無法判斷時升級 full。
+正式組合只有 `fast` 與 `full`；實作中只跑變更 owner 的 focused check（例如單一測試檔或 lint 路徑），它是本機回饋，不是第三種 tier。最後要求取發布通道下限與 `.csarc/scripts/ci_tier.py` 路徑分類中較強者：{% if 'milestones' in lifecycle %}`dev/m*` 的工作 PR 下限為 fast，{% endif %}指向 `main` 的 standalone、hotfix 與 release recovery 下限為 full；分類器無法判斷時升級 full。
 
-- **focused**：實作中只跑變更 owner 的窄檢查，例如單一測試檔或 lint 路徑。
 - **fast**：`./.csarc/scripts/verify-fast` 從 `branch.<name>.gh-merge-base`（或 `CSARC_CI_BASE`）找出 base，對變更路徑跑 diff hygiene、衝突標記、secret 掃描、新增或修改訊息的句型與受影響的 owner；base 無法判定時 fail closed。
 - **full**：`./.csarc/scripts/verify` 執行共同基線、已選語言的完整品質與原生建置，以及已啟用的容器與產品 hook（`project_verification_hook` 或 `scripts/verify-product`）。
 
@@ -128,7 +149,7 @@ GitHub UI 合併與 `gh pr merge --admin` 不是合法 route，沒有 trailer；
 
 ### Acceptance-checklist 驗證時機
 
-Draft PR 不檢查 PR 與 Issue 的 checklist 是否全勾；轉為 Ready 時對當下 head 完整檢查，之後每次 push 或 edit 都重新檢查。只在每個勾選都有真實證據、全部完成後才 push 要滿足 closing keyword 的 commit，不要一邊 push 一邊逐項打勾。
+Draft PR 不檢查 PR 與 Issue 的 checklist 是否全勾；轉為 Ready 時對當下 head 完整檢查，之後每次 push 或 edit 都重新檢查。
 
 ## 版本、發版、交付與部署矩陣
 
@@ -160,7 +181,7 @@ Draft PR 不檢查 PR 與 Issue 的 checklist 是否全勾；轉為 Ready 時對
 
 ## Failure 與 fallback
 
-- 分類器無法判斷時升級 full；skipped 或 zero-step 不算成功證據。
+- skipped 或 zero-step 不算成功證據。
 {%- if hosted %}
 - Hosted Actions 中斷時改走 governance-switch 路線：required checks、exact-head 授權與 remote lease 照常要求，Ruleset 的 admin bypass 也不能把缺少的 check 當成成功。
 {%- endif %}

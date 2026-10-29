@@ -122,15 +122,24 @@ def assert_schema_2(project: Path) -> dict[str, object]:
     keys = saved_keys(project)
     allowed = {
         settings_schema.SCHEMA_KEY,
+        settings_schema.LEGACY_MODE,
         *settings_schema.COPIER_METADATA_KEYS,
         *settings_schema.INTENT_SETTINGS,
         *settings_schema.DECISION_SETTINGS,
     }
     assert keys <= allowed, keys - allowed
     # #1233: an empty single-writer opt-in is omitted for older readers.
-    assert set(settings_schema.INTENT_SETTINGS) - {"single_writer_merger"} <= (
-        keys
-    )
+    # SPEC-011: registration keys exist only for a self-hosted private mode,
+    # and the legacy key stands for both modes until the trusted-base reader
+    # reads them (#1069 decision 8).
+    required = set(settings_schema.INTENT_SETTINGS) - {
+        "single_writer_merger",
+        *settings_schema.SELF_HOSTED_KEYS,
+    }
+    if settings_schema.LEGACY_MODE in keys:
+        required -= set(settings_schema.MODE_KEYS)
+        assert not set(settings_schema.MODE_KEYS) & keys
+    assert required <= keys, required - keys
     assert "single_writer_merger" not in keys
     provenance = json.loads(
         (project / ".csarc/provenance.json").read_text(encoding="utf-8")
@@ -280,6 +289,9 @@ def test_legacy_consumer_migrates_to_schema_2_in_one_update(
     legacy_keys = saved_keys(project)
     assert "schema_version" not in legacy_keys
     assert {"primary_language", "i18n", "actions_fallback"} <= legacy_keys
+    legacy_mode = yaml.safe_load(
+        (project / ".csarc/config.yml").read_text(encoding="utf-8")
+    )[settings_schema.LEGACY_MODE]
 
     report_dir = tmp_path / "report"
     code = main(
@@ -303,6 +315,10 @@ def test_legacy_consumer_migrates_to_schema_2_in_one_update(
     )
     assert config["documentation_languages"] == "en"
     assert config["python_floor"] == "latest"
+    # SPEC-011 (#1069 decision 8): the legacy reader cannot read the two
+    # visibility settings yet, so this first update keeps the one legacy
+    # key with the migrated value; the next update switches the writer.
+    assert config[settings_schema.LEGACY_MODE] == legacy_mode
     assert "actions_fallback" not in config
     assert product.read_text(encoding="utf-8") == "VALUE = 1\n"
     for seeded in ("pyproject.toml", "package.json", "Cargo.toml", "uv.lock"):

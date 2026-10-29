@@ -104,12 +104,15 @@ class SiblingModule:
 # selected command first needs it.
 ci_tier: Any = SiblingModule("ci_tier")
 dependabot_auth: Any = SiblingModule("authenticate_dependabot_head")
+dependabot_reverify: Any = SiblingModule("dependabot_reverify")
+evidence_freshness: Any = SiblingModule("evidence_freshness")
 local_verification: Any = SiblingModule("local_verification")
 merge_trace: Any = SiblingModule("merge_trace")
 promotion_gate: Any = SiblingModule("promotion_gate")
 release_level: Any = SiblingModule("release_level")
 review_gate: Any = SiblingModule("review_gate")
 risk_controls: Any = SiblingModule("risk_controls")
+self_hosted_evidence: Any = SiblingModule("self_hosted_evidence")
 verification_evidence: Any = SiblingModule("verification_evidence")
 
 
@@ -148,6 +151,16 @@ def main_route_kind(base_ref: str, head_ref: str, labels: set[str]) -> str:
 
 # Shared next steps of raised messages (#1253).
 GH_RETRY = "Run 'gh auth status' and rerun"
+# ADR self-hosted-verification Q1 (#1318): the exit candidate is checked by
+# the trusted base's verifier, whose recorder the candidate may not ship.
+EXIT_EVIDENCE_HINT = (
+    "To record it, run the base verifier, which checks this checkout "
+    "with the base's scripts and settings: 'git worktree "
+    "add --detach <dir> origin/<base>', then 'CSARC_VERIFICATION_SUBJECT_ROOT"
+    '="$PWD" <dir>/.csarc/scripts/verify-fast\'. This stops a candidate '
+    "from editing its own checks; it is not isolation, so the evidence "
+    "stays self-attested."
+)
 LS_LEASES = "Run 'git ls-remote origin csarc/leases'"
 LEASE_SCHEMA = 2
 MAX_TTL_SECONDS = 7200
@@ -841,8 +854,13 @@ def require_lease(
     repo: str,
     pr_number: int,
     head_sha: str,
+    destination: str = "",
 ) -> None:
-    """Revalidate lease identity, scope, and immutable remote commit."""
+    """Revalidate lease identity, scope, and immutable remote commit.
+
+    `destination` is the newer main a Dependabot reverification bound
+    (Issue #1264); without it the destination must still equal the base.
+    """
     require_origin(repo)
     if (
         lease["repository"].casefold() != repo.casefold()
@@ -869,7 +887,9 @@ def require_lease(
         raise RuntimeError(
             "Lease scope: base or destination drifted. Reacquire the lease."
         )
-    if branch_sha(github, repo, lease["base_ref"]) != lease["base_sha"]:
+    if branch_sha(github, repo, lease["base_ref"]) != (
+        destination or lease["base_sha"]
+    ):
         raise RuntimeError("Destination branch: advanced. Update the branch.")
 
 
@@ -1220,10 +1240,16 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         raise RuntimeError(
             f"Pull request: base identity unavailable. {GH_RETRY}."
         )
-    if branch_sha(github, args.repo, base["ref"]) != base["sha"]:
-        raise RuntimeError(
-            "Pull request: base differs from its destination ref. Run 'git "
-            "fetch origin'."
+    live_base = branch_sha(github, args.repo, base["ref"])
+    if live_base != base["sha"]:
+        if not getattr(args, "require_dependabot_head", False):
+            raise RuntimeError(
+                "Pull request: base differs from its destination ref. Run "
+                "'git fetch origin'."
+            )
+        # Issue #1264: only a Dependabot head reverified on this main.
+        reverified_destination(
+            github, args.repo, pull, args.head_sha, live_base
         )
     observed = {ref: remote_ref(ref) for ref in refs}
     if previous is not None:
@@ -2649,13 +2675,47 @@ def repository_root() -> Path:
     return parent.parent if parent.name == ".csarc" else parent
 
 
-def configured_verification_mode() -> str:
-    """Return the normalized local-or-hosted verification choice."""
-    return str(
-        csarc_config.load_config(repository_root() / ".csarc/config.yml")[
-            "verification_mode"
-        ]
+def configured_verification_mode(github: GitHub, repo: str) -> str:
+    """Return the effective mode for the live visibility (SPEC-011).
+
+    The rendered files must match it; self-hosted also needs its workflow.
+    """
+    config = csarc_config.load_config(repository_root() / ".csarc/config.yml")
+    repository = github.get(repo, "")
+    private = repository.get("private") if isinstance(repository, dict) else 0
+    if not isinstance(private, bool):
+        raise RuntimeError(f"Repository visibility: unavailable. {GH_RETRY}.")
+    # ADR self-hosted D9 (#1287): warn only; the merge decision is unchanged.
+    if text := merge_trace.retire_warning(
+        repo,
+        private,
+        config.get("verification_mode_private"),
+        lambda path: github.get(repo, path),
+    ):
+        sys.stderr.write(f"WARNING: {text}\n")
+    mode = str(
+        config[f"verification_mode_{'private' if private else 'public'}"]
     )
+    flows = repository_root() / ".github/workflows"
+    if (mode == "hosted", mode == "self-hosted") != (
+        (flows / "pr-policy.yml").is_file(),
+        (flows / "csarc-verify.yml").is_file(),
+    ):
+        if not private and (flows / "csarc-verify.yml").is_file():
+            # ADR self-hosted-verification D9 (#1318): only the message
+            # differs. This still fails closed like any stale render; the
+            # settings reader already rejects a public self-hosted mode.
+            raise RuntimeError(
+                "Verification mode self-hosted: the repository turned public "
+                "before 'csarc self-hosted retire', so no pull request can "
+                "merge. Make it private again, run 'csarc self-hosted retire "
+                "--apply', merge its pull request, then make it public."
+            )
+        raise RuntimeError(
+            f"Verification mode {mode}: the rendered files do not match the "
+            "current visibility. Run 'csarc update' to render again."
+        )
+    return mode
 
 
 def trusted_executor_module() -> ModuleType:
@@ -2750,9 +2810,16 @@ def base_policy_decision(
     )
     if listing.returncode:
         raise RuntimeError(f"Changed paths: cannot list them. {GH_RETRY}.")
-    base_config = repository_root() / ".csarc/config.yml"
     labels_csv = ",".join(sorted(labels))
     with tempfile.TemporaryDirectory(prefix="csarc-base-policy-") as scratch:
+        # Issue #1325: read the base settings from the lease's base commit,
+        # so the route never compares the candidate with itself, even when
+        # this entry point is not running from the trusted base checkout.
+        base_config = Path(scratch) / "base-config.yml"
+        base_config.write_text(
+            run([*git, "show", f"{base_sha}:.csarc/config.yml"]) + "\n",
+            encoding="utf-8",
+        )
         candidate_config = Path(scratch) / "candidate-config.yml"
         candidate_config.write_text(
             run([*git, "show", f"{head_sha}:.csarc/config.yml"]) + "\n",
@@ -2767,13 +2834,14 @@ def base_policy_decision(
             candidate, schema_source = executor.read_candidate_config(
                 candidate_config, labels, provenance
             )
+            base_values = executor.read_config(base_config)
             decision = executor.classify_route(
                 [
                     item.decode("utf-8", "surrogateescape")
                     for item in listing.stdout.split(b"\0")
                     if item
                 ],
-                executor.read_config(base_config),
+                base_values,
                 candidate,
             )
         except (OSError, ValueError) as error:
@@ -2782,6 +2850,12 @@ def base_policy_decision(
                 "'.csarc/config.yml'."
             ) from error
         executor.require_route(decision, labels)
+        # Issue #1270: the repository side of the registration is the
+        # Issue this pull request closes.
+        issues = CLOSING_ISSUE.findall(str(pull.get("body") or ""))
+        executor.require_registration(
+            base_values, candidate, ", ".join(f"#{n}" for n in issues) or "-"
+        )
         changed_files = Path(scratch) / "changed-files"
         changed_files.write_bytes(listing.stdout)
         plan = Path(scratch) / "ci-plan.json"
@@ -3053,6 +3127,40 @@ def authenticated_dependabot_commit(
     return kind, commit
 
 
+def reverified_destination(
+    github: GitHub,
+    repo: str,
+    pull: dict[str, Any],
+    head_sha: str,
+    main_sha: str,
+) -> dict[str, Any]:
+    """Return a hosted reverification of a behind Dependabot head on main.
+
+    Issue #1264: the head stays unchanged; only a trusted full verification
+    of GitHub's test merge into exactly `main_sha` stands in for a rebase.
+    """
+    eligible, reason, _, _, live_head = (
+        dependabot_auth.validated_dependabot_snapshot(pull, repo)
+    )
+    if not eligible or live_head != head_sha:
+        raise RuntimeError(
+            "Pull request: base differs from main and "
+            f"{reason or 'the head moved'}. Rebase it or merge it manually."
+        )
+    if configured_verification_mode(github, repo) != "hosted":
+        raise RuntimeError(
+            "Dependabot reverification: hosted mode only. Ask Dependabot to "
+            "rebase."
+        )
+    # Only no-release heads: no release follows a reverified merge.
+    dependabot_reverify.require_no_release(
+        pull, pull_commit_messages(github, repo, int(pull["number"]))
+    )
+    return dependabot_reverify.require(
+        github, repo, int(pull["number"]), head_sha, main_sha
+    )
+
+
 def require_trusted_dependabot_head(
     github: GitHub,
     repo: str,
@@ -3197,6 +3305,7 @@ def require_trusted_verification(  # noqa: C901
         else []
     )
     source_evidence = None
+    source_result = None
     source_ids = verification_evidence.evidence_source_ids(job, annotations)
     if source_ids is not None:
         source_kind, source_run_id, source_job_id, source_check_id = source_ids
@@ -3209,6 +3318,36 @@ def require_trusted_verification(  # noqa: C901
                 "Verification reuse source: unavailable. Rerun verify."
             )
         source_head = source_check.get("head_sha")
+    if (
+        source_ids is not None
+        and source_kind == "sync"
+        and str(source_check.get("name")).startswith("dependabot-reverify (")
+    ):
+        # Issue #1284: a clean sync of a reverified Dependabot squash cites
+        # the reverification that verified exactly that main tree.
+        source_result = dependabot_reverify.merged(
+            github,
+            repo,
+            verification_evidence.evidence_match(job, annotations)[1].group(9),
+            now=now,
+            max_age_hours=max_age_hours,
+        )
+        if (
+            source_result["run_id"],
+            source_result["job_id"],
+            source_result["check_run_id"],
+        ) != (source_run_id, source_job_id, source_check_id):
+            raise RuntimeError(
+                "Verification reuse source: invalid producer. Rerun verify."
+            )
+        source_result["executor"] = verification_evidence.EXECUTOR_TRUSTED
+        source_evidence = (
+            source_check,
+            source_run,
+            {"id": source_job_id},
+            str(source_result["tree_sha"]),
+        )
+    elif source_ids is not None:
         if not isinstance(source_head, str) or (
             source_kind == "reuse" and source_head != head_sha
         ):
@@ -3280,6 +3419,7 @@ def require_trusted_verification(  # noqa: C901
         source_evidence=source_evidence,
         annotations=annotations,
         commit_tree=lambda sha: commit_tree_sha(github, repo, sha),
+        source_result=source_result,
         full_command=(
             "./scripts/verify-template.sh"
             if Path("scripts/verify-template.sh").is_file()
@@ -3440,10 +3580,13 @@ def require_successful_checks(  # noqa: C901
     contexts: set[tuple[str, int]],
     quota_run_urls: set[str] | None = None,
     durable: dict[str, Any] | None = None,
+    reverified: bool = False,
 ) -> str:
     """Require protected contexts to pass or have exact quota evidence.
 
-    `durable` receives the normalized hosted `verify` payload, if any.
+    `durable` receives the normalized hosted `verify` payload, if any. A
+    Dependabot reverification on the current main (Issue #1264) replaces
+    the exact-head evidence payload, never the passing contexts themselves.
     """
     check_runs = github.collection(
         repo,
@@ -3476,6 +3619,7 @@ def require_successful_checks(  # noqa: C901
         item = required_runs.get((context, integration_id))
         if (
             context == "verify"
+            and not reverified
             and item is not None
             and item.get("status") == "completed"
             and item.get("conclusion") == "success"
@@ -3656,9 +3800,18 @@ def merge_snapshot(  # noqa: C901
     repo = lease["repository"]
     pr_number = lease["pull_request"]
     head_sha = lease["head_sha"]
-    require_lease(github, lease, repo, pr_number, head_sha)
+    # Issue #1264: on the Dependabot path a newer main needs reverification.
+    destination = ""
+    if require_dependabot_head:
+        live_main = branch_sha(github, repo, str(lease["base_ref"]))
+        destination = "" if live_main == lease["base_sha"] else live_main
+    require_lease(github, lease, repo, pr_number, head_sha, destination)
     pull = live_pull(github, repo, pr_number, head_sha)
-    verification_mode = configured_verification_mode()
+    verification_mode = configured_verification_mode(github, repo)
+    # Self-hosted keeps the local governance; only its evidence differs.
+    self_hosted = verification_mode == "self-hosted"
+    if self_hosted:
+        verification_mode = "local"
     dependabot_head = ""
     dependabot_scope: list[str] = []
     if require_dependabot_head and verification_mode == "local":
@@ -3670,6 +3823,16 @@ def merge_snapshot(  # noqa: C901
     elif require_dependabot_head:
         dependabot_head = require_trusted_dependabot_head(
             github, repo, pull, str(head_sha), str(lease["base_sha"])
+        )
+    reverification: dict[str, Any] | None = None
+    if destination:
+        if dependabot_head != "direct":
+            raise RuntimeError(
+                "Dependabot reverification: only a direct hosted Dependabot "
+                "head. Ask Dependabot to rebase."
+            )
+        reverification = reverified_destination(
+            github, repo, pull, str(head_sha), destination
         )
     if pull.get("draft") is not False:
         raise RuntimeError("Pull request: Draft at merge time. Mark it ready.")
@@ -3969,21 +4132,61 @@ def merge_snapshot(  # noqa: C901
     # label differs.
     verification_record: dict[str, Any] | None = None
     hosted_evidence: dict[str, Any] = {}
-    if verification_mode == "local":
+    vm_evidence: dict[str, Any] | None = None
+    config_path = repository_root() / ".csarc/config.yml"
+    exit_reason = (
+        self_hosted_evidence.exit_reason(
+            subject_repository_root(), config_path, lease
+        )
+        if self_hosted
+        else ""
+    )
+    # Q12 (#1317): the first registration of an unregistered self-hosted
+    # base cannot have VM evidence yet; it merges on local evidence.
+    registration_reason = (
+        self_hosted_evidence.registration_reason(
+            subject_repository_root(), config_path, lease
+        )
+        if self_hosted and not exit_reason
+        else ""
+    )
+    if (
+        self_hosted
+        and not exit_reason
+        and not registration_reason
+        and not quota_run_urls
+    ):
+        vm_evidence = self_hosted_evidence.require(
+            github, repo, lease, pull, config_path, required_tier
+        )
+        check_evidence = "self-hosted-registered"
+        verification_record = evidence_freshness.normalized_record(
+            vm_evidence, evidence_freshness.TRUST_SELF_HOSTED
+        )
+    elif verification_mode == "local":
         if quota_run_urls:
             raise RuntimeError(
                 "Quota fallback: not for local verification. Run it."
             )
-        local_evidence = local_verification.require(
-            head_sha=str(head_sha),
-            tree_sha=str(lease["head_tree"]),
-            base_ref=str(lease["base_ref"]),
-            base_sha=str(lease["base_sha"]),
-            required_tier=required_tier,
-        )
+        try:
+            local_evidence = local_verification.require(
+                head_sha=str(head_sha),
+                tree_sha=str(lease["head_tree"]),
+                base_ref=str(lease["base_ref"]),
+                base_sha=str(lease["base_sha"]),
+                required_tier=required_tier,
+            )
+        except RuntimeError as error:
+            if not exit_reason:
+                raise
+            # #1318: a public or hosted exit render ships no recorder, so
+            # the trusted base's verifier checks the candidate instead.
+            raise RuntimeError(
+                f"{str(error).rstrip('.')}. {EXIT_EVIDENCE_HINT}"
+            ) from error
         check_evidence = "local-self-attested"
-        verification_record = local_verification.normalized_record(
-            local_evidence, local_verification.TRUST_LOCAL
+        verification_record = evidence_freshness.normalized_record(
+            local_evidence, evidence_freshness.TRUST_LOCAL
         )
     elif protection in AGENT_PROTECTIONS or quota_run_urls:
         check_evidence = require_successful_checks(
@@ -3993,15 +4196,26 @@ def merge_snapshot(  # noqa: C901
             required_contexts,
             quota_run_urls,
             hosted_evidence,
+            reverification is not None,
         )
+        if reverification is not None:
+            hosted_evidence.clear()
+            hosted_evidence.update(
+                dependabot_reverify.payload(
+                    reverification,
+                    repo,
+                    str(lease["head_tree"]),
+                    str(lease["base_sha"]),
+                )
+            )
         if hosted_evidence:
-            verification_record = local_verification.normalized_record(
-                hosted_evidence, local_verification.TRUST_HOSTED
+            verification_record = evidence_freshness.normalized_record(
+                hosted_evidence, evidence_freshness.TRUST_HOSTED
             )
     trace = requirement_trace(
-        github, repo, pull, str(head_sha), local_evidence is not None
+        github, repo, pull, str(head_sha), verification_mode == "local"
     )
-    require_lease(github, lease, repo, pr_number, head_sha)
+    require_lease(github, lease, repo, pr_number, head_sha, destination)
     head_ref = str((pull.get("head") or {}).get("ref") or "")
     return {
         "requirement_trace": trace,
@@ -4034,6 +4248,9 @@ def merge_snapshot(  # noqa: C901
         "local_verification": local_evidence,
         "verification_record": verification_record,
         "hosted_verification": hosted_evidence or None,
+        "self_hosted_verification": vm_evidence,
+        "self_hosted_exit": exit_reason,
+        "self_hosted_registration": registration_reason,
         "trailer_route": trailer_route(
             str(lease["base_ref"]),
             head_ref,
@@ -4048,6 +4265,8 @@ def merge_snapshot(  # noqa: C901
         "admin_bypass": admin_bypass,
         "dependabot_head": dependabot_head,
         "dependabot_update_scope": dependabot_scope,
+        "dependabot_reverification": reverification,
+        "destination_sha": destination or lease["base_sha"],
         "hotfix_evidence": hotfix_evidence,
         "review_decision": review_decision,
     }
@@ -4503,6 +4722,21 @@ def require_head_contains_base(
         )
 
 
+def merge_target(
+    snapshot: dict[str, object], lease: dict[str, Any]
+) -> tuple[str, str]:
+    """Return the destination parent and tree the squash merge must have.
+
+    A Dependabot reverification (Issue #1264) binds the newer main and the
+    verified test-merge tree; every other merge keeps the leased base and
+    head tree.
+    """
+    reverified = snapshot.get("dependabot_reverification")
+    if isinstance(reverified, dict):
+        return str(reverified["main_sha"]), str(reverified["tree_sha"])
+    return str(lease["base_sha"]), str(lease["head_tree"])
+
+
 def merge_evidence(
     snapshot: dict[str, object], lease: dict[str, Any]
 ) -> tuple[bytes, str]:
@@ -4513,6 +4747,8 @@ def merge_evidence(
         payload, trust = local, "self-attested-local"
     elif isinstance(hosted, dict):
         payload, trust = hosted, "github-hosted"
+    elif isinstance(vm := snapshot.get("self_hosted_verification"), dict):
+        payload, trust = vm, "self-hosted-registered"
     else:
         raise RuntimeError(
             "evidence-missing: no exact-head verification evidence. "
@@ -4520,7 +4756,7 @@ def merge_evidence(
         )
     if (
         payload.get("head_sha") != lease["head_sha"]
-        or payload.get("tree_sha") != lease["head_tree"]
+        or payload.get("tree_sha") != merge_target(snapshot, lease)[1]
     ):
         raise RuntimeError(
             "Verification evidence: not bound to the leased tree. Rerun "
@@ -4606,7 +4842,7 @@ def merge_trailers(
     values: dict[str, str | list[str]] = {
         "CSARC-Evidence": locator,
         "CSARC-Evidence-SHA256": str(record["digest"]),
-        "CSARC-Evidence-Tree": str(lease["head_tree"]),
+        "CSARC-Evidence-Tree": merge_target(snapshot, lease)[1],
         "CSARC-Trust": str(record["trust"]),
         "CSARC-Route": str(record["route"]),
         "CSARC-Approval": str(snapshot.get("authorization_source") or ""),
@@ -4627,6 +4863,21 @@ def pull_commit_messages(
         for item in github.pages(
             repo, f"pulls/{pr_number}/commits?per_page=100"
         )
+    ]
+
+
+def reverify_trace(
+    snapshot: dict[str, object], lease: dict[str, Any], suffix: str
+) -> list[str]:
+    """Return the Issue #1264 trace of a Dependabot reverification."""
+    reverified = snapshot.get("dependabot_reverification")
+    if not isinstance(reverified, dict):
+        return []
+    return [
+        "dependabot-reverify-trace: "
+        f"head={lease['head_sha']} pull_base={lease['base_sha']} "
+        f"main={reverified['main_sha']} merge={reverified['merge_sha']} "
+        f"tree={reverified['tree_sha']} run={reverified['run_id']} {suffix}"
     ]
 
 
@@ -4693,6 +4944,7 @@ def trace_lines(
             f"route=dependabot release_level={snapshot['release_level']} "
             f"{suffix}"
         )
+    lines += reverify_trace(snapshot, lease, suffix)
     local_evidence = snapshot.get("local_verification")
     if isinstance(local_evidence, dict):
         lines.append(
@@ -4702,7 +4954,45 @@ def trace_lines(
             f"scopes={','.join(local_evidence['scopes'])} {suffix} "
             "trust=self-attested-local; this is not trusted hosted evidence"
         )
+    if any(
+        snapshot.get(key)
+        for key in (
+            "self_hosted_verification",
+            "self_hosted_exit",
+            "self_hosted_registration",
+        )
+    ):
+        lines += self_hosted_evidence.trace_lines(snapshot, suffix)
     return lines
+
+
+def require_reverified_result(
+    snapshot: dict[str, object],
+    merge_sha: str,
+    merge_commit: object,
+    target_base: str,
+) -> None:
+    """Fail loudly when a reverified merge landed on another main.
+
+    Issue #1264: GitHub's merge API cannot pin the base, so main may move
+    between the last check and the squash. Detection is all that remains.
+    """
+    reverified = snapshot.get("dependabot_reverification")
+    if not isinstance(reverified, dict):
+        return
+    commit = merge_commit if isinstance(merge_commit, dict) else {}
+    parents = [
+        item.get("sha")
+        for item in commit.get("parents") or []
+        if isinstance(item, dict)
+    ]
+    tree = (commit.get("tree") or {}).get("sha")
+    if parents != [target_base] or tree != reverified["tree_sha"]:
+        raise RuntimeError(
+            f"Reverified Dependabot merge {merge_sha}: unverified tree {tree} "
+            f"on parent {','.join(map(str, parents)) or 'none'}. Verify "
+            f"{merge_sha} on main, or revert it."
+        )
 
 
 def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
@@ -4738,7 +5028,8 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     snapshot = args_snapshot(github, lease, args)
     title = str(snapshot["title"])
     require_head_contains_base(github, args.repo, lease)
-    # Because the head contains the base, the squash tree is the head tree;
+    # Because the head contains the base, the squash tree is the head tree
+    # (or, for a Dependabot reverification, the verified test-merge tree);
     # read it back before merging and bind it to the evidence.
     if commit_tree_sha(github, args.repo, args.head_sha) != lease["head_tree"]:
         raise RuntimeError(
@@ -4762,7 +5053,8 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         trailers,
     )
     confirm_refs(lease)
-    if branch_sha(github, args.repo, lease["base_ref"]) != lease["base_sha"]:
+    target_base, target_tree = merge_target(snapshot, lease)
+    if branch_sha(github, args.repo, lease["base_ref"]) != target_base:
         raise RuntimeError(
             "Destination branch: advanced before merge. Update the branch."
         )
@@ -4779,6 +5071,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     parents = (
         merge_commit.get("parents") if isinstance(merge_commit, dict) else None
     )
+    require_reverified_result(snapshot, merge_sha, merge_commit, target_base)
     if (
         not isinstance(merged, dict)
         or merged.get("merged") is not True
@@ -4787,7 +5080,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         or branch_sha(github, args.repo, lease["base_ref"]) != merge_sha
         or not isinstance(parents, list)
         or [item.get("sha") for item in parents if isinstance(item, dict)]
-        != [lease["base_sha"]]
+        != [target_base]
     ):
         raise RuntimeError(
             "Merged pull request: state differs from the response. Run 'gh pr "
@@ -4801,7 +5094,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     suffix = f"merge={merge_sha} evidence={locator}"
     status = (
         "tree-mismatch"
-        if merged_tree != lease["head_tree"]
+        if merged_tree != target_tree
         else "trailer-mismatch"
         if merged_trailers != trailers
         else "merged"
@@ -4809,7 +5102,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     result_name = "traced" if status == "merged" else status
     lines = [
         f"merge-trace: result={result_name} {suffix} tree={merged_tree} "
-        f"expected_tree={lease['head_tree']} route={route} trust={trust} "
+        f"expected_tree={target_tree} route={route} trust={trust} "
         f"actor={lease['actor']} server_enforcement="
         f"{snapshot.get('server_enforcement') or 'ruleset'} "
         f"identity={snapshot.get('merge_identity') or 'unknown'}"
@@ -5531,6 +5824,12 @@ def parser() -> argparse.ArgumentParser:
         "--renew",
         type=Path,
         help="still-live lease evidence to renew for the same head and owner",
+    )
+    acquire_command.add_argument(
+        "--require-dependabot-head",
+        action="store_true",
+        help="accept a base behind main only with a Dependabot "
+        "reverification on that main (Issue #1264)",
     )
     acquire_command.set_defaults(handler=acquire)
     scan_command = commands.add_parser("scan-writers")
