@@ -34,6 +34,12 @@ CLOSING = re.compile(
 )
 EXEMPT_LABELS = frozenset({"promotion", "duplicate"})
 BODY_FLAGS = ("--body", "-b", "--body-file", "-F")
+# Issue form fallback labels and the native Type each one stands for (#1344).
+FALLBACK_TYPES = {
+    "bug": "Bug",
+    "enhancement": "Feature",
+    "documentation": "Task",
+}
 # Suggestion vocabulary (SPEC-010): the gate accepts any lowercase-kebab
 # category; these keywords only propose a starting point.
 SUGGESTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -223,6 +229,95 @@ def option_values(arguments: list[str], *flags: str) -> list[str]:
         elif argument in flags and index + 1 < len(arguments):
             values.append(arguments[index + 1])
     return values
+
+
+def issue_types_enabled(arguments: list[str], run: Runner) -> bool:
+    """Return whether the target repository offers native Issue Types.
+
+    An unreadable count or a user-owned repository (no Issue Types) keeps
+    the fallback-label path, so it never blocks Issue creation (#1344).
+    """
+    repos = option_values(arguments, "--repo", "-R")
+    try:
+        owner, _, name = resolve_repository(
+            repos[0] if repos else "", run
+        ).partition("/")
+        count = run(
+            [
+                "api",
+                "graphql",
+                "-f",
+                f'query={{repository(owner:"{owner}",name:"{name}")'
+                "{issueTypes(first:1){totalCount}}}",
+                "--jq",
+                ".data.repository.issueTypes.totalCount",
+            ]
+        ).strip()
+    except RiskToolError:
+        return False
+    return count.isdigit() and int(count) > 0
+
+
+def without_labels(arguments: list[str]) -> list[str]:
+    """Return the arguments without any `--label`/`-l` option."""
+    kept: list[str] = []
+    skip = False
+    for index, argument in enumerate(arguments):
+        if skip:
+            skip = False
+            continue
+        flag, equals, _ = argument.partition("=")
+        if (flag in {"--label", "-l"} and equals) or (
+            argument in {"--label", "-l"} and index + 1 < len(arguments)
+        ):
+            skip = not equals
+            continue
+        kept.append(argument)
+    return kept
+
+
+def work_item_arguments(
+    arguments: list[str], run: Runner = gh_runner
+) -> list[str]:
+    """Add the assignee and native Type that local modes cannot sync later.
+
+    Local and self-hosted modes have no hosted work-item automation, so the
+    Issue gets `--assignee @me` unless one is given and, where the
+    repository offers Issue Types, a native `--type` taken from `--type` or
+    its fallback classification label. The `bug` and `enhancement` labels
+    are then dropped because a Type with that label fails the PR policy
+    (#1344); `documentation` stays because it is orthogonal to Task.
+    """
+    result = list(arguments)
+    if not option_values(result, "--assignee", "-a"):
+        result += ["--assignee", "@me"]
+    if not issue_types_enabled(result, run):
+        return result
+    labels = [
+        label.strip()
+        for value in option_values(result, "--label", "-l")
+        for label in value.split(",")
+        if label.strip()
+    ]
+    types = option_values(result, "--type")
+    kind = types[0] if types else ""
+    for label in labels:
+        kind = kind or FALLBACK_TYPES.get(label, "")
+    titles = option_values(result, "--title", "-t")
+    if not kind:
+        if (titles and TRACKER.match(titles[0])) or set(labels) & EXEMPT_LABELS:
+            return result
+        raise RiskToolError(
+            "Issue Type is missing: the repository uses native Issue Types. "
+            "Pass '--type Bug', '--type Feature', or '--type Task' after '--'."
+        )
+    kept = without_labels(result)
+    remaining = [item for item in labels if item not in {"bug", "enhancement"}]
+    if remaining:
+        kept += ["--label", ",".join(remaining)]
+    if not types:
+        kept += ["--type", kind]
+    return kept
 
 
 def interactive_block(

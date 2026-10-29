@@ -6141,3 +6141,35 @@ def test_rendered_lifecycle_creates_the_post_review_issue_with_gh(
     monkeypatch.setitem(scope, "__file__", str(rendered))
     GitHub().create_issue("owner/repo", "Review", "body", "maintainer")
     assert calls[0][:3] == ["gh", "issue", "create"]
+
+
+@pytest.mark.parametrize("mode", ["local", "self-hosted"])
+def test_local_and_self_hosted_merge_run_the_local_issue_policy(
+    mode: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#1344 AC1/AC3: both modes run validate-pr-policy as the local gate.
+
+    The validator then requires the linked Issue's native Type (where the
+    repository offers Issue Types) and assignee; its own cases live in
+    tests/test_validate_pr_policy_errors.py.
+    """
+    bind_remote_lease(monkeypatch)
+    monkeypatch.setitem(
+        merge_snapshot.__globals__,
+        "configured_verification_mode",
+        lambda *_: mode,
+    )
+    seen: list[dict[str, str]] = []
+
+    def run(command: list[str], **kwargs: Any) -> None:  # noqa: ANN401
+        seen.append(kwargs["env"])
+        assert command[0].endswith("validate-pr-policy")
+        raise RuntimeError("Issue #42: no native Type.")
+
+    monkeypatch.setitem(
+        MODULE["require_local_pull_policy"].__globals__, "run", run
+    )
+    with pytest.raises(RuntimeError, match="no native Type"):
+        merge_snapshot(FakeGitHub("a" * 40), lease_fixture())
+    assert seen and seen[0]["PR_POLICY_LOCAL"] == "true"
+    assert seen[0]["PR_POLICY_READ_ONLY"] == "true"
