@@ -54,10 +54,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/trusted-verification"
           cp scripts/*.py scripts/check-trusted-verification \
             "$RUNNER_TEMP/trusted-verification/"
-          # Release ownership picks the release checks; read it from the base.
           cp .csarc/config.yml "$RUNNER_TEMP/trusted-verification/base-config.yml"
-          # The entry point, stage gate, router, and config reader come from
-          # this trusted base, never from the candidate checked out next.
           if [[ -f scripts/trusted_executor.py ]]; then
             python3 scripts/trusted_executor.py prepare \
               --source "$GITHUB_WORKSPACE" \
@@ -67,7 +64,6 @@ jobs:
             echo "::warning title=Trusted verification executor::This pull request base predates the trusted executor; verification runs the candidate entry point and is recorded as candidate-legacy until the base is synchronized."
             echo "executor=candidate-legacy" >> "$GITHUB_OUTPUT"
           fi
-          # The guided release check also comes from the trusted base.
           if [[ "$GUIDED_RELEASE" == "true" && -f scripts/verify-release-candidate ]]; then
             python3 scripts/trusted_executor.py prepare \
               --control-set release \
@@ -203,17 +199,11 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           RELEASE_LEVEL: ${{ steps.level.outputs.level }}
         run: |
-          # This workflow always comes from the default branch, while the
-          # trusted scripts come from the PR base; pass a checkpoint role only
-          # when that base reports one so older bases keep their interface.
           release_policy="$RUNNER_TEMP/trusted-verification/release_policy.py"
           checkpoint_args=()
           if [[ -n "$CHECKPOINT_ROLE" ]]; then
             checkpoint_args=(--checkpoint-role "$CHECKPOINT_ROLE")
           fi
-          # The squash merge keeps only the PR title, so check its release
-          # intent against the branch commits; older trusted bases without
-          # --pr-title keep their earlier interface.
           title_args=()
           if grep -q -- '"--pr-title"' "$release_policy"; then
             title_args=(--pr-title "$PR_TITLE")
@@ -261,7 +251,6 @@ jobs:
           TIER: ${{ steps.effective.outputs.suite }}
         run: |
           tree="$(git rev-parse "$HEAD_SHA^{tree}")"
-          # Only labels that change the verification tier belong in evidence identity.
           labels="$(jq -c '[.pull_request.labels[].name | select(. == "promotion" or . == "hotfix" or . == "release-recovery")] | sort' "$GITHUB_EVENT_PATH" 2>/dev/null || printf '[]')"
           labels_sha="$(printf '%s' "$labels" | sha256sum | cut -d' ' -f1)"
           if [[ "$TIER" == "full" ]]; then
@@ -445,8 +434,6 @@ jobs:
           CSARC_VERIFICATION_SUITE: ${{ steps.effective.outputs.suite }}
           EXECUTOR: ${{ steps.trusted.outputs.executor }}
         run: |
-          # The trusted-base entry point checks the exact candidate tree; only
-          # an older base falls back to the candidate entry point.
           entry_root="$GITHUB_WORKSPACE"
           if [[ "$EXECUTOR" == "trusted-base" ]]; then
             entry_root="$RUNNER_TEMP/trusted-executor"

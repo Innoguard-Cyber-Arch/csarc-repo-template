@@ -1,14 +1,5 @@
 name: PR review
 
-# Publishes the `review` required status check for pr_review_mode=copilot
-# (Issue #752): the exact head passes when GitHub Copilot reviewed it and
-# found no issues, or an independent maintainer approved it. An
-# admin-bypass PR (Issue #775) has its own exact-head authorization
-# comment. Copilot's own review submission re-runs this check; the
-# `issue_comment` trigger re-runs it when that authorization comment is
-# posted, since posting a comment does not itself fire `pull_request_target`. In
-# pr_review_mode=human the Ruleset requires a maintainer approval natively
-# and this check only reports so.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -19,11 +10,6 @@ on:
   merge_group:
     types: [checks_requested]
 
-# Never cancel an in-progress publication: a cancelled job stays the head's
-# latest result, and an `issue_comment` rerun cannot replace it. Publishing
-# runs for one pull request queue in one group, and the newest run re-reads
-# the live head. Runs that do not publish get a run-scoped group. The
-# publishing predicate mirrors `jobs.publish.if`.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{

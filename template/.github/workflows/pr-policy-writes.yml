@@ -1,7 +1,5 @@
 name: PR policy writes
 
-# This workflow is loaded from the default branch after the read-only PR
-# policy run completes. It never checks out or executes pull-request content.
 on:
   workflow_run:
     workflows: ["PR policy"]
