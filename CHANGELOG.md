@@ -50,6 +50,12 @@ CHANGELOG 的 tag。
 
 * fix(dependabot): reverify behind updates on the latest main (a8d5acd)
 
+## [0.46.0] - 2026-10-27
+
+### Features
+
+* feat(update): detect policy documentation drift (4c5e5f4)
+
 ## [0.46.0-beta.1] - 2026-10-25
 
 ### Features

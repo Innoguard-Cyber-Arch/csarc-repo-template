@@ -277,6 +277,13 @@ def test_legacy_consumer_migrates_to_schema_2_in_one_update(
     product = project / "src/product.py"
     product.parent.mkdir(parents=True, exist_ok=True)
     product.write_text("VALUE = 1\n", encoding="utf-8")
+    documentation = project / "docs/site/content/_index.en.md"
+    documentation.write_text(
+        documentation.read_text(encoding="utf-8").replace(
+            "`[[primary_language]]`; i18n `[[i18n]]`", "`en`"
+        ),
+        encoding="utf-8",
+    )
     git(project, "init", "-q", "-b", "main")
     commit_all(project, f"test: untouched {LEGACY_TAG} consumer")
     legacy_keys = saved_keys(project)
