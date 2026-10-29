@@ -75,6 +75,27 @@ CONTROL_FILES = (
     "scripts/verification-step",
     "scripts/verify-fast",
     "scripts/verify-template.sh",
+    # Issue #1333: the root security checks, their pinned tool installers,
+    # and the secret-scan settings also come from the trusted base. The
+    # candidate supplies only the files they read; generator and
+    # consistency checks stay candidate-supplied.
+    ".gitleaks.toml",
+    *(
+        f"scripts/{name}"
+        for name in (
+            "check-bypass-lifecycle",
+            "check-update-conflicts",
+            "check_action_pins.py",
+            "install-actionlint",
+            "install-gitleaks",
+            "install-osv-scanner",
+            "install-shellcheck",
+            "lint-workflows-shell",
+            "release_phase_rulesets.py",
+            "scan-secrets",
+            "verify-dependencies",
+        )
+    ),
 )
 CONTROL_GLOBS = ("scripts/verify-stage-*",)
 # Generated projects keep the same control set under .csarc/scripts, with

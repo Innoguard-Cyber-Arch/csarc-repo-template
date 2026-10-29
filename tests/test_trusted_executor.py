@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import runpy
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +22,7 @@ verify_manifest = EXECUTOR["verify_manifest"]
 self_test_report = EXECUTOR["self_test_report"]
 is_control_path = EXECUTOR["is_control_path"]
 control_main = EXECUTOR["main"]
+control_paths = EXECUTOR["control_paths"]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 
 SUBJECT_CHECKS = (
@@ -144,16 +146,50 @@ def run_entry(
     return result, log.read_text(encoding="utf-8")
 
 
+# Issue #1333: root security checks that need a network tool become
+# logging stubs in the fixture base; the conflict-marker check stays real.
+TRUSTED_STUBS = (
+    "check-bypass-lifecycle",
+    "lint-workflows-shell",
+    "scan-secrets",
+    "verify-dependencies",
+)
+
+
+def trusted_check(name: str, *, status: int = 0) -> str:
+    """Return a stub trusted-base check that logs its name and subject."""
+    return recording_check(name, status=status).replace(
+        '"%s subject=', '"trusted %s subject=', 1
+    )
+
+
+def trusted_base(root: Path, failing: str | None = None) -> Path:
+    """Copy this repository's control set with network checks stubbed."""
+    base = root / "base"
+    for relative in control_paths(REPO_ROOT):
+        target = base / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO_ROOT / relative, target)
+    for name in TRUSTED_STUBS:
+        status = 1 if name == failing else 0
+        target = base / "scripts" / name
+        target.unlink()
+        write_script(target, trusted_check(name, status=status))
+    return base
+
+
 @pytest.fixture
 def executor(tmp_path: Path) -> Path:
     """Stage this repository's control set as the trusted base."""
     destination = tmp_path / "trusted-executor"
-    prepare(REPO_ROOT, destination)
+    prepare(trusted_base(tmp_path), destination)
     return destination
 
 
-def test_prepare_stages_only_the_read_only_control_set(executor: Path) -> None:
+def test_prepare_stages_only_the_read_only_control_set(tmp_path: Path) -> None:
     """The staged executor is exactly the digested control set."""
+    executor = tmp_path / "trusted-executor"
+    prepare(REPO_ROOT, executor)
     manifest = json.loads(
         (executor / "trusted-executor.json").read_text(encoding="utf-8")
     )
@@ -167,6 +203,16 @@ def test_prepare_stages_only_the_read_only_control_set(executor: Path) -> None:
         "scripts/csarc_config.py",
         "scripts/resolve-cache-root",
         "scripts/verify-stage-regression-tests",
+        # Issue #1333: the root security checks and their settings.
+        ".gitleaks.toml",
+        "scripts/check-bypass-lifecycle",
+        "scripts/check-update-conflicts",
+        "scripts/check_action_pins.py",
+        "scripts/install-gitleaks",
+        "scripts/lint-workflows-shell",
+        "scripts/release_phase_rulesets.py",
+        "scripts/scan-secrets",
+        "scripts/verify-dependencies",
     } <= set(files)
     assert all(is_control_path(path) for path in files)
     staged = {
@@ -244,8 +290,11 @@ def test_tampered_candidate_gate_cannot_decide_the_result(
     # the trusted full gate, which runs the candidate's own checks.
     assert "suite=full" in trusted.stdout
     assert "[verify-template] START Repository contracts" in trusted.stdout
-    assert "check-update-conflicts subject=unset" in log
-    assert "scan-secrets subject=unset" in log
+    # Issue #1333: security checks come from the trusted base and read the
+    # candidate; the message pattern check stays the candidate's own.
+    assert f"trusted scan-secrets subject={candidate}" in log
+    assert "\nscan-secrets subject=" not in f"\n{log}"
+    assert "check-update-conflicts subject=" not in log
     assert "check-message-style subject=unset" in log
 
 
@@ -270,7 +319,7 @@ def test_tampered_candidate_stage_cannot_skip_its_checks(
 ) -> None:
     """A trusted stage gate runs the candidate checks it lists."""
     candidate = candidate_repository(
-        tmp_path, tamper_gate=True, failing_check="lint-workflows-shell"
+        tmp_path, tamper_gate=True, failing_check="sync-paired-files.sh"
     )
 
     trusted, log = run_entry(
@@ -281,7 +330,9 @@ def test_tampered_candidate_stage_cannot_skip_its_checks(
 
     assert trusted.returncode != 0
     assert "build-repo-site subject=unset" in log
-    assert "lint-workflows-shell subject=unset" in log
+    assert "sync-paired-files.sh subject=unset" in log
+    assert f"trusted lint-workflows-shell subject={candidate}" in log
+    assert "\nlint-workflows-shell subject=" not in f"\n{log}"
 
 
 def test_normal_candidate_passes_through_the_trusted_executor(
@@ -297,11 +348,13 @@ def test_normal_candidate_passes_through_the_trusted_executor(
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+    assert "PASSED Conflict-marker check" in result.stdout
+    for name in ("scan-secrets", "check-bypass-lifecycle"):
+        # Issue #1333: trusted security checks get the subject explicitly.
+        assert f"trusted {name} subject={candidate}" in log
+        assert f"\n{name} subject=" not in f"\n{log}"
     for name in (
-        "check-update-conflicts",
-        "scan-secrets",
         "check-message-style",
-        "check-bypass-lifecycle",
         "spec_to_issue.py",
         "build-repo-site",
         "build-handbook",
@@ -309,6 +362,100 @@ def test_normal_candidate_passes_through_the_trusted_executor(
     ):
         # Nested checks never inherit the subject override.
         assert f"{name} subject=unset" in log
+
+
+@pytest.mark.parametrize(
+    ("entry", "check"),
+    [
+        ("verify-fast", "scan-secrets"),
+        ("verify-fast", "check-bypass-lifecycle"),
+        ("verify-stage-repository-contracts", "scan-secrets"),
+        ("verify-stage-repository-contracts", "verify-dependencies"),
+        ("verify-stage-static-assets", "lint-workflows-shell"),
+    ],
+)
+def test_candidate_cannot_disable_a_trusted_security_check(
+    tmp_path: Path, entry: str, check: str
+) -> None:
+    """A candidate check rewritten to pass never replaces the base's (#1333)."""
+    executor = tmp_path / "trusted-executor"
+    prepare(trusted_base(tmp_path, failing=check), executor)
+    # The candidate's copy of every check, including this one, exits 0.
+    candidate = candidate_repository(
+        tmp_path, tamper_gate=False, failing_check=None
+    )
+
+    result, log = run_entry(executor / "scripts" / entry, candidate, tmp_path)
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert f"trusted {check} subject={candidate}" in log
+    assert f"\n{check} subject=" not in f"\n{log}"
+
+
+def test_trusted_conflict_check_catches_a_disabled_candidate_copy(
+    tmp_path: Path, executor: Path
+) -> None:
+    """The base conflict-marker check reads the candidate's files (#1333)."""
+    candidate = candidate_repository(
+        tmp_path, tamper_gate=False, failing_check=None
+    )
+    write_script(
+        candidate / "scripts" / "check-update-conflicts",
+        "#!/usr/bin/env bash\nexit 0\n",
+    )
+    marker = "<" * 7
+    (candidate / "docs" / "merge.md").write_text(
+        f"{marker} ours\ntext\n", encoding="utf-8"
+    )
+    git(candidate, "add", "-A")
+    git(candidate, "commit", "-q", "-m", "conflict")
+
+    result, _ = run_entry(
+        executor / "scripts" / "verify-fast", candidate, tmp_path
+    )
+
+    assert result.returncode != 0
+    assert "FAILED Conflict-marker check" in result.stderr
+    assert "Git markers remain" in result.stderr
+    assert "docs/merge.md" in result.stderr
+
+
+def test_trusted_pin_check_reads_the_candidate_workflows(
+    tmp_path: Path, executor: Path
+) -> None:
+    """The base pin check runs on the candidate's workflows (#1333)."""
+    candidate = tmp_path / "candidate"
+    workflows = candidate / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    for name, sha in (("a.yml", "1" * 40), ("b.yml", "2" * 40)):
+        (workflows / name).write_text(
+            f"jobs:\n  x:\n    steps:\n"
+            f"      - uses: actions/checkout@{sha} # v7.0.1\n",
+            encoding="utf-8",
+        )
+    write_script(
+        candidate / "scripts" / "check_action_pins.py", "raise SystemExit(0)\n"
+    )
+
+    result = subprocess.run(  # noqa: S603 - staged trusted check
+        [  # noqa: S607
+            "python3",
+            "-I",
+            str(executor / "scripts" / "check_action_pins.py"),
+            "--root",
+            str(candidate),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "Action pins disagree" in result.stderr
+    for entry in ("verify-fast", "verify-stage-github-actions-audit"):
+        text = (REPO_ROOT / "scripts" / entry).read_text(encoding="utf-8")
+        assert "python3 scripts/check_action_pins.py" not in text
+        assert 'check_action_pins.py" --root "$repo_root"' in text
 
 
 def test_relative_subject_root_fails_closed(

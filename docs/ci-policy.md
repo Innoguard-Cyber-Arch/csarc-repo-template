@@ -1029,8 +1029,32 @@ workflow 與 shell lint、Action pin、相依掃描、規格驗證、站台、me
 | hosted CI 與 VM | trusted base 搬入的 control set | trusted base 的 `.csarc/config.yml` | candidate |
 
 仍屬於 candidate、照常執行的是：測試、lint 設定（例如 `pyproject.toml` 的 ruff 設定、`uv.toml` 對專案指令的設定）、相依與 lockfile，以及 project verification hook（`project_verification_hook` 或可執行的 `scripts/verify-product`，路徑檢查之後執行 candidate 的程式）。它們就是驗證對象；candidate 放寬自己的 lint 設定、測試或 hook，要靠審查發現。trusted 的 Python helper 以 `python3 -I` 執行，candidate 目錄裡的 `json.py`、`json/` 之類的同名模組、它的 virtual environment 與 uv 設定都不會被載入；wheel 匯入檢查以 `python -P` 執行並要求模組來自 site-packages，twine 與 wheel 的 `uv run` 帶 `--no-config`；站台建置的設定 reader 與設定也來自檢查腳本所在的 checkout。要跑哪些範圍由 trusted router 依 candidate 的變更路徑決定，這是被檢查的資料。hosted `ci.yml` 的「Read release ownership」先確認 trusted reader 讀得懂 candidate 的設定，再從保存的 base `.csarc/config.yml` 讀 `release_ownership`，決定是否執行 release 檢查。這個 workflow 是 `pull_request_target`，由 main 讀取，所以要等這個變更進入 main 才生效；在那之前與之後，任何 `release_ownership` 變更都走 governance-switch route（#1325）。trusted helper 以 `python3 -I` 執行，入口一開始就要求 Python 3.12 以上，較舊時以 `ERROR: Python is too old` 結束；VM 不安裝 Python，靠 image 的 `python3_minimum`。lifecycle 的 route 判斷從 lease 的 base commit 讀 base 設定，不從執行中的 checkout 讀。
-一般本機執行時 candidate 就是 base，行為不變。這個 template repository 自己的 root `verify-fast` 與
-`verify-template.sh` 仍以 candidate 的 `scripts/` 執行檢查腳本，control set 只有上段列的入口與 stage gate。
+一般本機執行時 candidate 就是 base，行為不變。
+
+#1333 把這個 template repository 根層的 control set 擴大到安全檢查，其他檢查仍由 candidate 提供。hosted `verify`
+的 `prepare` 另外從 trusted base 複製下列檔案，根層 `verify-fast` 與 `verify-stage-*` 以這份副本執行，並以
+`CSARC_VERIFICATION_SUBJECT_ROOT` 指向 candidate，candidate 只提供被檢查的檔案：
+
+| 根層檢查 | 檢查腳本與設定的來源 |
+| --- | --- |
+| 衝突標記 `check-update-conflicts` | trusted base |
+| secret 掃描 `scan-secrets`、`install-gitleaks` 與 `.gitleaks.toml` | trusted base |
+| lifecycle bypass `check-bypass-lifecycle` 與 `release_phase_rulesets.py`（以 `python3 -I` 執行，讀 candidate 的 `policies/`） | trusted base |
+| Action pin `check_action_pins.py`（以 `python3 -I` 執行） | trusted base |
+| 相依掃描 `verify-dependencies` 與 `install-osv-scanner` | trusted base |
+| workflow 與 shell lint `lint-workflows-shell`、`install-actionlint` 與 `install-shellcheck` | trusted base |
+| 站台與 handbook 建置、`check_jinja_workflow_drift.py`、`spec_to_issue.py`、`sync-paired-files.sh`、`check-message-style`、`test-*` self-test | candidate |
+| 測試、ruff 與 ty 設定、`uv.lock`、zizmor 與 `zizmor.yml` | candidate |
+
+candidate 一欄的檢查會同時改產生器和產生的檔案，或測試 candidate 自己的腳本，改用 base 的版本會讓正常的
+產生器變更永遠過不了，所以照常執行 candidate 的副本；candidate 改寫這些檢查或放寬它們，要靠審查發現。
+trusted 的安全檢查也會讀 candidate 內工具自己找到的設定與註記，例如 `.shellcheckrc`、`.github/actionlint.yaml`、
+`osv-scanner.toml` 與檔案內的 `shellcheck disable`；只有 gitleaks 一律用 base 的 `.gitleaks.toml`。這些檢查
+都不用 `uv`，所以不需要 `--no-config`。
+
+改動上表 trusted base 一欄的檔案時要拆成兩個 PR：先合併檢查腳本或設定的變更，再送出要靠新版才能通過的內容。
+在同一個 PR 裡，hosted `verify` 仍以 base 的舊版檢查，新版只由 candidate 的測試驗證。`ci.yml` 讀自 main，
+但 `prepare` 執行的是 PR base 的 `trusted_executor.py`，所以這個變更合併進 base 後才生效，不需要改 workflow。
 
 這些 trusted step 用 `python3` 執行 base 的 scripts，所以 `verify` 在第一個 trusted step 之前就以固定版本的
 `actions/setup-python` 裝好 Python 3.14，不用 runner 內建的舊版直譯器（#1111）。其他 workflow 不一定先裝

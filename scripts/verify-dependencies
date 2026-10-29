@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Issue #1333: tools and settings come from this checkout; a trusted
+# copy names the tree it checks in CSARC_VERIFICATION_SUBJECT_ROOT.
+repo_root="$(cd "${CSARC_VERIFICATION_SUBJECT_ROOT:-$script_root}" && pwd)"
 osv_scanner="${CSARC_OSV_SCANNER:-}"
 if [[ -z "$osv_scanner" ]]; then
-  osv_scanner="$("$repo_root/scripts/install-osv-scanner")"
+  osv_scanner="$("$script_root/scripts/install-osv-scanner")"
 fi
 if [[ ! -x "$osv_scanner" ]]; then
   echo "ERROR: OSV-Scanner is unusable: '$osv_scanner' is not executable. Run 'chmod +x' on it." >&2

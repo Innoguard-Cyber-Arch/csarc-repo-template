@@ -15,6 +15,11 @@ else
   export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
 fi
 cd "$repo_root"
+# Issue #1333: the security checks come from the control root, never from
+# the subject; each still reads the subject's files. Generator and
+# consistency checks below stay the subject's own (docs/ci-policy.md).
+checks="$control_root/scripts"
+subject=(env "CSARC_VERIFICATION_SUBJECT_ROOT=$repo_root")
 
 plan_root="$(mktemp -d)"
 trap 'rm -rf "$plan_root"' EXIT
@@ -133,19 +138,22 @@ case "$suite" in
 esac
 
 verification_step "Changed-tree hygiene" git diff --check
-verification_step "Conflict-marker check" ./scripts/check-update-conflicts
-verification_step "Secret scan" ./scripts/scan-secrets
+verification_step "Conflict-marker check" \
+  "${subject[@]}" "$checks/check-update-conflicts"
+verification_step "Secret scan" "${subject[@]}" "$checks/scan-secrets"
 verification_step "Message pattern check" \
   ./scripts/check-message-style --base "$merge_base"
-verification_step "Lifecycle-bypass check" ./scripts/check-bypass-lifecycle
+verification_step "Lifecycle-bypass check" \
+  "${subject[@]}" "$checks/check-bypass-lifecycle"
 
 if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ||
   "$scopes" == *,template,* ]]; then
-  verification_step "Workflow and shell lint" ./scripts/lint-workflows-shell
+  verification_step "Workflow and shell lint" \
+    "${subject[@]}" "$checks/lint-workflows-shell"
 fi
 if [[ "$scopes" == *,workflow,* || "$scopes" == *,template,* ]]; then
   verification_step "GitHub Actions pin check" \
-    python3 scripts/check_action_pins.py
+    python3 -I "$checks/check_action_pins.py" --root "$repo_root"
 fi
 
 run_python_suite="$run_project"
@@ -258,7 +266,8 @@ if [[ "$scopes" == *,workflow,* ]]; then
 fi
 
 if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
-  verification_step "Dependency scan" ./scripts/verify-dependencies
+  verification_step "Dependency scan" \
+    "${subject[@]}" "$checks/verify-dependencies"
 fi
 
 if $run_python_suite; then
